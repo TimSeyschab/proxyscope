@@ -1,0 +1,126 @@
+import unittest
+
+from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
+from proxyscope.proxy.forwarding import ForwardResponse
+from proxyscope.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
+
+
+class _FakeModifier:
+    def __init__(self) -> None:
+        self.seen_urls: list[str] = []
+
+    def maybe_modify_response(self, *, request_url: str, method: str, response: ForwardResponse) -> ForwardResponse:
+        self.seen_urls.append(request_url)
+        if request_url == "https://example.com/edit":
+            return ForwardResponse(
+                status_code=response.status_code,
+                reason=response.reason,
+                headers={"Content-Type": "text/plain"},
+                body=b"edited",
+            )
+        return response
+
+
+class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
+    def tearDown(self) -> None:
+        set_runtime_config(RuntimeConfig())
+
+    def test_rewrites_matching_response(self) -> None:
+        modifier = _FakeModifier()
+        requests = [("GET", "https://example.com/edit")]
+
+        def acquire_request_meta() -> tuple[str, str] | None:
+            if not requests:
+                return None
+            return requests.pop(0)
+
+        rewriter = HTTP1ResponseModifierRewriter(
+            response_modifier=modifier,  # type: ignore[arg-type]
+            acquire_request_meta=acquire_request_meta,
+        )
+
+        raw_response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/plain\r\n"
+            b"Content-Length: 8\r\n"
+            b"\r\n"
+            b"original"
+        )
+        out = rewriter.feed(raw_response)
+        text = out.decode("iso-8859-1")
+        self.assertIn("HTTP/1.1 200 OK", text)
+        self.assertIn("Content-Length: 6", text)
+        self.assertTrue(text.endswith("\r\n\r\nedited"))
+        self.assertEqual(modifier.seen_urls, ["https://example.com/edit"])
+
+    def test_can_replace_response_with_static_policy_template(self) -> None:
+        config = RuntimeConfig()
+        config.add_static_response_rule(
+            url="https://example.com/mock",
+            status_code=202,
+            reason="Accepted",
+            headers={"Content-Type": "text/plain"},
+            body=b"from-policy",
+            method="GET",
+        )
+        set_runtime_config(config)
+
+        modifier = _FakeModifier()
+        requests = [("GET", "https://example.com/mock")]
+
+        def acquire_request_meta() -> tuple[str, str] | None:
+            if not requests:
+                return None
+            return requests.pop(0)
+
+        rewriter = HTTP1ResponseModifierRewriter(
+            response_modifier=modifier,  # type: ignore[arg-type]
+            acquire_request_meta=acquire_request_meta,
+        )
+
+        raw_response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/plain\r\n"
+            b"Content-Length: 8\r\n"
+            b"\r\n"
+            b"original"
+        )
+        out = rewriter.feed(raw_response)
+        text = out.decode("iso-8859-1")
+        self.assertIn("HTTP/1.1 202 Accepted", text)
+        self.assertIn("Content-Length: 11", text)
+        self.assertTrue(text.endswith("\r\n\r\nfrom-policy"))
+
+    def test_keeps_request_meta_for_103_then_final_response(self) -> None:
+        modifier = _FakeModifier()
+        requests = [("GET", "https://example.com/edit")]
+
+        def acquire_request_meta() -> tuple[str, str] | None:
+            if not requests:
+                return None
+            return requests.pop(0)
+
+        rewriter = HTTP1ResponseModifierRewriter(
+            response_modifier=modifier,  # type: ignore[arg-type]
+            acquire_request_meta=acquire_request_meta,
+        )
+
+        early_hints = (
+            b"HTTP/1.1 103 Early Hints\r\n"
+            b"Link: </style.css>; rel=preload; as=style\r\n"
+            b"\r\n"
+        )
+        final_response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/plain\r\n"
+            b"Content-Length: 8\r\n"
+            b"\r\n"
+            b"original"
+        )
+
+        out = rewriter.feed(early_hints + final_response)
+        text = out.decode("iso-8859-1")
+        self.assertIn("HTTP/1.1 103 Early Hints", text)
+        self.assertIn("HTTP/1.1 200 OK", text)
+        self.assertTrue(text.endswith("\r\n\r\nedited"))
+        self.assertEqual(modifier.seen_urls, ["https://example.com/edit"])

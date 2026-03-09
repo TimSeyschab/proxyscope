@@ -1,0 +1,243 @@
+import http.client
+import socket
+import socketserver
+import threading
+import time
+import unittest
+
+from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
+from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse
+from proxyscope.proxy.server import create_server
+
+
+class StaticForwarder:
+    def forward(self, request: ForwardRequest) -> ForwardResponse:
+        body = b"Milestone 1: request received and logged\n"
+        return ForwardResponse(
+            status_code=200,
+            reason="OK",
+            headers={
+                "Content-Type": "text/plain; charset=utf-8",
+                "Content-Length": str(len(body)),
+            },
+            body=body,
+        )
+
+
+class TestRequestLoggingServer(unittest.TestCase):
+    def setUp(self) -> None:
+        set_runtime_config(RuntimeConfig())
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            forwarder=StaticForwarder(),
+            auto_enable_mitm=False,
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+        set_runtime_config(RuntimeConfig())
+
+    def _request(
+        self, method: str, path: str, *, headers: dict[str, str] | None = None, body: bytes | None = None
+    ) -> tuple[int, bytes]:
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=2)
+        conn.request(method, path, body=body, headers=headers or {})
+        response = conn.getresponse()
+        status = response.status
+        data = response.read()
+        conn.close()
+        return status, data
+
+    def test_get_returns_200_and_body(self) -> None:
+        status, data = self._request("GET", "/hello")
+        self.assertEqual(status, 200)
+        self.assertEqual(data, b"Milestone 1: request received and logged\n")
+
+    def test_head_returns_200_without_body(self) -> None:
+        status, data = self._request("HEAD", "/hello")
+        self.assertEqual(status, 200)
+        self.assertEqual(data, b"")
+
+    def test_connect_establishes_tunnel_and_relays_bytes(self) -> None:
+        class EchoHandler(socketserver.BaseRequestHandler):
+            def handle(self) -> None:
+                while True:
+                    data = self.request.recv(65536)
+                    if not data:
+                        return
+                    self.request.sendall(data)
+
+        echo_server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), EchoHandler)
+        echo_thread = threading.Thread(target=echo_server.serve_forever, daemon=True)
+        echo_thread.start()
+
+        try:
+            echo_host, echo_port = echo_server.server_address
+            with socket.create_connection((self.host, self.port), timeout=2) as proxy_client:
+                connect_request = (
+                    f"CONNECT {echo_host}:{echo_port} HTTP/1.1\r\n"
+                    f"Host: {echo_host}:{echo_port}\r\n"
+                    "\r\n"
+                ).encode("utf-8")
+                proxy_client.sendall(connect_request)
+
+                response_head = b""
+                while b"\r\n\r\n" not in response_head:
+                    chunk = proxy_client.recv(4096)
+                    if not chunk:
+                        break
+                    response_head += chunk
+
+                self.assertIn(b"200 Connection Established", response_head)
+
+                payload = b"ping through connect tunnel"
+                proxy_client.sendall(payload)
+                echoed = proxy_client.recv(len(payload))
+                self.assertEqual(echoed, payload)
+        finally:
+            echo_server.shutdown()
+            echo_server.server_close()
+            echo_thread.join(timeout=2)
+
+    def test_connect_invalid_target_returns_400(self) -> None:
+        status, data = self._request("CONNECT", "https://example.com:443")
+        self.assertEqual(status, 400)
+        self.assertIn(b"Invalid CONNECT target:", data)
+
+    def test_request_is_logged(self) -> None:
+        with self.assertLogs("tproxy.request", level="INFO") as captured:
+            self._request("GET", "/log-test", headers={"X-Demo": "m1"})
+
+        logs = "\n".join(captured.output)
+        self.assertIn("Incoming request method=GET path=/log-test", logs)
+
+    def test_response_is_logged_for_forwarded_request(self) -> None:
+        class DummyForwarder:
+            def forward(self, request: ForwardRequest) -> ForwardResponse:
+                return ForwardResponse(
+                    status_code=204,
+                    reason="No Content",
+                    headers={"X-Upstream": "demo"},
+                    body=b"",
+                )
+
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            forwarder=DummyForwarder(),
+            auto_enable_mitm=False,
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+
+        with self.assertLogs("tproxy.response", level="INFO") as captured:
+            status, _ = self._request("GET", "/response-log-test")
+            time.sleep(0.05)
+
+        self.assertEqual(status, 204)
+        logs = "\n".join(captured.output)
+        self.assertIn("Outgoing response status=204 reason=No Content", logs)
+
+    def test_server_can_use_forwarder(self) -> None:
+        class DummyForwarder:
+            def __init__(self) -> None:
+                self.last_request: ForwardRequest | None = None
+
+            def forward(self, request: ForwardRequest) -> ForwardResponse:
+                self.last_request = request
+                return ForwardResponse(
+                    status_code=202,
+                    reason="Accepted",
+                    headers={"Content-Type": "text/plain; charset=utf-8"},
+                    body=b"forwarded",
+                )
+
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+        forwarder = DummyForwarder()
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            forwarder=forwarder,
+            auto_enable_mitm=False,
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+
+        status, data = self._request(
+            "POST",
+            "/forward-me",
+            headers={"Content-Type": "application/json"},
+            body=b'{"ok":true}',
+        )
+
+        self.assertEqual(status, 202)
+        self.assertEqual(data, b"forwarded")
+        self.assertIsNotNone(forwarder.last_request)
+        mapped_request = forwarder.last_request
+        assert mapped_request is not None
+        self.assertEqual(mapped_request.path, "/forward-me")
+        self.assertEqual(mapped_request.body, b'{"ok":true}')
+
+    def test_static_response_policy_skips_upstream_forwarder(self) -> None:
+        class CountingForwarder:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def forward(self, request: ForwardRequest) -> ForwardResponse:
+                self.calls += 1
+                return ForwardResponse(
+                    status_code=500,
+                    reason="ShouldNotBeUsed",
+                    headers={"Content-Type": "text/plain"},
+                    body=b"upstream",
+                )
+
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+        config = RuntimeConfig()
+        config.add_static_response_rule(
+            url="http://example.com/mock",
+            status_code=200,
+            reason="OK",
+            headers={"Content-Type": "application/json"},
+            body=b'{"source":"policy"}',
+            method="GET",
+        )
+        set_runtime_config(config)
+
+        forwarder = CountingForwarder()
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            forwarder=forwarder,
+            auto_enable_mitm=False,
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+
+        status, data = self._request(
+            "GET",
+            "http://example.com/mock",
+            headers={"Host": "example.com"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(data, b'{"source":"policy"}')
+        self.assertEqual(forwarder.calls, 0)
