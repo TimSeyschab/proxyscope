@@ -21,6 +21,74 @@ class MitmCertificateAuthority:
     def is_ready(self) -> bool:
         return self.ca_cert_path.exists() and self.ca_key_path.exists()
 
+    def ensure_ca_material(self) -> bool:
+        """
+        Ensure CA key/cert material exists and return True when a new CA was created.
+        """
+        try:
+            self.hosts_dir.mkdir(parents=True, exist_ok=True)
+            if self.is_ready():
+                self._write_browser_import_copy()
+                return False
+
+            self.ca_cert_path.parent.mkdir(parents=True, exist_ok=True)
+            # If only one file exists, discard it and create a fresh key/cert pair.
+            if self.ca_cert_path.exists() != self.ca_key_path.exists():
+                self.ca_cert_path.unlink(missing_ok=True)
+                self.ca_key_path.unlink(missing_ok=True)
+
+            config_path = self.ca_cert_path.parent / "mitm-ca.cnf"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "[ req ]",
+                        "distinguished_name = dn",
+                        "x509_extensions = v3_ca",
+                        "prompt = no",
+                        "",
+                        "[ dn ]",
+                        "CN = proxyscope Local MITM CA",
+                        "",
+                        "[ v3_ca ]",
+                        "subjectKeyIdentifier = hash",
+                        "authorityKeyIdentifier = keyid:always,issuer",
+                        "basicConstraints = critical, CA:true",
+                        "keyUsage = critical, keyCertSign, cRLSign",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            self._run_openssl(
+                [
+                    "req",
+                    "-x509",
+                    "-newkey",
+                    "rsa:4096",
+                    "-sha256",
+                    "-days",
+                    "3650",
+                    "-nodes",
+                    "-config",
+                    str(config_path),
+                    "-extensions",
+                    "v3_ca",
+                    "-keyout",
+                    str(self.ca_key_path),
+                    "-out",
+                    str(self.ca_cert_path),
+                ]
+            )
+            if not self.is_ready():
+                raise MitmCertificateError(
+                    f"Failed to create CA files: cert={self.ca_cert_path} key={self.ca_key_path}"
+                )
+            self._write_browser_import_copy()
+            return True
+        except OSError as exc:
+            raise MitmCertificateError(f"Filesystem error while preparing CA material: {exc}") from exc
+
     def issue_host_certificate(self, host: str) -> tuple[Path, Path]:
         if not self.is_ready():
             raise MitmCertificateError(
@@ -131,6 +199,10 @@ class MitmCertificateAuthority:
             stderr = exc.stderr.strip()
             raise MitmCertificateError(f"openssl failed: {' '.join(command)} | {stderr}") from exc
 
+    def _write_browser_import_copy(self) -> None:
+        browser_import_path = _browser_import_ca_path(self.ca_cert_path)
+        browser_import_path.write_bytes(self.ca_cert_path.read_bytes())
+
 
 def default_ca() -> MitmCertificateAuthority:
     certs_root = Path("certs")
@@ -147,3 +219,11 @@ def _is_ip_address(host: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _browser_import_ca_path(ca_cert_path: Path) -> Path:
+    cert_suffix = ".cert.pem"
+    cert_name = ca_cert_path.name
+    if cert_name.endswith(cert_suffix):
+        return ca_cert_path.with_name(f"{cert_name[: -len(cert_suffix)]}.crt")
+    return ca_cert_path.with_suffix(".crt")

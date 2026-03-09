@@ -7,6 +7,58 @@ from proxyscope.mitm.certificates import MitmCertificateAuthority
 
 
 class TestMitmCertificateAuthority(unittest.TestCase):
+    def test_ensure_ca_material_generates_missing_ca(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ca_dir = root / "ca"
+            hosts_dir = root / "hosts"
+            cert_path = ca_dir / "mitm-ca.cert.pem"
+            key_path = ca_dir / "mitm-ca.key.pem"
+            ca = MitmCertificateAuthority(
+                ca_cert_path=cert_path,
+                ca_key_path=key_path,
+                hosts_dir=hosts_dir,
+            )
+
+            def fake_run(_args: list[str]) -> None:
+                cert_path.write_text("generated-cert", encoding="utf-8")
+                key_path.write_text("generated-key", encoding="utf-8")
+
+            with patch.object(MitmCertificateAuthority, "_run_openssl", side_effect=fake_run) as openssl_mock:
+                created = ca.ensure_ca_material()
+
+            self.assertTrue(created)
+            self.assertTrue(cert_path.exists())
+            self.assertTrue(key_path.exists())
+            self.assertTrue(hosts_dir.exists())
+            self.assertEqual((ca_dir / "mitm-ca.crt").read_text(encoding="utf-8"), "generated-cert")
+            openssl_mock.assert_called_once()
+
+    def test_ensure_ca_material_reuses_existing_ca(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ca_dir = root / "ca"
+            hosts_dir = root / "hosts"
+            ca_dir.mkdir(parents=True)
+            cert_path = ca_dir / "mitm-ca.cert.pem"
+            key_path = ca_dir / "mitm-ca.key.pem"
+            cert_path.write_text("existing-cert", encoding="utf-8")
+            key_path.write_text("existing-key", encoding="utf-8")
+
+            ca = MitmCertificateAuthority(
+                ca_cert_path=cert_path,
+                ca_key_path=key_path,
+                hosts_dir=hosts_dir,
+            )
+
+            with patch.object(MitmCertificateAuthority, "_run_openssl") as openssl_mock:
+                created = ca.ensure_ca_material()
+
+            self.assertFalse(created)
+            self.assertTrue(hosts_dir.exists())
+            self.assertEqual((ca_dir / "mitm-ca.crt").read_text(encoding="utf-8"), "existing-cert")
+            openssl_mock.assert_not_called()
+
     def test_issue_host_certificate_reuses_matching_cached_pair(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

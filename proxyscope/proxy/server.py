@@ -19,7 +19,7 @@ from proxyscope.proxy.forwarding import (
     resolve_target_url,
 )
 from proxyscope.proxy.http_bridge import map_incoming_request, write_forward_response
-from proxyscope.mitm.certificates import default_ca
+from proxyscope.mitm.certificates import MitmCertificateError, default_ca
 from proxyscope.mitm.tunnel import MitmTLSInterceptor
 from proxyscope.app.logging.observability import emit_site_visit
 from proxyscope.app.config.runtime import get_static_response_template_for_request
@@ -354,8 +354,17 @@ def create_server(
     resolved_mitm_interceptor = mitm_interceptor
     if resolved_mitm_interceptor is None and auto_enable_mitm:
         ca = default_ca()
-        if ca.is_ready():
+        try:
+            created_new_ca = ca.ensure_ca_material()
+            if created_new_ca:
+                SERVER_LOGGER.info(
+                    "Generated local MITM CA materials cert=%s key=%s",
+                    ca.ca_cert_path,
+                    ca.ca_key_path,
+                )
             resolved_mitm_interceptor = MitmTLSInterceptor(certificate_authority=ca)
+        except MitmCertificateError as exc:
+            SERVER_LOGGER.warning("MITM disabled: failed to initialize local CA: %s", exc)
 
     return ProxyHTTPServer(
         (host, port),

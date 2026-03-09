@@ -77,13 +77,15 @@ poetry run proxyscope --no-ui
 
 ## TLS Interception (MITM)
 
-Generate local CA materials:
-
-```bash
-./scripts/generate_mitm_ca.sh
-```
+On startup, proxyscope now auto-creates local CA materials under `certs/ca` if they are missing.
 
 Import `certs/ca/mitm-ca.crt` into your browser trust store for local testing.
+
+To regenerate CA files, delete the existing cert material and restart proxyscope:
+
+```bash
+rm -f certs/ca/mitm-ca.key.pem certs/ca/mitm-ca.cert.pem certs/ca/mitm-ca.crt certs/ca/mitm-ca.cnf certs/hosts/*.pem certs/hosts/*.srl
+```
 
 ## Tests
 
