@@ -21,6 +21,7 @@ class AuxPanelTabModel:
 
 @dataclass(frozen=True)
 class RuntimeScreenModel:
+    request_title: str
     request_entries: list[LoggedExchange]
     request_cursor: int
     request_scroll: int
@@ -85,6 +86,7 @@ class RuntimeScreenRenderer:
                 scroll=model.request_scroll,
                 active=model.active_pane == "requests",
                 selected_attr=self._selected_attr(),
+                title=model.request_title,
             )
         else:
             request_area_width = _compute_request_list_width(
@@ -103,6 +105,7 @@ class RuntimeScreenRenderer:
                 scroll=model.request_scroll,
                 active=model.active_pane == "requests",
                 selected_attr=self._selected_attr(),
+                title=model.request_title,
             )
             selected_entry = model.request_entries[model.request_cursor] if model.request_entries else None
             request_detail_scroll, response_detail_scroll = _draw_detail_pane(
@@ -204,8 +207,8 @@ def _draw_requests_pane(
     scroll: int,
     active: bool,
     selected_attr: int,
+    title: str,
 ) -> int:
-    title = "REQUESTS"
     if active:
         title += " *"
     _draw_box(stdscr, row, col, height, width, title, active=active)

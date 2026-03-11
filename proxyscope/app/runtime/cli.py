@@ -1,4 +1,5 @@
 from collections import Counter
+from dataclasses import dataclass
 import curses
 import logging
 from threading import Lock
@@ -18,6 +19,49 @@ from proxyscope.app.runtime.tui import AuxPanelTabModel, RuntimeScreenModel, Run
 MainMode = Literal["requests", "request_detail"]
 ActivePane = Literal["requests", "detail", "aux"]
 DetailTab = Literal["request", "response"]
+
+
+@dataclass
+class RequestFilterState:
+    host: str | None = None
+    method: str | None = None
+    status_code: int | None = None
+    text: str | None = None
+
+    def is_active(self) -> bool:
+        return any((self.host, self.method, self.status_code is not None, self.text))
+
+    def summary(self) -> str:
+        parts: list[str] = []
+        if self.host:
+            parts.append(f"host={self.host}")
+        if self.method:
+            parts.append(f"method={self.method}")
+        if self.status_code is not None:
+            parts.append(f"status={self.status_code}")
+        if self.text:
+            parts.append(f"text={self.text}")
+        return " ".join(parts) if parts else "off"
+
+    def matches(self, entry: LoggedExchange) -> bool:
+        if self.host is not None and (entry.target_host or "").lower() != self.host:
+            return False
+        if self.method is not None and entry.request.method.upper() != self.method:
+            return False
+        if self.status_code is not None:
+            if entry.response is None or entry.response.status_code != self.status_code:
+                return False
+        if self.text is not None:
+            haystack = _entry_search_text(entry)
+            if self.text not in haystack:
+                return False
+        return True
+
+    def clear(self) -> None:
+        self.host = None
+        self.method = None
+        self.status_code = None
+        self.text = None
 
 
 class RuntimeCLI(logging.Handler):
@@ -49,6 +93,7 @@ class RuntimeCLI(logging.Handler):
         self._shutdown_server: Callable[[], None] | None = None
         self._on_cache_toggle: Callable[[], None] | None = None
         self._pending_policy_edit_name: str | None = None
+        self._request_filter = RequestFilterState()
 
         self._site_cursor = 0
         self._policy_cursor = 0
@@ -107,6 +152,7 @@ class RuntimeCLI(logging.Handler):
         if cmd == "help":
             self._status_message = (
                 "Commands: help | clear | sites | loglevel <LEVEL> | "
+                "filter [show|clear|host|method|status|text] ... | find <text>|find clear | "
                 "whitelist [add|remove|clear|show] ... | cache [show|on|off|toggle] | "
                 "config [show|save [path]|reload] | "
                 "policy [show|add-editor|remove-editor|clear-editor|add-static|edit|remove|enable|disable] ... | "
@@ -134,6 +180,14 @@ class RuntimeCLI(logging.Handler):
             else:
                 summary = ", ".join(f"{host} ({count})" for host, count in top_sites)
                 self._status_message = f"Top sites: {summary}"
+            return False
+
+        if cmd == "filter":
+            self._status_message = self._handle_filter_command(parts)
+            return False
+
+        if cmd == "find":
+            self._status_message = self._handle_find_command(parts)
             return False
 
         command_result = self._command_service.execute(
@@ -251,7 +305,80 @@ class RuntimeCLI(logging.Handler):
     def _ordered_entries(self) -> list[LoggedExchange]:
         entries = list(self._request_journal.list_entries())
         entries.reverse()
+        if self._request_filter.is_active():
+            entries = [entry for entry in entries if self._request_filter.matches(entry)]
         return entries
+
+    def _all_entries(self) -> list[LoggedExchange]:
+        entries = list(self._request_journal.list_entries())
+        entries.reverse()
+        return entries
+
+    def _handle_filter_command(self, parts: list[str]) -> str:
+        if len(parts) == 1 or parts[1].lower() == "show":
+            return f"Request filter: {self._request_filter.summary()}"
+
+        action = parts[1].lower()
+        value = " ".join(parts[2:]).strip()
+
+        if action == "clear":
+            self._request_filter.clear()
+            self._reset_request_view_after_filter_change()
+            return "Request filter cleared."
+
+        if action == "host":
+            if not value:
+                return "Usage: filter host <hostname>|clear"
+            self._request_filter.host = None if value.lower() == "clear" else value.lower()
+            self._reset_request_view_after_filter_change()
+            return f"Request filter: {self._request_filter.summary()}"
+
+        if action == "method":
+            if not value:
+                return "Usage: filter method <HTTP method>|clear"
+            self._request_filter.method = None if value.lower() == "clear" else value.upper()
+            self._reset_request_view_after_filter_change()
+            return f"Request filter: {self._request_filter.summary()}"
+
+        if action == "status":
+            if not value:
+                return "Usage: filter status <HTTP status>|clear"
+            if value.lower() == "clear":
+                self._request_filter.status_code = None
+            else:
+                try:
+                    self._request_filter.status_code = int(value)
+                except ValueError:
+                    return "Status filter must be an integer."
+            self._reset_request_view_after_filter_change()
+            return f"Request filter: {self._request_filter.summary()}"
+
+        if action == "text":
+            if not value:
+                return "Usage: filter text <search text>|clear"
+            self._request_filter.text = None if value.lower() == "clear" else value.lower()
+            self._reset_request_view_after_filter_change()
+            return f"Request filter: {self._request_filter.summary()}"
+
+        return "Usage: filter [show|clear|host|method|status|text] ..."
+
+    def _handle_find_command(self, parts: list[str]) -> str:
+        query = " ".join(parts[1:]).strip()
+        if not query:
+            return "Usage: find <search text>|clear"
+        self._request_filter.text = None if query.lower() == "clear" else query.lower()
+        self._reset_request_view_after_filter_change()
+        return f"Request filter: {self._request_filter.summary()}"
+
+    def _reset_request_view_after_filter_change(self) -> None:
+        self._request_cursor = 0
+        self._request_scroll = 0
+        self._request_detail_scroll = 0
+        self._response_detail_scroll = 0
+        if not self._ordered_entries():
+            self._main_mode = "requests"
+            if self._active_pane == "detail":
+                self._active_pane = "requests"
 
     def _ordered_policy_items(self) -> list[tuple[str, str]]:
         rules = self._runtime_config.policy_rules()
@@ -389,6 +516,7 @@ class RuntimeCLI(logging.Handler):
             status_message = self._status_message
             command_buffer = self._command_buffer
 
+        all_entries = self._all_entries()
         entries = self._ordered_entries()
         if self._request_cursor >= len(entries):
             self._request_cursor = max(0, len(entries) - 1)
@@ -412,12 +540,15 @@ class RuntimeCLI(logging.Handler):
             f"cache_invalidation={cache_text} "
             f"editor_policies={editor_policy_count} "
             f"policies={policy_count} "
+            f"filter={self._request_filter.summary()} "
             f"config={config_path_text}"
         )
+        request_title = f"REQUESTS {len(entries)}/{len(all_entries)}"
 
         result = self._renderer.draw(
             stdscr,
             RuntimeScreenModel(
+                request_title=request_title,
                 request_entries=entries,
                 request_cursor=self._request_cursor,
                 request_scroll=self._request_scroll,
@@ -565,3 +696,20 @@ def _entry_to_url(entry: LoggedExchange) -> str | None:
     if entry.target_port == default_port:
         return f"{scheme}://{host}{normalized_path}"
     return f"{scheme}://{host}:{entry.target_port}{normalized_path}"
+
+
+def _entry_search_text(entry: LoggedExchange) -> str:
+    parts = [
+        entry.request.method,
+        entry.request.path,
+        entry.target_host or "",
+        entry.client_ip,
+        entry.request.body_preview,
+    ]
+    parts.extend(f"{name}: {value}" for name, value in entry.request.headers)
+    if entry.response is not None:
+        parts.append(str(entry.response.status_code))
+        parts.append(entry.response.reason)
+        parts.append(entry.response.body_preview)
+        parts.extend(f"{name}: {value}" for name, value in entry.response.headers)
+    return "\n".join(parts).lower()

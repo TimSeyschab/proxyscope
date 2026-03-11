@@ -13,7 +13,7 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 - [x] Request-/Response-Streaming statt Full-Buffering vorbereiten
   `UpstreamForwarder` laedt Antworten komplett in den Speicher (`response.content`). Das ist fuer Debugging bequem, skaliert aber schlecht bei grossen Bodies, Downloads und langen Streams. Ein naechster sinnvoller Schritt ist ein Streaming-Modus mit Groessenlimits fuer UI-Preview und Logging.
 
-- [ ] TUI um Filter und Suche erweitern
+- [x] TUI um Filter und Suche erweitern
   Die Request-Liste ist aktuell eine einfache Chronologie. Fuer ein Proxy-Debugging-Tool sind Filter nach Host, Methode, Status und Freitextsuche der direkteste Produktivitaetsgewinn.
 
 ## P1 - Danach hoher Nutzen

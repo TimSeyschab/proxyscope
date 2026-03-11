@@ -11,6 +11,51 @@ from proxyscope.app.runtime.cli import RuntimeCLI
 
 
 class TestRuntimeCLI(unittest.TestCase):
+    def _journal_with_requests(self) -> RequestJournal:
+        journal = RequestJournal()
+        first = journal.start_request(
+            method="GET",
+            path="/alpha",
+            start_line="GET /alpha HTTP/1.1",
+            headers={"X-Test": "alpha"},
+            body=b"hello world",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        journal.complete_request(
+            first,
+            status_code=200,
+            reason="OK",
+            start_line="HTTP/1.1 200 OK",
+            headers={"Content-Type": "text/plain"},
+            body=b"alpha response",
+            duration_ms=10.0,
+        )
+
+        second = journal.start_request(
+            method="POST",
+            path="/beta",
+            start_line="POST /beta HTTP/1.1",
+            headers={"X-Test": "beta"},
+            body=b"search me",
+            client_ip="127.0.0.1",
+            target_host="api.example.com",
+            target_port=443,
+            protocol="https-mitm",
+        )
+        journal.complete_request(
+            second,
+            status_code=404,
+            reason="Not Found",
+            start_line="HTTP/1.1 404 Not Found",
+            headers={"Content-Type": "text/plain"},
+            body=b"missing",
+            duration_ms=11.0,
+        )
+        return journal
+
     def test_execute_help_command(self) -> None:
         cli = RuntimeCLI(
             runtime_config=RuntimeConfig(),
@@ -19,6 +64,7 @@ class TestRuntimeCLI(unittest.TestCase):
         )
         should_exit = cli.execute_command("help")
         self.assertFalse(should_exit)
+        self.assertIn("filter", cli._status_message)  # type: ignore[attr-defined]
 
     def test_execute_clear_command_clears_requests(self) -> None:
         journal = RequestJournal()
@@ -255,3 +301,51 @@ class TestRuntimeCLI(unittest.TestCase):
                     url="https://example.com/hot",
                 )
             )
+
+    def test_execute_filter_commands_reduce_visible_entries(self) -> None:
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=self._journal_with_requests(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        cli.execute_command("filter host api.example.com")
+        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
+        self.assertEqual(cli._ordered_entries()[0].target_host, "api.example.com")  # type: ignore[attr-defined]
+
+        cli.execute_command("filter method POST")
+        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
+        self.assertEqual(cli._ordered_entries()[0].request.method, "POST")  # type: ignore[attr-defined]
+
+        cli.execute_command("filter status 404")
+        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
+        self.assertEqual(cli._ordered_entries()[0].response.status_code, 404)  # type: ignore[union-attr,attr-defined]
+
+    def test_find_command_filters_by_text_and_clear_restores_entries(self) -> None:
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=self._journal_with_requests(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        cli.execute_command("find missing")
+        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
+        self.assertEqual(cli._ordered_entries()[0].target_host, "api.example.com")  # type: ignore[attr-defined]
+
+        cli.execute_command("find clear")
+        self.assertEqual(len(cli._ordered_entries()), 2)  # type: ignore[attr-defined]
+
+    def test_filter_clear_resets_all_request_filters(self) -> None:
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=self._journal_with_requests(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        cli.execute_command("filter host example.com")
+        cli.execute_command("filter method GET")
+        cli.execute_command("filter text alpha")
+        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
+
+        cli.execute_command("filter clear")
+        self.assertEqual(len(cli._ordered_entries()), 2)  # type: ignore[attr-defined]
