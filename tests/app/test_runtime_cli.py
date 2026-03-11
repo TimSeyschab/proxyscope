@@ -349,3 +349,17 @@ class TestRuntimeCLI(unittest.TestCase):
 
         cli.execute_command("filter clear")
         self.assertEqual(len(cli._ordered_entries()), 2)  # type: ignore[attr-defined]
+
+    def test_export_command_writes_json_snapshot(self) -> None:
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=self._journal_with_requests(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "runtime-export.json"
+            cli.execute_command(f"export json {path}")
+
+            self.assertTrue(path.exists())
+            self.assertIn("Exported json snapshot", cli._status_message)  # type: ignore[attr-defined]

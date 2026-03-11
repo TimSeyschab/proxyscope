@@ -12,6 +12,7 @@ from proxyscope.app.editing.policy import edit_policy_rule_with_external_editor
 from proxyscope.app.runtime.commands import RuntimeCommandService
 from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
 from proxyscope.app.runtime.replay import edit_and_resend_logged_request
+from proxyscope.app.runtime.exporting import export_entries
 from proxyscope.app.editing.response import edit_pending_response_with_external_editor
 from proxyscope.app.editing.modifier import PendingResponseEdit, ResponseModifierService
 from proxyscope.app.runtime.tui import AuxPanelTabModel, RuntimeScreenModel, RuntimeScreenRenderer
@@ -153,6 +154,7 @@ class RuntimeCLI(logging.Handler):
             self._status_message = (
                 "Commands: help | clear | sites | loglevel <LEVEL> | "
                 "filter [show|clear|host|method|status|text] ... | find <text>|find clear | "
+                "export <json|har> <path> | "
                 "whitelist [add|remove|clear|show] ... | cache [show|on|off|toggle] | "
                 "config [show|save [path]|reload] | "
                 "policy [show|add-editor|remove-editor|clear-editor|add-static|edit|remove|enable|disable] ... | "
@@ -188,6 +190,10 @@ class RuntimeCLI(logging.Handler):
 
         if cmd == "find":
             self._status_message = self._handle_find_command(parts)
+            return False
+
+        if cmd == "export":
+            self._status_message = self._handle_export_command(parts)
             return False
 
         command_result = self._command_service.execute(
@@ -369,6 +375,25 @@ class RuntimeCLI(logging.Handler):
         self._request_filter.text = None if query.lower() == "clear" else query.lower()
         self._reset_request_view_after_filter_change()
         return f"Request filter: {self._request_filter.summary()}"
+
+    def _handle_export_command(self, parts: list[str]) -> str:
+        if len(parts) < 3:
+            return "Usage: export <json|har> <path>"
+        format_name = parts[1].lower()
+        path = " ".join(parts[2:]).strip()
+        if not path:
+            return "Usage: export <json|har> <path>"
+        try:
+            destination = export_entries(
+                list(self._request_journal.list_entries()),
+                format_name=format_name,
+                destination=path,
+            )
+        except ValueError as exc:
+            return str(exc)
+        except OSError as exc:
+            return f"Export failed ({exc})."
+        return f"Exported {format_name} snapshot to {destination}"
 
     def _reset_request_view_after_filter_change(self) -> None:
         self._request_cursor = 0

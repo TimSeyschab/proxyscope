@@ -18,7 +18,7 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 
 ## P1 - Danach hoher Nutzen
 
-- [ ] Export von Mitschnitten als HAR oder JSON
+- [x] Export von Mitschnitten als HAR oder JSON
   Das Projekt sammelt bereits strukturierte Exchanges. Ein Exportformat waere der naechste logische Schritt fuer Team-Sharing, Bugreports und Offline-Analyse.
 
 - [ ] Persistente Session-Historie fuer Requests einfuehren
