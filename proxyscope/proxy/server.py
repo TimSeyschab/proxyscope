@@ -11,8 +11,11 @@ from proxyscope.proxy.connect_tunnel import (
     parse_connect_target,
 )
 from proxyscope.proxy.forwarding import (
+    BODY_PREVIEW_BYTES,
+    capture_body_preview,
     ForwardRequest,
     ForwardResponse,
+    STREAM_CHUNK_SIZE,
     UpstreamForwarder,
     prepare_forward_headers,
     prepare_forward_request,
@@ -22,7 +25,7 @@ from proxyscope.proxy.http_bridge import map_incoming_request, write_forward_res
 from proxyscope.mitm.certificates import MitmCertificateError, default_ca
 from proxyscope.mitm.tunnel import MitmTLSInterceptor
 from proxyscope.app.logging.observability import emit_site_visit
-from proxyscope.app.config.runtime import get_static_response_template_for_request
+from proxyscope.app.config.runtime import get_static_response_template_for_request, should_modify_response_for_request
 from proxyscope.app.editing.modifier import get_response_modifier
 from proxyscope.proxy.types import Forwarder
 from proxyscope.proxy.tunnel_registry import TunnelConnectionRegistry
@@ -122,6 +125,39 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             },
         )
 
+    def _forward_upstream_streaming(
+        self,
+        forwarder: UpstreamForwarder,
+        request: ForwardRequest,
+        *,
+        send_body: bool,
+    ) -> ForwardResponse:
+        upstream_response = forwarder.open_stream(request)
+        try:
+            self.send_response(upstream_response.status_code, upstream_response.reason)
+            for name, value in upstream_response.headers.items():
+                self.send_header(name, value)
+            self.end_headers()
+
+            preview = b""
+            body_size = 0
+            if send_body:
+                preview, body_size = capture_body_preview(
+                    upstream_response.raw.stream(STREAM_CHUNK_SIZE, decode_content=False),
+                    max_bytes=BODY_PREVIEW_BYTES,
+                    on_chunk=self.wfile.write,
+                )
+
+            return ForwardResponse(
+                status_code=upstream_response.status_code,
+                reason=upstream_response.reason,
+                headers=dict(upstream_response.headers),
+                body=preview,
+                body_size=body_size,
+            )
+        finally:
+            upstream_response.close()
+
     def _handle(self, *, send_body: bool) -> None:
         started = time.perf_counter()
         server = self.server
@@ -182,13 +218,30 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             return
 
         static_template = get_static_response_template_for_request(method=self.command, url=target_url)
+        should_modify = should_modify_response_for_request(method=self.command, url=target_url)
         if static_template is not None:
             forward_response = ForwardResponse(
                 status_code=static_template.status_code,
                 reason=static_template.reason,
                 headers=dict(static_template.headers),
                 body=static_template.body,
+                body_size=len(static_template.body),
             )
+        elif isinstance(server.forwarder, UpstreamForwarder) and not should_modify:
+            forward_response = self._forward_upstream_streaming(
+                server.forwarder,
+                forward_request,
+                send_body=send_body,
+            )
+            duration_ms = (time.perf_counter() - started) * 1000
+            log_outgoing_response(
+                forward_response,
+                request_id=request_id,
+                duration_ms=duration_ms,
+                client_ip=self.client_address[0],
+                target_host=target_host,
+            )
+            return
         else:
             forward_response = server.forwarder.forward(forward_request)
         modifier = get_response_modifier()

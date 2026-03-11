@@ -97,3 +97,34 @@ class TestRequestJournal(unittest.TestCase):
         assert entry is not None
         self.assertEqual(entry.request.body_preview, "abc\\x00def")
         self.assertEqual(entry.request.body, b"abc\x00def")
+
+    def test_response_preview_uses_reported_total_body_size(self) -> None:
+        journal = RequestJournal()
+        request_id = journal.start_request(
+            method="GET",
+            path="/large",
+            start_line="GET /large HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+
+        journal.complete_request(
+            request_id,
+            status_code=200,
+            reason="OK",
+            start_line="HTTP/1.1 200 OK",
+            headers={"Content-Length": "10"},
+            body=b"abc",
+            duration_ms=5.0,
+            body_size=10,
+        )
+
+        entry = journal.get_entry(request_id)
+        assert entry is not None
+        assert entry.response is not None
+        self.assertEqual(entry.response.body_size, 10)
+        self.assertEqual(entry.response.body_preview, "abc\n...[truncated 7 bytes]")

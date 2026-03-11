@@ -1,10 +1,14 @@
 from dataclasses import dataclass
+from collections.abc import Callable, Iterable
 from urllib.parse import urlsplit
 
 import requests
 
 from proxyscope.app.config.runtime import is_cache_invalidation_enabled
 from proxyscope.proxy.http1_request_rewriter import rewrite_cache_invalidation_headers
+
+STREAM_CHUNK_SIZE = 64 * 1024
+BODY_PREVIEW_BYTES = 4096
 
 
 @dataclass(frozen=True)
@@ -21,23 +25,57 @@ class ForwardResponse:
     reason: str
     headers: dict[str, str]
     body: bytes
+    body_size: int | None = None
 
 
 class UpstreamForwarder:
     """Forward a request to its dynamic upstream target."""
 
     def forward(self, request: ForwardRequest) -> ForwardResponse:
+        response = self.open_stream(request)
+        try:
+            body = response.content
+            return ForwardResponse(
+                response.status_code,
+                response.reason,
+                dict(response.headers),
+                body,
+                body_size=len(body),
+            )
+        finally:
+            response.close()
+
+    def open_stream(self, request: ForwardRequest) -> requests.Response:
         url = resolve_target_url(request)
         headers = prepare_forward_headers(request.headers)
-        response = requests.request(request.method,
-                                    url,
-                                    headers=headers,
-                                    data=request.body,
-                                    timeout=60)
-        return ForwardResponse(response.status_code,
-                               response.reason,
-                               dict(response.headers),
-                               response.content)
+        return requests.request(
+            request.method,
+            url,
+            headers=headers,
+            data=request.body,
+            timeout=60,
+            stream=True,
+        )
+
+
+def capture_body_preview(
+    chunks: Iterable[bytes],
+    *,
+    max_bytes: int = BODY_PREVIEW_BYTES,
+    on_chunk: Callable[[bytes], None] | None = None,
+) -> tuple[bytes, int]:
+    preview = bytearray()
+    total_bytes = 0
+    for chunk in chunks:
+        if not chunk:
+            continue
+        if on_chunk is not None:
+            on_chunk(chunk)
+        total_bytes += len(chunk)
+        remaining = max_bytes - len(preview)
+        if remaining > 0:
+            preview.extend(chunk[:remaining])
+    return bytes(preview), total_bytes
 
 
 def resolve_target_url(request: ForwardRequest) -> str:

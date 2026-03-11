@@ -20,6 +20,7 @@ class LoggedResponseMessage:
     start_line: str
     headers: tuple[tuple[str, str], ...]
     body_preview: str
+    body_size: int | None
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ class RequestJournal:
         headers: dict[str, str],
         body: bytes | None,
         duration_ms: float,
+        body_size: int | None = None,
     ) -> None:
         with self._lock:
             for index, entry in enumerate(self._entries):
@@ -111,7 +113,8 @@ class RequestJournal:
                         reason=reason,
                         start_line=start_line,
                         headers=tuple(headers.items()),
-                        body_preview=_body_preview(body),
+                        body_preview=_body_preview(body, total_bytes=body_size),
+                        body_size=body_size if body_size is not None else (len(body) if body is not None else None),
                     ),
                 )
                 self._entries[index] = updated
@@ -148,7 +151,7 @@ def get_request_journal() -> RequestJournal:
         return _request_journal
 
 
-def _body_preview(body: bytes | None, *, max_bytes: int = 4096) -> str:
+def _body_preview(body: bytes | None, *, max_bytes: int = 4096, total_bytes: int | None = None) -> str:
     if body is None:
         return "<not captured>"
     if not body:
@@ -156,7 +159,8 @@ def _body_preview(body: bytes | None, *, max_bytes: int = 4096) -> str:
 
     prefix = body[:max_bytes]
     text = prefix.decode("utf-8", errors="replace").replace("\x00", "\\x00")
-    if len(body) <= max_bytes:
+    effective_total = len(body) if total_bytes is None else max(total_bytes, len(body))
+    if effective_total <= len(prefix):
         return text
-    remaining = len(body) - max_bytes
+    remaining = effective_total - len(prefix)
     return f"{text}\n...[truncated {remaining} bytes]"

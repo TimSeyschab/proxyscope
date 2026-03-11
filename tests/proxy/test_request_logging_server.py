@@ -6,6 +6,7 @@ import time
 import unittest
 
 from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
+from proxyscope.app.runtime.journal import get_request_journal
 from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse
 from proxyscope.proxy.server import create_server
 
@@ -241,3 +242,58 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(data, b'{"source":"policy"}')
         self.assertEqual(forwarder.calls, 0)
+
+    def test_streams_large_upstream_response_with_truncated_preview(self) -> None:
+        class UpstreamHandler(socketserver.BaseRequestHandler):
+            response_body = b"x" * 5000
+
+            def handle(self) -> None:
+                request_data = b""
+                while b"\r\n\r\n" not in request_data:
+                    chunk = self.request.recv(4096)
+                    if not chunk:
+                        return
+                    request_data += chunk
+                response = (
+                    b"HTTP/1.1 200 OK\r\n"
+                    b"Content-Type: text/plain\r\n"
+                    b"Content-Length: 5000\r\n"
+                    b"\r\n"
+                    + self.response_body
+                )
+                self.request.sendall(response)
+
+        upstream = socketserver.ThreadingTCPServer(("127.0.0.1", 0), UpstreamHandler)
+        upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+        upstream_thread.start()
+
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+        self.server = create_server("127.0.0.1", 0, auto_enable_mitm=False)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+
+        try:
+            upstream_host, upstream_port = upstream.server_address
+            status, data = self._request(
+                "GET",
+                f"http://{upstream_host}:{upstream_port}/large",
+                headers={"Host": f"{upstream_host}:{upstream_port}"},
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(data, UpstreamHandler.response_body)
+
+            entries = get_request_journal().list_entries()
+            self.assertTrue(entries)
+            entry = entries[-1]
+            assert entry.response is not None
+            self.assertEqual(entry.response.body_size, 5000)
+            self.assertTrue(entry.response.body_preview.endswith("...[truncated 904 bytes]"))
+        finally:
+            upstream.shutdown()
+            upstream.server_close()
+            upstream_thread.join(timeout=2)

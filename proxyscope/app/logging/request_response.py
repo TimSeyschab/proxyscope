@@ -56,12 +56,14 @@ def log_outgoing_response(
     if not should_log_for_host(target_host):
         return
 
+    body_size = response.body_size if response.body_size is not None else len(response.body)
+
     RESPONSE_LOGGER.info(
         "Outgoing response status=%s reason=%s client=%s body_bytes=%d duration_ms=%.2f",
         response.status_code,
         response.reason,
         client_ip,
-        len(response.body),
+        body_size,
         duration_ms,
     )
 
@@ -77,6 +79,7 @@ def log_outgoing_response(
         headers=response.headers,
         body=response.body,
         duration_ms=duration_ms,
+        body_size=body_size,
     )
 
 
@@ -149,6 +152,7 @@ def log_mitm_http_response(
         headers=headers,
         body=body,
         duration_ms=0.0,
+        body_size=len(body),
     )
 
 

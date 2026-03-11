@@ -3,12 +3,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 
 from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.proxy.forwarding import ForwardRequest, UpstreamForwarder
+from proxyscope.proxy.forwarding import ForwardRequest, UpstreamForwarder, capture_body_preview
 
 
 class TestForwardingStubs(unittest.TestCase):
     def tearDown(self) -> None:
         set_runtime_config(RuntimeConfig())
+
+    def test_capture_body_preview_keeps_prefix_and_counts_total_bytes(self) -> None:
+        preview, total_bytes = capture_body_preview([b"abcd", b"efgh", b"ijkl"], max_bytes=6)
+
+        self.assertEqual(preview, b"abcdef")
+        self.assertEqual(total_bytes, 12)
 
     def test_forwarder_contract_with_upstream_server(self) -> None:
         class UpstreamHandler(BaseHTTPRequestHandler):

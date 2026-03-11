@@ -10,7 +10,7 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 - [x] Echte Integrations-/Socket-Tests in einer CI-Pipeline absichern
   Die reine Logik ist gut getestet, aber die servernahen Tests fuer Forwarding, CONNECT und MITM-Bootstrap brauchen echte Socket-Binds. Diese Pfade sind produktkritisch und sollten in CI ausserhalb der aktuellen Sandbox verifiziert werden.
 
-- [ ] Request-/Response-Streaming statt Full-Buffering vorbereiten
+- [x] Request-/Response-Streaming statt Full-Buffering vorbereiten
   `UpstreamForwarder` laedt Antworten komplett in den Speicher (`response.content`). Das ist fuer Debugging bequem, skaliert aber schlecht bei grossen Bodies, Downloads und langen Streams. Ein naechster sinnvoller Schritt ist ein Streaming-Modus mit Groessenlimits fuer UI-Preview und Logging.
 
 - [ ] TUI um Filter und Suche erweitern
