@@ -67,6 +67,44 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertIn("filter", cli._status_message)  # type: ignore[attr-defined]
         self.assertIn("mitm", cli._status_message)  # type: ignore[attr-defined]
 
+    def test_go_back_closes_active_sidebar_first(self) -> None:
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+        cli._focus_aux_tab("sites")  # type: ignore[attr-defined]
+
+        cli._go_back()  # type: ignore[attr-defined]
+
+        self.assertFalse(cli._view_state.aux_visible)  # type: ignore[attr-defined]
+        self.assertEqual(cli._view_state.active_pane, "requests")  # type: ignore[attr-defined]
+
+    def test_go_back_closes_detail_view(self) -> None:
+        journal = RequestJournal()
+        journal.start_request(
+            method="GET",
+            path="/hello",
+            start_line="GET /hello HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=journal,
+            response_modifier=ResponseModifierService(),
+        )
+        cli._open_selected_request_detail()  # type: ignore[attr-defined]
+
+        cli._go_back()  # type: ignore[attr-defined]
+
+        self.assertEqual(cli._view_state.main_mode, "requests")  # type: ignore[attr-defined]
+        self.assertEqual(cli._view_state.active_pane, "requests")  # type: ignore[attr-defined]
+
     def test_execute_clear_command_clears_requests(self) -> None:
         journal = RequestJournal()
         request_id = journal.start_request(

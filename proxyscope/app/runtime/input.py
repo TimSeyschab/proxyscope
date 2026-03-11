@@ -17,6 +17,8 @@ class RuntimeInputHost(Protocol):
 
     def _page_vertical(self, direction: int) -> None: ...
 
+    def _go_back(self) -> None: ...
+
     def _switch_to_request_list_mode(self) -> None: ...
 
     def _focus_aux_tab(self, tab_key: str) -> None: ...
@@ -79,7 +81,7 @@ class RuntimeInputController:
             return
 
         if key == ord("B") and not host._command_buffer:
-            host._switch_to_request_list_mode()
+            host._go_back()
             return
 
         if key == ord("P") and not host._command_buffer:

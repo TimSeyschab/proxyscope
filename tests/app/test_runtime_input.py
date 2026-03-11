@@ -11,6 +11,7 @@ class _FakeHost:
         self._main_mode = "requests"
 
         self.switched_to_requests = 0
+        self.go_back_calls = 0
         self.focused_tabs: list[str] = []
         self.toggle_aux_calls = 0
         self.executed_commands: list[str] = []
@@ -26,6 +27,9 @@ class _FakeHost:
 
     def _switch_to_request_list_mode(self) -> None:
         self.switched_to_requests += 1
+
+    def _go_back(self) -> None:
+        self.go_back_calls += 1
 
     def _focus_aux_tab(self, tab_key: str) -> None:
         self.focused_tabs.append(tab_key)
@@ -71,11 +75,11 @@ class _FakeHost:
 
 
 class TestRuntimeInputController(unittest.TestCase):
-    def test_shift_b_switches_to_request_list_mode(self) -> None:
+    def test_shift_b_dispatches_go_back(self) -> None:
         host = _FakeHost()
         controller = RuntimeInputController()
         controller.handle_key(host, object(), ord("B"))
-        self.assertEqual(host.switched_to_requests, 1)
+        self.assertEqual(host.go_back_calls, 1)
 
     def test_shift_p_focuses_policies_tab(self) -> None:
         host = _FakeHost()

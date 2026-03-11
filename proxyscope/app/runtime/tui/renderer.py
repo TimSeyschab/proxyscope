@@ -310,7 +310,7 @@ def _draw_aux_panel(
     active: bool,
     selected_attr: int,
 ) -> dict[str, int]:
-    title = "UTILITY [Shift+V hide]"
+    title = "SIDEBAR [Shift+V hide]"
     if active:
         title += " *"
     _draw_box(stdscr, row, col, height, width, title, active=active)
