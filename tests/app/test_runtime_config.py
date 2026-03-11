@@ -34,6 +34,17 @@ class TestRuntimeConfig(unittest.TestCase):
         config.set_cache_invalidation_enabled(True)
         self.assertTrue(config.cache_invalidation_enabled)
 
+    def test_mitm_settings_can_be_updated(self) -> None:
+        config = RuntimeConfig()
+        self.assertTrue(config.mitm_enabled)
+        self.assertEqual(config.mitm_certs_dir, Path("certs"))
+
+        config.set_mitm_enabled(False)
+        config.set_mitm_certs_dir("custom-certs")
+
+        self.assertFalse(config.mitm_enabled)
+        self.assertEqual(config.mitm_certs_dir, Path("custom-certs"))
+
     def test_modification_whitelist(self) -> None:
         config = RuntimeConfig()
         added = config.add_modification_whitelist_entry("https://example.com/path?x=1")
@@ -98,6 +109,8 @@ class TestRuntimeConfig(unittest.TestCase):
 
             config.set_log_level("DEBUG")
             config.add_whitelist_entry("https://example.com")
+            config.set_mitm_enabled(False)
+            config.set_mitm_certs_dir("cert-bundle")
             config.add_modification_whitelist_entry("https://example.com/edit", method="POST")
             config.add_static_response_rule(
                 url="https://example.com/mock",
@@ -111,6 +124,8 @@ class TestRuntimeConfig(unittest.TestCase):
             reloaded = RuntimeConfig.load_from_file(config_path)
             self.assertEqual(reloaded.log_level_name(), "DEBUG")
             self.assertEqual(reloaded.whitelist_entries(), ("example.com",))
+            self.assertFalse(reloaded.mitm_enabled)
+            self.assertEqual(reloaded.mitm_certs_dir, Path("cert-bundle"))
             self.assertTrue(
                 reloaded.should_modify_response_for_request(
                     method="POST",
@@ -185,6 +200,8 @@ class TestRuntimeConfig(unittest.TestCase):
             config = RuntimeConfig.load_from_file(config_path)
             config.set_log_level("INFO")
             config.set_cache_invalidation_enabled(True)
+            config.set_mitm_enabled(True)
+            config.set_mitm_certs_dir("before-certs")
             config.add_whitelist_entry("https://before.example")
             config.add_open_editor_policy("https://before.example/edit", method="GET")
             config.save()
@@ -192,6 +209,8 @@ class TestRuntimeConfig(unittest.TestCase):
             external = RuntimeConfig.load_from_file(config_path)
             external.set_log_level("DEBUG")
             external.set_cache_invalidation_enabled(False)
+            external.set_mitm_enabled(False)
+            external.set_mitm_certs_dir("after-certs")
             external.clear_whitelist()
             external.add_whitelist_entry("https://after.example")
             external.clear_open_editor_policies()
@@ -202,6 +221,8 @@ class TestRuntimeConfig(unittest.TestCase):
             self.assertTrue(reloaded)
             self.assertEqual(config.log_level_name(), "DEBUG")
             self.assertFalse(config.cache_invalidation_enabled)
+            self.assertFalse(config.mitm_enabled)
+            self.assertEqual(config.mitm_certs_dir, Path("after-certs"))
             self.assertEqual(config.whitelist_entries(), ("after.example",))
             self.assertFalse(
                 config.should_modify_response_for_request(method="GET", url="https://before.example/edit")

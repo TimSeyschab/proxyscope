@@ -19,6 +19,8 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind")
     parser.add_argument("--port", default=8080, type=int, help="Port to bind")
     parser.add_argument("--config", default=None, help="Path to JSON runtime configuration file")
+    parser.add_argument("--mitm", choices=("on", "off"), default=None, help="Override MITM interception mode")
+    parser.add_argument("--certs-dir", default=None, help="Directory for MITM CA and host certificates")
     parser.add_argument("--no-ui", action="store_true", help="Disable interactive runtime CLI UI")
     return parser
 
@@ -26,6 +28,10 @@ def _build_parser() -> ArgumentParser:
 def main() -> None:
     args = _build_parser().parse_args()
     runtime_config = RuntimeConfig.load_from_file(args.config) if args.config else RuntimeConfig()
+    if args.mitm is not None:
+        runtime_config.set_mitm_enabled(args.mitm == "on")
+    if args.certs_dir is not None:
+        runtime_config.set_mitm_certs_dir(args.certs_dir)
     request_journal = RequestJournal()
     response_modifier = ResponseModifierService()
     set_runtime_config(runtime_config)
@@ -33,7 +39,12 @@ def main() -> None:
     set_response_modifier(response_modifier)
     configure_logging(level=runtime_config.log_level)
 
-    server = create_server(args.host, args.port)
+    server = create_server(
+        args.host,
+        args.port,
+        auto_enable_mitm=runtime_config.mitm_enabled,
+        ca_root=runtime_config.mitm_certs_dir,
+    )
     LOGGER.info("Listening on http://%s:%d", args.host, args.port)
 
     use_ui = not args.no_ui and sys.stdin.isatty() and sys.stdout.isatty()

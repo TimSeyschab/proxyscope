@@ -27,7 +27,7 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 - [x] Policy-System um URL-Prefix-/Host-Regeln und Prioritaeten ausbauen
   Es gibt schon statische Antworten und Editor-Policies, aber fuer reale Workflows fehlen komfortable Regelstufen wie Host-weit, Prefix-weit, explizite Prioritaet und Konfliktauflosung.
 
-- [ ] Bessere Steuerung fuer MITM im CLI/Config ergaenzen
+- [x] Bessere Steuerung fuer MITM im CLI/Config ergaenzen
   MITM wird beim Server-Bootstrap behandelt, aber nicht als klar sichtbare Runtime-/CLI-Funktion praesentiert. Sinnvoll waeren explizite Flags und Konfigurationsoptionen fuer an/aus, Zertifikatspfade und Failover-Verhalten.
 
 - [ ] Strukturierte Response-Manipulation ohne externen Editor anbieten

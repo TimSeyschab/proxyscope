@@ -40,6 +40,8 @@ class RuntimeCommandService:
             return self._handle_whitelist(parts)
         if cmd == "cache":
             return self._handle_cache(parts, on_cache_toggle=on_cache_toggle)
+        if cmd == "mitm":
+            return self._handle_mitm(parts)
         if cmd == "config":
             return self._handle_config(parts, on_cache_toggle=on_cache_toggle)
         if cmd in {"policy", "pol"}:
@@ -321,6 +323,46 @@ class RuntimeCommandService:
                 "Usage: policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|"
                 "add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ..."
             ),
+        )
+
+    def _handle_mitm(self, parts: list[str]) -> CommandExecutionResult:
+        if len(parts) == 1 or parts[1].lower() == "show":
+            state = "on" if self._runtime_config.mitm_enabled else "off"
+            certs_dir = self._runtime_config.mitm_certs_dir
+            return CommandExecutionResult(
+                handled=True,
+                status_message=f"MITM: {state} certs_dir={certs_dir}",
+            )
+
+        action = parts[1].lower()
+        if action == "on":
+            self._runtime_config.set_mitm_enabled(True)
+            return CommandExecutionResult(
+                handled=True,
+                status_message="MITM enabled in config (restart server to apply).",
+            )
+        if action == "off":
+            self._runtime_config.set_mitm_enabled(False)
+            return CommandExecutionResult(
+                handled=True,
+                status_message="MITM disabled in config (restart server to apply).",
+            )
+        if action == "certs-dir":
+            path = " ".join(parts[2:]).strip()
+            if not path:
+                return CommandExecutionResult(
+                    handled=True,
+                    status_message="Usage: mitm certs-dir <path>",
+                )
+            target = self._runtime_config.set_mitm_certs_dir(path)
+            return CommandExecutionResult(
+                handled=True,
+                status_message=f"MITM certs dir set to {target} (restart server to apply).",
+            )
+
+        return CommandExecutionResult(
+            handled=True,
+            status_message="Usage: mitm [show|on|off|certs-dir <path>]",
         )
 
     def _handle_config(

@@ -35,6 +35,8 @@ class RuntimeConfig:
         log_level: int = logging.INFO,
         log_whitelist: Iterable[str] | None = None,
         cache_invalidation_enabled: bool = True,
+        mitm_enabled: bool = True,
+        mitm_certs_dir: str | Path = "certs",
         config_path: str | Path | None = None,
         policy_rules: Iterable[PolicyRule] | None = None,
     ) -> None:
@@ -42,6 +44,8 @@ class RuntimeConfig:
         self._log_level = log_level
         self._log_whitelist: set[str] = set()
         self._cache_invalidation_enabled = cache_invalidation_enabled
+        self._mitm_enabled = mitm_enabled
+        self._mitm_certs_dir = Path(mitm_certs_dir)
         self._config_path = Path(config_path) if config_path is not None else None
         self._policy_rules: list[PolicyRule] = list(policy_rules or [])
 
@@ -119,6 +123,16 @@ class RuntimeConfig:
         with self._lock:
             return self._cache_invalidation_enabled
 
+    @property
+    def mitm_enabled(self) -> bool:
+        with self._lock:
+            return self._mitm_enabled
+
+    @property
+    def mitm_certs_dir(self) -> Path:
+        with self._lock:
+            return self._mitm_certs_dir
+
     def set_cache_invalidation_enabled(self, enabled: bool) -> bool:
         with self._lock:
             self._cache_invalidation_enabled = enabled
@@ -131,6 +145,19 @@ class RuntimeConfig:
             enabled = self._cache_invalidation_enabled
         self._persist_if_configured()
         return enabled
+
+    def set_mitm_enabled(self, enabled: bool) -> bool:
+        with self._lock:
+            self._mitm_enabled = enabled
+        self._persist_if_configured()
+        return enabled
+
+    def set_mitm_certs_dir(self, value: str | Path) -> Path:
+        normalized = Path(value)
+        with self._lock:
+            self._mitm_certs_dir = normalized
+        self._persist_if_configured()
+        return normalized
 
     def policy_rules(self) -> tuple[PolicyRule, ...]:
         with self._lock:
@@ -420,6 +447,8 @@ class RuntimeConfig:
             self._log_level = reloaded.log_level
             self._log_whitelist = set(reloaded.whitelist_entries())
             self._cache_invalidation_enabled = reloaded.cache_invalidation_enabled
+            self._mitm_enabled = reloaded.mitm_enabled
+            self._mitm_certs_dir = reloaded.mitm_certs_dir
             self._policy_rules = list(reloaded.policy_rules())
         return True
 
@@ -443,6 +472,8 @@ class RuntimeConfig:
             "log_level": logging.getLevelName(self._log_level),
             "log_whitelist": sorted(self._log_whitelist),
             "cache_invalidation_enabled": self._cache_invalidation_enabled,
+            "mitm_enabled": self._mitm_enabled,
+            "mitm_certs_dir": str(self._mitm_certs_dir),
             "policies": [serialize_policy_rule_payload(rule) for rule in self._policy_rules],
         }
 
@@ -457,6 +488,8 @@ class RuntimeConfig:
         level_value = getattr(logging, level_raw, logging.INFO)
         whitelist_raw = raw.get("log_whitelist", [])
         cache_enabled = bool(raw.get("cache_invalidation_enabled", False))
+        mitm_enabled = bool(raw.get("mitm_enabled", True))
+        mitm_certs_dir = raw.get("mitm_certs_dir", "certs")
 
         rules: list[PolicyRule] = []
         for item in raw.get("policies", []):
@@ -468,6 +501,8 @@ class RuntimeConfig:
             log_level=level_value,
             log_whitelist=whitelist_raw,
             cache_invalidation_enabled=cache_enabled,
+            mitm_enabled=mitm_enabled,
+            mitm_certs_dir=mitm_certs_dir,
             config_path=resolved_path,
             policy_rules=rules,
         )

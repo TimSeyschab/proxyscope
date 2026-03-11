@@ -204,13 +204,17 @@ class MitmCertificateAuthority:
         browser_import_path.write_bytes(self.ca_cert_path.read_bytes())
 
 
-def default_ca() -> MitmCertificateAuthority:
-    certs_root = Path("certs")
+def certificate_authority_for_root(certs_root: str | Path) -> MitmCertificateAuthority:
+    resolved_root = Path(certs_root)
     return MitmCertificateAuthority(
-        ca_cert_path=certs_root / "ca" / "mitm-ca.cert.pem",
-        ca_key_path=certs_root / "ca" / "mitm-ca.key.pem",
-        hosts_dir=certs_root / "hosts",
+        ca_cert_path=resolved_root / "ca" / "mitm-ca.cert.pem",
+        ca_key_path=resolved_root / "ca" / "mitm-ca.key.pem",
+        hosts_dir=resolved_root / "hosts",
     )
+
+
+def default_ca() -> MitmCertificateAuthority:
+    return certificate_authority_for_root(Path("certs"))
 
 
 def _is_ip_address(host: str) -> bool:

@@ -65,6 +65,7 @@ class TestRuntimeCLI(unittest.TestCase):
         should_exit = cli.execute_command("help")
         self.assertFalse(should_exit)
         self.assertIn("filter", cli._status_message)  # type: ignore[attr-defined]
+        self.assertIn("mitm", cli._status_message)  # type: ignore[attr-defined]
 
     def test_execute_clear_command_clears_requests(self) -> None:
         journal = RequestJournal()
@@ -170,6 +171,18 @@ class TestRuntimeCLI(unittest.TestCase):
         cli._on_cache_toggle = lambda: called.__setitem__("count", called["count"] + 1)  # type: ignore[attr-defined]
         cli.execute_command("cache on")
         self.assertEqual(called["count"], 1)
+
+    def test_execute_mitm_commands_update_config(self) -> None:
+        config = RuntimeConfig()
+        cli = RuntimeCLI(
+            runtime_config=config,
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+        cli.execute_command("mitm off")
+        self.assertFalse(config.mitm_enabled)
+        cli.execute_command("mitm certs-dir custom-certs")
+        self.assertEqual(config.mitm_certs_dir, Path("custom-certs"))
 
     def test_execute_policy_add_editor_updates_config(self) -> None:
         config = RuntimeConfig()

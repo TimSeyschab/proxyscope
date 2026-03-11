@@ -42,6 +42,19 @@ class TestServerMitmBootstrap(unittest.TestCase):
         finally:
             server.server_close()
 
+    def test_create_server_uses_configured_ca_root(self) -> None:
+        fake_ca = Mock()
+        fake_ca.ensure_ca_material.return_value = False
+
+        with patch("proxyscope.proxy.server.certificate_authority_for_root", return_value=fake_ca) as ca_factory:
+            server = create_server("127.0.0.1", 0, auto_enable_mitm=True, ca_root="custom-certs")
+        try:
+            self.assertIsNotNone(server.mitm_interceptor)
+            ca_factory.assert_called_once_with("custom-certs")
+            fake_ca.ensure_ca_material.assert_called_once_with()
+        finally:
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()

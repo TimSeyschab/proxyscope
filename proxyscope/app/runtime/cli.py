@@ -157,6 +157,7 @@ class RuntimeCLI(logging.Handler):
                 "filter [show|clear|host|method|status|text] ... | find <text>|find clear | "
                 "export <json|har> <path> | "
                 "session <save|load> <path> | "
+                "mitm [show|on|off|certs-dir <path>] | "
                 "whitelist [add|remove|clear|show] ... | cache [show|on|off|toggle] | "
                 "config [show|save [path]|reload] | "
                 "policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|"
@@ -589,6 +590,7 @@ class RuntimeCLI(logging.Handler):
         if len(entries_whitelist) > 3:
             whitelist_text += ",..."
         cache_text = "on" if self._runtime_config.cache_invalidation_enabled else "off"
+        mitm_text = "on" if self._runtime_config.mitm_enabled else "off"
         policy_count = len(self._runtime_config.policy_rules())
         editor_policy_count = len(self._runtime_config.open_editor_policy_entries())
         config_path = self._runtime_config.config_path
@@ -597,6 +599,7 @@ class RuntimeCLI(logging.Handler):
             f"level={self._runtime_config.log_level_name()} "
             f"whitelist={whitelist_text} "
             f"cache_invalidation={cache_text} "
+            f"mitm={mitm_text} "
             f"editor_policies={editor_policy_count} "
             f"policies={policy_count} "
             f"filter={self._request_filter.summary()} "

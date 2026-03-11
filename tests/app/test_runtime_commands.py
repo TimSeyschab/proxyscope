@@ -7,6 +7,26 @@ from proxyscope.app.runtime.commands import RuntimeCommandService
 
 
 class TestRuntimeCommandService(unittest.TestCase):
+    def test_mitm_commands_update_runtime_config(self) -> None:
+        config = RuntimeConfig()
+        service = RuntimeCommandService(runtime_config=config)
+
+        result = service.execute(
+            "mitm off",
+            on_cache_toggle=None,
+            on_schedule_policy_edit=lambda _name: None,
+        )
+        self.assertTrue(result.handled)
+        self.assertFalse(config.mitm_enabled)
+
+        result = service.execute(
+            "mitm certs-dir custom-certs",
+            on_cache_toggle=None,
+            on_schedule_policy_edit=lambda _name: None,
+        )
+        self.assertTrue(result.handled)
+        self.assertEqual(config.mitm_certs_dir, Path("custom-certs"))
+
     def test_policy_prefix_and_priority_commands(self) -> None:
         config = RuntimeConfig()
         service = RuntimeCommandService(runtime_config=config)
