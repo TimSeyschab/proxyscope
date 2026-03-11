@@ -30,6 +30,9 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 - [x] Bessere Steuerung fuer MITM im CLI/Config ergaenzen
   MITM wird beim Server-Bootstrap behandelt, aber nicht als klar sichtbare Runtime-/CLI-Funktion praesentiert. Sinnvoll waeren explizite Flags und Konfigurationsoptionen fuer an/aus, Zertifikatspfade und Failover-Verhalten.
 
+- [x] Runtime-UI auf ein responsives Drei-Bereichs-Layout heben
+  Die bisherige `curses`-TUI ist funktional, aber fuer Layout, Fokus und kleine Terminalgroessen unnoetig komplex. Ein klareres Modell aus Hauptfenster, Detailansicht und Seitenleiste auf einer TUI-Library mit besserem Layout-System senkt die UI-Komplexitaet und macht spaetere Anpassungen deutlich einfacher.
+
 - [ ] Strukturierte Response-Manipulation ohne externen Editor anbieten
   Der Editor-Flow ist flexibel, aber langsam fuer kleine Anpassungen. Einfache Built-ins fuer Header-Override, Statuscode-Override oder Body-Templates wuerden haeufige Faelle beschleunigen.
 

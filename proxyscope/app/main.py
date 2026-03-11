@@ -9,6 +9,7 @@ from proxyscope.app.logging.observability import set_runtime_observer
 from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
 from proxyscope.app.editing.modifier import ResponseModifierService, set_response_modifier
 from proxyscope.app.runtime.cli import RuntimeCLI
+from proxyscope.app.runtime.textual_ui import RuntimeTextualUI
 from proxyscope.proxy.server import ProxyHTTPServer, create_server
 
 LOGGER = logging.getLogger("tproxy.app")
@@ -21,6 +22,7 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("--config", default=None, help="Path to JSON runtime configuration file")
     parser.add_argument("--mitm", choices=("on", "off"), default=None, help="Override MITM interception mode")
     parser.add_argument("--certs-dir", default=None, help="Directory for MITM CA and host certificates")
+    parser.add_argument("--ui", choices=("textual", "curses"), default="textual", help="Interactive runtime UI implementation")
     parser.add_argument("--no-ui", action="store_true", help="Disable interactive runtime CLI UI")
     return parser
 
@@ -60,7 +62,8 @@ def main() -> None:
         return
 
     response_modifier.set_interactive_enabled(True)
-    runtime_ui = RuntimeCLI(
+    ui_class = RuntimeTextualUI if args.ui == "textual" else RuntimeCLI
+    runtime_ui = ui_class(
         runtime_config=runtime_config,
         request_journal=request_journal,
         response_modifier=response_modifier,

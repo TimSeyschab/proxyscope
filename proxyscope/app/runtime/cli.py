@@ -1,4 +1,5 @@
 from collections import Counter
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 import curses
 import json
@@ -512,7 +513,12 @@ class RuntimeCLI(logging.Handler):
     def _schedule_policy_edit(self, name: str) -> None:
         self._view_state.pending_policy_edit_name = name
 
-    def _edit_selected_policy(self, stdscr: "curses._CursesWindow") -> None:
+    def _edit_selected_policy(
+        self,
+        stdscr: "curses._CursesWindow" | None = None,
+        *,
+        suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
+    ) -> None:
         name = self._selected_policy_name()
         if name is None:
             self._view_state.status_message = "No policy selected."
@@ -526,9 +532,14 @@ class RuntimeCLI(logging.Handler):
             self._view_state.status_message = f"Policy not found: {name}"
             return
 
-        self._edit_policy_rule_interactive(stdscr, name, rule)
+        self._edit_policy_rule_interactive(stdscr, name, rule, suspend_ui=suspend_ui)
 
-    def _process_pending_policy_edit(self, stdscr: "curses._CursesWindow") -> None:
+    def _process_pending_policy_edit(
+        self,
+        stdscr: "curses._CursesWindow" | None = None,
+        *,
+        suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
+    ) -> None:
         pending_name = self._view_state.pending_policy_edit_name
         if pending_name is None:
             return
@@ -541,18 +552,19 @@ class RuntimeCLI(logging.Handler):
         if rule is None:
             self._view_state.status_message = f"Policy not found: {pending_name}"
             return
-        self._edit_policy_rule_interactive(stdscr, pending_name, rule)
+        self._edit_policy_rule_interactive(stdscr, pending_name, rule, suspend_ui=suspend_ui)
 
     def _edit_policy_rule_interactive(
         self,
-        stdscr: "curses._CursesWindow",
+        stdscr: "curses._CursesWindow" | None,
         name: str,
         rule: PolicyRule,
+        *,
+        suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
         try:
-            curses.def_prog_mode()
-            curses.endwin()
-            success, edited_rule, message = edit_policy_rule_with_external_editor(rule)
+            with _suspend_runtime_ui(stdscr, suspend_ui=suspend_ui):
+                success, edited_rule, message = edit_policy_rule_with_external_editor(rule)
             if not success or edited_rule is None:
                 self._view_state.status_message = message
                 return
@@ -562,35 +574,9 @@ class RuntimeCLI(logging.Handler):
                 self._view_state.status_message = f"Policy not found: {name}"
         except Exception as exc:  # noqa: BLE001
             self._view_state.status_message = f"Policy edit failed ({exc})."
-        finally:
-            try:
-                curses.reset_prog_mode()
-                stdscr.refresh()
-            except curses.error:
-                pass
 
     def _draw(self, stdscr: "curses._CursesWindow") -> None:
-        with self._lock:
-            site_counter = self._sites.copy()
-
-        all_entries = self._all_entries()
-        entries = self._ordered_entries()
-        if self._view_state.request_cursor >= len(entries):
-            self._view_state.request_cursor = max(0, len(entries) - 1)
-
-        policy_items = [description for _name, description in self._ordered_policy_items()]
-        if self._view_state.policy_cursor >= len(policy_items):
-            self._view_state.policy_cursor = max(0, len(policy_items) - 1)
-
-        model = build_runtime_screen_model(
-            state=self._view_state,
-            runtime_config=self._runtime_config,
-            entries=entries,
-            all_entry_count=len(all_entries),
-            site_counter=site_counter,
-            policy_items=policy_items,
-            filter_summary=self._request_filter.summary(),
-        )
+        model = self.build_screen_model()
         result = self._renderer.draw(stdscr, model)
         self._view_state.site_scroll = result.aux_scrolls.get("sites", self._view_state.site_scroll)
         self._view_state.policy_scroll = result.aux_scrolls.get("policies", self._view_state.policy_scroll)
@@ -615,6 +601,14 @@ class RuntimeCLI(logging.Handler):
         self._view_state.status_message = f"Added editor policy: {normalized}"
 
     def _edit_and_resend_selected_request(self, stdscr: "curses._CursesWindow") -> None:
+        self._edit_and_resend_selected_request_with_ui_suspend(stdscr)
+
+    def _edit_and_resend_selected_request_with_ui_suspend(
+        self,
+        stdscr: "curses._CursesWindow" | None = None,
+        *,
+        suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
+    ) -> None:
         entries = self._ordered_entries()
         if not entries:
             self._view_state.status_message = "No request selected."
@@ -626,48 +620,45 @@ class RuntimeCLI(logging.Handler):
             return
 
         try:
-            curses.def_prog_mode()
-            curses.endwin()
-            success, message = edit_and_resend_logged_request(
-                selected,
-                request_url=request_url,
-                proxy_base_url=self._proxy_base_url,
-            )
+            with _suspend_runtime_ui(stdscr, suspend_ui=suspend_ui):
+                success, message = edit_and_resend_logged_request(
+                    selected,
+                    request_url=request_url,
+                    proxy_base_url=self._proxy_base_url,
+                )
             self._view_state.status_message = message
             if not success:
                 return
         except Exception as exc:  # noqa: BLE001
             self._view_state.status_message = f"Replay failed ({exc})."
-        finally:
-            try:
-                curses.reset_prog_mode()
-                stdscr.refresh()
-            except curses.error:
-                pass
 
-    def _process_pending_editor(self, stdscr: "curses._CursesWindow") -> None:
+    def _process_pending_editor(
+        self,
+        stdscr: "curses._CursesWindow" | None = None,
+        *,
+        suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
+    ) -> None:
         pending = self._response_modifier.poll_pending_edit()
         if pending is None:
             return
-        self._open_editor_for_pending(stdscr, pending)
+        self._open_editor_for_pending(stdscr, pending, suspend_ui=suspend_ui)
 
-    def _open_editor_for_pending(self, stdscr: "curses._CursesWindow", pending: PendingResponseEdit) -> None:
+    def _open_editor_for_pending(
+        self,
+        stdscr: "curses._CursesWindow" | None,
+        pending: PendingResponseEdit,
+        *,
+        suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
+    ) -> None:
         try:
-            curses.def_prog_mode()
-            curses.endwin()
-            success, message = edit_pending_response_with_external_editor(pending)
+            with _suspend_runtime_ui(stdscr, suspend_ui=suspend_ui):
+                success, message = edit_pending_response_with_external_editor(pending)
             self._view_state.status_message = message
             if not success:
                 pending.keep_original()
         except Exception as exc:  # noqa: BLE001
             pending.keep_original()
             self._view_state.status_message = f"Response edit failed ({exc}); kept original response."
-        finally:
-            try:
-                curses.reset_prog_mode()
-                stdscr.refresh()
-            except curses.error:
-                pass
 
     def _trigger_cache_toggle_hook(self) -> None:
         if self._on_cache_toggle is None:
@@ -676,6 +667,29 @@ class RuntimeCLI(logging.Handler):
             self._on_cache_toggle()
         except Exception as exc:  # noqa: BLE001
             self._view_state.status_message = f"Failed to close active SSL tunnels: {exc}"
+
+    def build_screen_model(self) -> "RuntimeScreenModel":
+        with self._lock:
+            site_counter = self._sites.copy()
+
+        all_entries = self._all_entries()
+        entries = self._ordered_entries()
+        if self._view_state.request_cursor >= len(entries):
+            self._view_state.request_cursor = max(0, len(entries) - 1)
+
+        policy_items = [description for _name, description in self._ordered_policy_items()]
+        if self._view_state.policy_cursor >= len(policy_items):
+            self._view_state.policy_cursor = max(0, len(policy_items) - 1)
+
+        return build_runtime_screen_model(
+            state=self._view_state,
+            runtime_config=self._runtime_config,
+            entries=entries,
+            all_entry_count=len(all_entries),
+            site_counter=site_counter,
+            policy_items=policy_items,
+            filter_summary=self._request_filter.summary(),
+        )
 
 
 def _format_policy_item(rule: PolicyRule) -> str:
@@ -722,3 +736,33 @@ def _entry_search_text(entry: LoggedExchange) -> str:
         parts.append(entry.response.body_preview)
         parts.extend(f"{name}: {value}" for name, value in entry.response.headers)
     return "\n".join(parts).lower()
+
+
+class _CursesUISuspend(AbstractContextManager[None]):
+    def __init__(self, stdscr: "curses._CursesWindow") -> None:
+        self._stdscr = stdscr
+
+    def __enter__(self) -> None:
+        curses.def_prog_mode()
+        curses.endwin()
+        return None
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+        try:
+            curses.reset_prog_mode()
+            self._stdscr.refresh()
+        except curses.error:
+            pass
+        return False
+
+
+def _suspend_runtime_ui(
+    stdscr: "curses._CursesWindow" | None,
+    *,
+    suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
+) -> AbstractContextManager[None]:
+    if suspend_ui is not None:
+        return suspend_ui()
+    if stdscr is not None:
+        return _CursesUISuspend(stdscr)
+    return nullcontext()
