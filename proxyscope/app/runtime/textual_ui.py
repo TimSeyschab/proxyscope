@@ -221,9 +221,9 @@ class _RuntimeTextualApp(App[None]):
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         self._controller._active_pane = "aux"
         if self._controller._aux_tab_key == "sites":
-            self._controller._view_state.site_cursor = event.index
+            self._controller._view_state.site_cursor = event.option_index
         else:
-            self._controller._view_state.policy_cursor = event.index
+            self._controller._view_state.policy_cursor = event.option_index
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         self.on_option_list_option_highlighted(event)

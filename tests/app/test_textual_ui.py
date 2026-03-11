@@ -1,5 +1,8 @@
 import unittest
 
+from textual.widgets import OptionList
+from textual.widgets._option_list import Option
+
 from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
 from proxyscope.app.runtime.textual_ui import (
     _detail_signature,
@@ -189,6 +192,14 @@ class TestTextualUIDetailFormatting(unittest.TestCase):
             _detail_signature(base_entry, "response"),
             _detail_signature(updated_entry, "response"),
         )
+
+
+class TestTextualEventCompatibility(unittest.TestCase):
+    def test_option_highlighted_exposes_option_index(self) -> None:
+        event = OptionList.OptionHighlighted(OptionList(), Option("alpha"), 3)
+
+        self.assertEqual(event.option_index, 3)
+        self.assertFalse(hasattr(event, "index"))
 
 
 if __name__ == "__main__":
