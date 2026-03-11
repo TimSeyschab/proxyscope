@@ -20,6 +20,7 @@ class StaticResponseTemplate:
 class PolicyRule:
     name: str
     enabled: bool
+    priority: int
     action: str  # "open_editor" | "static_response"
     match: RequestMatchRule
     static_response: StaticResponseTemplate | None = None

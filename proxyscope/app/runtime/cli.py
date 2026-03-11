@@ -159,7 +159,8 @@ class RuntimeCLI(logging.Handler):
                 "session <save|load> <path> | "
                 "whitelist [add|remove|clear|show] ... | cache [show|on|off|toggle] | "
                 "config [show|save [path]|reload] | "
-                "policy [show|add-editor|remove-editor|clear-editor|add-static|edit|remove|enable|disable] ... | "
+                "policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|"
+                "add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ... | "
                 "Hotkeys (Shift): A/B/D/E/I/M/P/R/S/T/V/X | quit"
             )
             return False
@@ -735,8 +736,11 @@ def _format_policy_item(rule: PolicyRule) -> str:
     method = ",".join(rule.match.methods or ("*",))
     target = rule.match.url_exact or rule.match.url_prefix or "*"
     if rule.action == "static_response" and rule.static_response is not None:
-        return f"{state:>3} {rule.name} | static {method} {target} -> {rule.static_response.status_code}"
-    return f"{state:>3} {rule.name} | {rule.action} {method} {target}"
+        return (
+            f"{state:>3} p={rule.priority} {rule.name} | "
+            f"static {method} {target} -> {rule.static_response.status_code}"
+        )
+    return f"{state:>3} p={rule.priority} {rule.name} | {rule.action} {method} {target}"
 
 
 def _entry_to_url(entry: LoggedExchange) -> str | None:

@@ -127,6 +127,58 @@ class TestRuntimeConfig(unittest.TestCase):
             self.assertEqual(template.reason, "Created")
             self.assertEqual(template.body, b'{"mock":true}')
 
+    def test_policy_priority_prefers_higher_priority_rule(self) -> None:
+        config = RuntimeConfig()
+        config.add_static_response_rule(
+            url="https://example.com/api",
+            status_code=201,
+            reason="Created",
+            headers={"Content-Type": "text/plain"},
+            body=b"prefix",
+            method="GET",
+            url_prefix=True,
+            priority=1,
+        )
+        config.add_static_response_rule(
+            url="https://example.com/api/users",
+            status_code=418,
+            reason="I'm a teapot",
+            headers={"Content-Type": "text/plain"},
+            body=b"exact",
+            method="GET",
+            priority=10,
+        )
+
+        template = config.get_static_response_template_for_request(
+            method="GET",
+            url="https://example.com/api/users",
+        )
+        self.assertIsNotNone(template)
+        assert template is not None
+        self.assertEqual(template.status_code, 418)
+        self.assertEqual(template.body, b"exact")
+
+    def test_open_editor_prefix_rule_can_be_added_explicitly(self) -> None:
+        config = RuntimeConfig()
+        config.add_open_editor_policy(
+            "https://example.com/api",
+            method="GET",
+            url_prefix=True,
+            priority=3,
+        )
+
+        self.assertTrue(
+            config.should_modify_response_for_request(
+                method="GET",
+                url="https://example.com/api/v2/users",
+            )
+        )
+
+        rule = config.policy_rules()[0]
+        self.assertEqual(rule.priority, 3)
+        self.assertEqual(rule.match.url_prefix, "https://example.com/api")
+        self.assertIsNone(rule.match.url_exact)
+
     def test_reload_from_attached_file_hot_swaps_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "runtime-config.json"
@@ -186,6 +238,7 @@ class TestRuntimeConfig(unittest.TestCase):
             type(rule)(
                 name=rule.name,
                 enabled=rule.enabled,
+                priority=rule.priority,
                 action=rule.action,
                 match=rule.match,
                 static_response=type(rule.static_response)(

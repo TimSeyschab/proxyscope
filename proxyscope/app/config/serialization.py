@@ -8,6 +8,7 @@ def serialize_policy_rule(rule: PolicyRule) -> dict:
     payload = {
         "name": rule.name,
         "enabled": rule.enabled,
+        "priority": rule.priority,
         "action": {"type": rule.action},
         "match": {},
     }
@@ -34,6 +35,7 @@ def parse_policy_rule(data: object) -> PolicyRule | None:
         return None
     name = str(data.get("name", "unnamed-policy"))
     enabled = bool(data.get("enabled", True))
+    priority = int(data.get("priority", 0))
 
     action_data = data.get("action", {})
     if not isinstance(action_data, dict):
@@ -61,7 +63,7 @@ def parse_policy_rule(data: object) -> PolicyRule | None:
     match = RequestMatchRule(methods=methods, url_exact=normalized_exact, url_prefix=normalized_prefix)
 
     if action_type == "open_editor":
-        return PolicyRule(name=name, enabled=enabled, action=action_type, match=match)
+        return PolicyRule(name=name, enabled=enabled, priority=priority, action=action_type, match=match)
 
     status_code = int(action_data.get("status_code", 200))
     reason = str(action_data.get("reason", "OK"))
@@ -79,6 +81,7 @@ def parse_policy_rule(data: object) -> PolicyRule | None:
     return PolicyRule(
         name=name,
         enabled=enabled,
+        priority=priority,
         action=action_type,
         match=match,
         static_response=template,

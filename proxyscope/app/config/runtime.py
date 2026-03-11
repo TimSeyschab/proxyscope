@@ -11,6 +11,7 @@ from proxyscope.app.config.matching import (
     normalize_whitelist_entry,
     policy_description,
     policy_rule_matches_request,
+    policy_sort_key,
     request_url_candidates,
     rule_matches_url,
     rule_method_display,
@@ -214,6 +215,7 @@ class RuntimeConfig:
                     PolicyRule(
                         name=rule.name,
                         enabled=enabled,
+                        priority=rule.priority,
                         action=rule.action,
                         match=rule.match,
                         static_response=rule.static_response,
@@ -236,6 +238,7 @@ class RuntimeConfig:
         method: str | None = None,
         url_prefix: bool = False,
         name: str | None = None,
+        priority: int = 0,
     ) -> str:
         normalized_url = normalize_modification_url(url)
         normalized_method = normalize_http_method(method) if method is not None else None
@@ -249,6 +252,7 @@ class RuntimeConfig:
             PolicyRule(
                 name=rule_name,
                 enabled=True,
+                priority=priority,
                 action="static_response",
                 match=match,
                 static_response=StaticResponseTemplate(
@@ -269,8 +273,15 @@ class RuntimeConfig:
     def open_editor_policy_entries(self) -> tuple[str, ...]:
         return self.modification_whitelist_entries()
 
-    def add_open_editor_policy(self, value: str, *, method: str = "GET") -> str:
-        return self.add_modification_whitelist_entry(value, method=method)
+    def add_open_editor_policy(
+        self,
+        value: str,
+        *,
+        method: str = "GET",
+        url_prefix: bool = False,
+        priority: int = 0,
+    ) -> str:
+        return self.add_modification_whitelist_entry(value, method=method, url_prefix=url_prefix, priority=priority)
 
     def remove_open_editor_policy(self, value: str, *, method: str | None = None) -> bool:
         return self.remove_modification_whitelist_entry(value, method=method)
@@ -278,7 +289,14 @@ class RuntimeConfig:
     def clear_open_editor_policies(self) -> None:
         self.clear_modification_whitelist()
 
-    def add_modification_whitelist_entry(self, value: str, *, method: str = "GET") -> str:
+    def add_modification_whitelist_entry(
+        self,
+        value: str,
+        *,
+        method: str = "GET",
+        url_prefix: bool = False,
+        priority: int = 0,
+    ) -> str:
         normalized_url = normalize_modification_url(value)
         normalized_method = normalize_http_method(method)
         name = f"open-editor-{len(self._policy_rules) + 1}"
@@ -286,11 +304,43 @@ class RuntimeConfig:
             PolicyRule(
                 name=name,
                 enabled=True,
+                priority=priority,
                 action="open_editor",
-                match=RequestMatchRule(methods=(normalized_method,), url_exact=normalized_url),
+                match=RequestMatchRule(
+                    methods=(normalized_method,),
+                    url_exact=None if url_prefix else normalized_url,
+                    url_prefix=normalized_url if url_prefix else None,
+                ),
             )
         )
         return f"{normalized_method} {normalized_url}"
+
+    def set_policy_rule_priority(self, name: str, *, priority: int) -> bool:
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("Policy name must not be empty.")
+        changed = False
+        with self._lock:
+            updated: list[PolicyRule] = []
+            for rule in self._policy_rules:
+                if rule.name != normalized:
+                    updated.append(rule)
+                    continue
+                updated.append(
+                    PolicyRule(
+                        name=rule.name,
+                        enabled=rule.enabled,
+                        priority=priority,
+                        action=rule.action,
+                        match=rule.match,
+                        static_response=rule.static_response,
+                    )
+                )
+                changed = True
+            self._policy_rules = updated
+        if changed:
+            self._persist_if_configured()
+        return changed
 
     def remove_modification_whitelist_entry(self, value: str, *, method: str | None = None) -> bool:
         normalized_url = normalize_modification_url(value)
@@ -324,7 +374,8 @@ class RuntimeConfig:
         normalized_method = normalize_http_method(method)
         candidates = request_url_candidates(url)
         with self._lock:
-            for rule in self._policy_rules:
+            matching_rules = sorted(self._policy_rules, key=policy_sort_key, reverse=True)
+            for rule in matching_rules:
                 if not rule.enabled or rule.action != "open_editor":
                     continue
                 if policy_rule_matches_request(rule=rule, method=normalized_method, url_candidates=candidates):
@@ -340,7 +391,8 @@ class RuntimeConfig:
         normalized_method = normalize_http_method(method)
         candidates = request_url_candidates(url)
         with self._lock:
-            for rule in self._policy_rules:
+            matching_rules = sorted(self._policy_rules, key=policy_sort_key, reverse=True)
+            for rule in matching_rules:
                 if not rule.enabled or rule.action != "static_response":
                     continue
                 if policy_rule_matches_request(rule=rule, method=normalized_method, url_candidates=candidates):

@@ -169,12 +169,14 @@ class RuntimeCommandService:
             )
 
         action = parts[1].lower()
-        if action == "add-static":
+        if action in {"add-static", "add-static-prefix"}:
             parsed = _parse_add_static_policy_arguments(parts[2:])
             if parsed is None:
                 return CommandExecutionResult(
                     handled=True,
-                    status_message="Usage: policy add-static [METHOD] <url> [status] [content-type] [body...]",
+                    status_message=(
+                        "Usage: policy add-static[ -prefix ] [METHOD] <url> [status] [content-type] [body...]"
+                    ),
                 )
             method, url, status_code, content_type, body_text = parsed
             if status_code < 100 or status_code > 599:
@@ -190,19 +192,23 @@ class RuntimeCommandService:
                 headers=headers,
                 body=body_text.encode("utf-8"),
                 method=method,
-                url_prefix=False,
+                url_prefix=(action == "add-static-prefix"),
             )
             return CommandExecutionResult(handled=True, status_message=f"Added static policy: {rule_name}")
 
-        if action == "add-editor":
+        if action in {"add-editor", "add-editor-prefix"}:
             method, value = _parse_modify_method_and_url(parts[2:])
             if not value:
                 return CommandExecutionResult(
                     handled=True,
-                    status_message="Usage: policy add-editor [METHOD] <url>",
+                    status_message="Usage: policy add-editor[ -prefix ] [METHOD] <url>",
                 )
             try:
-                normalized = self._runtime_config.add_open_editor_policy(value, method=method or "GET")
+                normalized = self._runtime_config.add_open_editor_policy(
+                    value,
+                    method=method or "GET",
+                    url_prefix=(action == "add-editor-prefix"),
+                )
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             return CommandExecutionResult(handled=True, status_message=f"Added editor policy: {normalized}")
@@ -265,6 +271,37 @@ class RuntimeCommandService:
                 return CommandExecutionResult(handled=True, status_message=f"Policy {state}: {name}")
             return CommandExecutionResult(handled=True, status_message=f"Policy not found: {name}")
 
+        if action == "set-priority":
+            if len(parts) < 4:
+                return CommandExecutionResult(
+                    handled=True,
+                    status_message="Usage: policy set-priority <name> <integer>",
+                )
+            name = " ".join(parts[2:-1]).strip()
+            raw_priority = parts[-1]
+            if not name:
+                return CommandExecutionResult(
+                    handled=True,
+                    status_message="Usage: policy set-priority <name> <integer>",
+                )
+            try:
+                priority = int(raw_priority)
+            except ValueError:
+                return CommandExecutionResult(
+                    handled=True,
+                    status_message="Priority must be an integer.",
+                )
+            try:
+                changed = self._runtime_config.set_policy_rule_priority(name, priority=priority)
+            except ValueError as exc:
+                return CommandExecutionResult(handled=True, status_message=str(exc))
+            if changed:
+                return CommandExecutionResult(
+                    handled=True,
+                    status_message=f"Policy priority set: {name} -> {priority}",
+                )
+            return CommandExecutionResult(handled=True, status_message=f"Policy not found: {name}")
+
         if action == "edit":
             name = " ".join(parts[2:]).strip()
             if not name:
@@ -280,7 +317,10 @@ class RuntimeCommandService:
 
         return CommandExecutionResult(
             handled=True,
-            status_message="Usage: policy [show|add-editor|remove-editor|clear-editor|add-static|edit|remove|enable|disable] ...",
+            status_message=(
+                "Usage: policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|"
+                "add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ..."
+            ),
         )
 
     def _handle_config(

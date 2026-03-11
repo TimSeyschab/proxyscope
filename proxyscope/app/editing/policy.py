@@ -31,6 +31,7 @@ def edit_policy_rule_with_external_editor(rule: PolicyRule) -> tuple[bool, Polic
                 parsed = PolicyRule(
                     name=rule.name,
                     enabled=parsed.enabled,
+                    priority=parsed.priority,
                     action=parsed.action,
                     match=parsed.match,
                     static_response=parsed.static_response,

@@ -120,13 +120,19 @@ def policy_description(rule: PolicyRule) -> str:
     method = rule_method_display(rule)
     target = rule_url_display(rule)
     if rule.action == "open_editor":
-        return f"{rule.name} [{state}] open_editor {method} {target}"
+        return f"{rule.name} [{state}] prio={rule.priority} open_editor {method} {target}"
     if rule.action == "static_response" and rule.static_response is not None:
         return (
-            f"{rule.name} [{state}] static_response {method} {target} "
+            f"{rule.name} [{state}] prio={rule.priority} static_response {method} {target} "
             f"-> {rule.static_response.status_code} {rule.static_response.reason}"
         )
-    return f"{rule.name} [{state}] {rule.action} {method} {target}"
+    return f"{rule.name} [{state}] prio={rule.priority} {rule.action} {method} {target}"
+
+
+def policy_sort_key(rule: PolicyRule) -> tuple[int, int, int]:
+    target = rule_url_display(rule)
+    is_exact = 1 if rule.match.url_exact is not None else 0
+    return (rule.priority, is_exact, len(target))
 
 
 def _alternate_scheme_url(normalized_url: str) -> str | None:

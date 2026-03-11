@@ -24,7 +24,7 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 - [x] Persistente Session-Historie fuer Requests einfuehren
   Im Moment ist das Journal rein im Speicher. Optionales Speichern und Wiederladen vergangener Sessions wuerde den Wert des Tools deutlich erhoehen.
 
-- [ ] Policy-System um URL-Prefix-/Host-Regeln und Prioritaeten ausbauen
+- [x] Policy-System um URL-Prefix-/Host-Regeln und Prioritaeten ausbauen
   Es gibt schon statische Antworten und Editor-Policies, aber fuer reale Workflows fehlen komfortable Regelstufen wie Host-weit, Prefix-weit, explizite Prioritaet und Konfliktauflosung.
 
 - [ ] Bessere Steuerung fuer MITM im CLI/Config ergaenzen

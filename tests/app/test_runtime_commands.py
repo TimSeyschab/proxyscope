@@ -7,6 +7,32 @@ from proxyscope.app.runtime.commands import RuntimeCommandService
 
 
 class TestRuntimeCommandService(unittest.TestCase):
+    def test_policy_prefix_and_priority_commands(self) -> None:
+        config = RuntimeConfig()
+        service = RuntimeCommandService(runtime_config=config)
+
+        add_result = service.execute(
+            "policy add-editor-prefix GET https://example.com/api",
+            on_cache_toggle=None,
+            on_schedule_policy_edit=lambda _name: None,
+        )
+        self.assertTrue(add_result.handled)
+        self.assertTrue(
+            config.should_modify_response_for_request(
+                method="GET",
+                url="https://example.com/api/v1/users",
+            )
+        )
+
+        rule_name = config.policy_rules()[0].name
+        priority_result = service.execute(
+            f"policy set-priority {rule_name} 12",
+            on_cache_toggle=None,
+            on_schedule_policy_edit=lambda _name: None,
+        )
+        self.assertTrue(priority_result.handled)
+        self.assertEqual(config.policy_rules()[0].priority, 12)
+
     def test_policy_edit_requires_existing_name(self) -> None:
         service = RuntimeCommandService(runtime_config=RuntimeConfig())
         scheduled: list[str] = []
