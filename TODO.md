@@ -7,7 +7,7 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 - [x] Replay robust machen
   Aktuell basiert Replay auf `body_preview` aus dem In-Memory-Journal. Dadurch koennen groessere oder binaere Requests abgeschnitten oder verfremdet erneut gesendet werden. Sinnvoll waere eine Trennung zwischen Vorschau fuer die UI und vollstaendigem Raw-Request fuer Replay/Export.
 
-- [ ] Echte Integrations-/Socket-Tests in einer CI-Pipeline absichern
+- [x] Echte Integrations-/Socket-Tests in einer CI-Pipeline absichern
   Die reine Logik ist gut getestet, aber die servernahen Tests fuer Forwarding, CONNECT und MITM-Bootstrap brauchen echte Socket-Binds. Diese Pfade sind produktkritisch und sollten in CI ausserhalb der aktuellen Sandbox verifiziert werden.
 
 - [ ] Request-/Response-Streaming statt Full-Buffering vorbereiten
