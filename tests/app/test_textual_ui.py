@@ -1,7 +1,12 @@
 import unittest
 
 from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
-from proxyscope.app.runtime.textual_ui import _format_detail, determine_runtime_layout
+from proxyscope.app.runtime.textual_ui import (
+    _detail_signature,
+    _format_detail,
+    _request_rows_signature,
+    determine_runtime_layout,
+)
 from proxyscope.app.runtime.tui import AuxPanelTabModel, RuntimeScreenModel
 
 
@@ -87,6 +92,103 @@ class TestTextualUIDetailFormatting(unittest.TestCase):
         self.assertIn("HTTP/1.1 200 OK", detail)
         self.assertIn("status: 200 OK", detail)
         self.assertIn("body\nhello", detail)
+
+    def test_request_rows_signature_changes_when_response_status_changes(self) -> None:
+        pending_entry = LoggedExchange(
+            request_id=1,
+            started_at=0.0,
+            finished_at=None,
+            duration_ms=None,
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+            request=LoggedRequestMessage(
+                method="GET",
+                path="/",
+                start_line="GET / HTTP/1.1",
+                headers=(),
+                body_preview="",
+                body=b"",
+            ),
+            response=None,
+        )
+        complete_entry = LoggedExchange(
+            request_id=1,
+            started_at=0.0,
+            finished_at=1.0,
+            duration_ms=3.4,
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+            request=pending_entry.request,
+            response=LoggedResponseMessage(
+                status_code=201,
+                reason="Created",
+                start_line="HTTP/1.1 201 Created",
+                headers=(),
+                body_preview="done",
+                body_size=4,
+            ),
+        )
+
+        self.assertNotEqual(
+            _request_rows_signature([pending_entry]),
+            _request_rows_signature([complete_entry]),
+        )
+
+    def test_detail_signature_changes_when_response_preview_changes(self) -> None:
+        base_entry = LoggedExchange(
+            request_id=1,
+            started_at=0.0,
+            finished_at=1.0,
+            duration_ms=5.0,
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=443,
+            protocol="https-mitm",
+            request=LoggedRequestMessage(
+                method="GET",
+                path="/",
+                start_line="GET / HTTP/1.1",
+                headers=(),
+                body_preview="",
+                body=b"",
+            ),
+            response=LoggedResponseMessage(
+                status_code=200,
+                reason="OK",
+                start_line="HTTP/1.1 200 OK",
+                headers=(),
+                body_preview="alpha",
+                body_size=5,
+            ),
+        )
+        updated_entry = LoggedExchange(
+            request_id=1,
+            started_at=0.0,
+            finished_at=1.0,
+            duration_ms=5.0,
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=443,
+            protocol="https-mitm",
+            request=base_entry.request,
+            response=LoggedResponseMessage(
+                status_code=200,
+                reason="OK",
+                start_line="HTTP/1.1 200 OK",
+                headers=(),
+                body_preview="beta",
+                body_size=4,
+            ),
+        )
+
+        self.assertNotEqual(
+            _detail_signature(base_entry, "response"),
+            _detail_signature(updated_entry, "response"),
+        )
 
 
 if __name__ == "__main__":

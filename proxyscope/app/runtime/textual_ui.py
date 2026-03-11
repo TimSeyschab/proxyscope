@@ -161,10 +161,10 @@ class _RuntimeTextualApp(App[None]):
     def __init__(self, controller: RuntimeCLI) -> None:
         super().__init__()
         self._controller = controller
-        self._request_ids: tuple[int, ...] = ()
+        self._request_rows: tuple[tuple[str, str, str, str, str, str], ...] = ()
         self._sidebar_items: tuple[str, ...] = ()
         self._sidebar_key: str | None = None
-        self._detail_cache: tuple[int | None, str] = (None, "")
+        self._detail_cache = ""
 
     def compose(self) -> ComposeResult:
         with Vertical(id="root"):
@@ -189,8 +189,7 @@ class _RuntimeTextualApp(App[None]):
         table.cursor_type = "row"
         table.zebra_stripes = True
         table.add_columns("ID", "Status", "Method", "Host", "Path", "Duration")
-        self.set_interval(0.2, self._refresh_screen)
-        self.set_interval(0.2, self._poll_pending_actions)
+        self.set_interval(0.2, self._tick)
         table.focus()
         self._controller._active_pane = "requests"
         self._refresh_screen()
@@ -288,7 +287,7 @@ class _RuntimeTextualApp(App[None]):
         self._controller._remove_selected_policy()
         self._refresh_screen()
 
-    def _poll_pending_actions(self) -> None:
+    def _tick(self) -> None:
         self._controller._process_pending_policy_edit(suspend_ui=self.suspend)
         self._controller._process_pending_editor(suspend_ui=self.suspend)
         if self._controller._view_state.should_exit:
@@ -334,25 +333,24 @@ class _RuntimeTextualApp(App[None]):
 
     def _render_requests(self, model: RuntimeScreenModel) -> None:
         table = self.query_one("#requests", DataTable)
-        request_ids = tuple(entry.request_id for entry in model.request_entries)
-        if request_ids != self._request_ids:
+        request_rows = _request_rows_signature(model.request_entries)
+        if request_rows != self._request_rows:
             table.clear(columns=False)
-            for entry in model.request_entries:
-                table.add_row(*_request_row(entry))
-            self._request_ids = request_ids
+            for row in request_rows:
+                table.add_row(*row)
+            self._request_rows = request_rows
         if model.request_entries:
             target_row = min(model.request_cursor, len(model.request_entries) - 1)
             table.move_cursor(row=target_row, animate=False, scroll=True)
 
     def _render_detail(self, model: RuntimeScreenModel) -> None:
         entry = model.request_entries[model.request_cursor] if model.request_entries else None
-        detail_text = _format_detail(entry, model.detail_tab)
-        cache_key = (entry.request_id if entry is not None else None, model.detail_tab)
-        if cache_key == self._detail_cache:
+        detail_text = _detail_signature(entry, model.detail_tab)
+        if detail_text == self._detail_cache:
             return
         self.query_one("#detail-body", Static).update(detail_text)
         self.query_one("#detail-scroll", VerticalScroll).scroll_home(animate=False)
-        self._detail_cache = cache_key
+        self._detail_cache = detail_text
 
     def _render_sidebar(self, model: RuntimeScreenModel) -> None:
         option_list = self.query_one("#sidebar-list", OptionList)
@@ -420,12 +418,20 @@ def _request_row(entry: LoggedExchange) -> tuple[str, str, str, str, str, str]:
     )
 
 
+def _request_rows_signature(entries: list[LoggedExchange]) -> tuple[tuple[str, str, str, str, str, str], ...]:
+    return tuple(_request_row(entry) for entry in entries)
+
+
 def _format_detail(entry: LoggedExchange | None, detail_tab: str) -> str:
     if entry is None:
         return "No request selected."
     if detail_tab == "response":
         return _format_response_detail(entry)
     return _format_request_detail(entry)
+
+
+def _detail_signature(entry: LoggedExchange | None, detail_tab: str) -> str:
+    return _format_detail(entry, detail_tab)
 
 
 def _format_request_detail(entry: LoggedExchange) -> str:

@@ -92,8 +92,8 @@ class RuntimeCLI(logging.Handler):
         self._on_cache_toggle: Callable[[], None] | None = None
         self._request_filter = RequestFilterState()
         self._view_state = RuntimeUIViewState()
-        self._renderer = RuntimeScreenRenderer()
-        self._input_controller = RuntimeInputController()
+        self._renderer: RuntimeScreenRenderer | None = None
+        self._input_controller: RuntimeInputController | None = None
         self._command_service = RuntimeCommandService(runtime_config=self._runtime_config)
 
     @property
@@ -159,6 +159,8 @@ class RuntimeCLI(logging.Handler):
     ) -> None:
         self._shutdown_server = shutdown_server
         self._on_cache_toggle = on_cache_toggle
+        self._renderer = RuntimeScreenRenderer()
+        self._input_controller = RuntimeInputController()
         curses.wrapper(self._main_loop)
 
     def execute_command(self, command: str) -> bool:
@@ -257,6 +259,8 @@ class RuntimeCLI(logging.Handler):
             time.sleep(0.03)
 
     def _handle_key(self, stdscr: "curses._CursesWindow", key: int) -> None:
+        if self._input_controller is None:
+            self._input_controller = RuntimeInputController()
         self._input_controller.handle_key(self, stdscr, key)
 
     def _switch_to_request_list_mode(self) -> None:
@@ -576,6 +580,8 @@ class RuntimeCLI(logging.Handler):
             self._view_state.status_message = f"Policy edit failed ({exc})."
 
     def _draw(self, stdscr: "curses._CursesWindow") -> None:
+        if self._renderer is None:
+            self._renderer = RuntimeScreenRenderer()
         model = self.build_screen_model()
         result = self._renderer.draw(stdscr, model)
         self._view_state.site_scroll = result.aux_scrolls.get("sites", self._view_state.site_scroll)
