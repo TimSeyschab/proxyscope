@@ -16,11 +16,6 @@ class RuntimeUIViewState:
     site_cursor: int = 0
     policy_cursor: int = 0
     request_cursor: int = 0
-    site_scroll: int = 0
-    policy_scroll: int = 0
-    request_scroll: int = 0
-    request_detail_scroll: int = 0
-    response_detail_scroll: int = 0
     detail_tab: DetailTab = "request"
 
     main_mode: MainMode = "requests"
@@ -30,14 +25,9 @@ class RuntimeUIViewState:
 
     def reset_request_view(self) -> None:
         self.request_cursor = 0
-        self.request_scroll = 0
-        self.request_detail_scroll = 0
-        self.response_detail_scroll = 0
 
     def switch_to_request_list_mode(self) -> None:
         self.main_mode = "requests"
-        self.request_detail_scroll = 0
-        self.response_detail_scroll = 0
         self.detail_tab = "request"
         if self.active_pane == "detail":
             self.active_pane = "requests"
@@ -56,24 +46,6 @@ class RuntimeUIViewState:
         self.main_mode = "request_detail"
         self.active_pane = "detail"
         self.detail_tab = "request"
-        self.request_detail_scroll = 0
-        self.response_detail_scroll = 0
-
-    def visible_panes(self) -> list[ActivePane]:
-        panes: list[ActivePane] = ["requests"]
-        if self.main_mode == "request_detail":
-            panes.append("detail")
-        if self.aux_visible:
-            panes.append("aux")
-        return panes
-
-    def move_focus(self, direction: int) -> None:
-        panes = self.visible_panes()
-        if self.active_pane not in panes:
-            self.active_pane = panes[0]
-            return
-        index = panes.index(self.active_pane)
-        self.active_pane = panes[max(0, min(len(panes) - 1, index + direction))]
 
     def go_back(self) -> bool:
         if self.active_pane == "aux" and self.aux_visible:

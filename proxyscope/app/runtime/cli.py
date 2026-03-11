@@ -1,25 +1,22 @@
 from collections import Counter
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-import curses
 import json
 import logging
 from threading import Lock
-import time
 from typing import Callable
 
 from proxyscope.app.config.runtime import PolicyRule, RuntimeConfig
-from proxyscope.app.runtime.input import RuntimeInputController
 from proxyscope.app.editing.policy import edit_policy_rule_with_external_editor
 from proxyscope.app.runtime.commands import RuntimeCommandService
 from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
 from proxyscope.app.runtime.replay import edit_and_resend_logged_request
 from proxyscope.app.runtime.exporting import export_entries, load_entries_from_json
+from proxyscope.app.runtime.ui_models import RuntimeScreenModel
 from proxyscope.app.runtime.ui_presenter import build_runtime_screen_model
 from proxyscope.app.runtime.ui_state import RuntimeUIViewState
 from proxyscope.app.editing.response import edit_pending_response_with_external_editor
 from proxyscope.app.editing.modifier import PendingResponseEdit, ResponseModifierService
-from proxyscope.app.runtime.tui import RuntimeScreenRenderer
 
 
 @dataclass
@@ -66,13 +63,6 @@ class RequestFilterState:
 
 
 class RuntimeCLI(logging.Handler):
-    """
-    Runtime terminal UI:
-    - main area: Request List or Request List + Request Detail
-    - optional right utility area: tabbed panel (Sites, Policies, ...)
-    - bottom: command input and runtime config
-    """
-
     def __init__(
         self,
         *,
@@ -92,8 +82,6 @@ class RuntimeCLI(logging.Handler):
         self._on_cache_toggle: Callable[[], None] | None = None
         self._request_filter = RequestFilterState()
         self._view_state = RuntimeUIViewState()
-        self._renderer: RuntimeScreenRenderer | None = None
-        self._input_controller: RuntimeInputController | None = None
         self._command_service = RuntimeCommandService(runtime_config=self._runtime_config)
 
     @property
@@ -159,9 +147,9 @@ class RuntimeCLI(logging.Handler):
     ) -> None:
         self._shutdown_server = shutdown_server
         self._on_cache_toggle = on_cache_toggle
-        self._renderer = RuntimeScreenRenderer()
-        self._input_controller = RuntimeInputController()
-        curses.wrapper(self._main_loop)
+        from proxyscope.app.runtime.textual_ui import RuntimeTextualApp
+
+        RuntimeTextualApp(self).run()
 
     def execute_command(self, command: str) -> bool:
         normalized = command.strip()
@@ -196,9 +184,6 @@ class RuntimeCLI(logging.Handler):
         if cmd == "clear":
             self._request_journal.clear()
             self._view_state.request_cursor = 0
-            self._view_state.request_scroll = 0
-            self._view_state.request_detail_scroll = 0
-            self._view_state.response_detail_scroll = 0
             self._view_state.main_mode = "requests"
             self._view_state.active_pane = "requests"
             self._view_state.aux_tab_key = "sites"
@@ -245,27 +230,6 @@ class RuntimeCLI(logging.Handler):
         self._view_state.status_message = f"Unknown command: {command}"
         return False
 
-    def _main_loop(self, stdscr: "curses._CursesWindow") -> None:
-        curses.curs_set(1)
-        stdscr.nodelay(True)
-        stdscr.timeout(100)
-
-        while not self._view_state.should_exit:
-            self._process_pending_editor(stdscr)
-            self._process_pending_policy_edit(stdscr)
-            self._draw(stdscr)
-            key = stdscr.getch()
-            self._handle_key(stdscr, key)
-            time.sleep(0.03)
-
-    def _handle_key(self, stdscr: "curses._CursesWindow", key: int) -> None:
-        if self._input_controller is None:
-            self._input_controller = RuntimeInputController()
-        self._input_controller.handle_key(self, stdscr, key)
-
-    def _switch_to_request_list_mode(self) -> None:
-        self._view_state.switch_to_request_list_mode()
-
     def _go_back(self) -> None:
         if not self._view_state.go_back():
             self._view_state.status_message = "Nothing to close."
@@ -275,46 +239,6 @@ class RuntimeCLI(logging.Handler):
 
     def _toggle_aux_visibility(self) -> None:
         self._view_state.toggle_aux_visibility()
-
-    def _move_focus(self, direction: int) -> None:
-        self._view_state.move_focus(direction)
-
-    def _move_vertical(self, delta: int) -> None:
-        if self._view_state.active_pane == "aux" and self._view_state.aux_tab_key == "sites":
-            with self._lock:
-                max_index = max(0, len(self._sites) - 1)
-                self._view_state.site_cursor = min(max(self._view_state.site_cursor + delta, 0), max_index)
-            return
-
-        if self._view_state.active_pane == "aux" and self._view_state.aux_tab_key == "policies":
-            max_index = max(0, len(self._ordered_policy_items()) - 1)
-            self._view_state.policy_cursor = min(max(self._view_state.policy_cursor + delta, 0), max_index)
-            return
-
-        if self._view_state.active_pane == "requests":
-            entries = self._ordered_entries()
-            max_index = max(0, len(entries) - 1)
-            self._view_state.request_cursor = min(max(self._view_state.request_cursor + delta, 0), max_index)
-            if self._view_state.main_mode == "request_detail":
-                self._view_state.request_detail_scroll = 0
-                self._view_state.response_detail_scroll = 0
-            return
-
-        if self._view_state.active_pane == "detail" and self._view_state.main_mode == "request_detail":
-            if self._view_state.detail_tab == "request":
-                self._view_state.request_detail_scroll = max(0, self._view_state.request_detail_scroll + delta)
-            else:
-                self._view_state.response_detail_scroll = max(0, self._view_state.response_detail_scroll + delta)
-
-    def _page_vertical(self, direction: int) -> None:
-        step = 10 * direction
-        if self._view_state.active_pane == "detail" and self._view_state.main_mode == "request_detail":
-            if self._view_state.detail_tab == "request":
-                self._view_state.request_detail_scroll = max(0, self._view_state.request_detail_scroll + step)
-            else:
-                self._view_state.response_detail_scroll = max(0, self._view_state.response_detail_scroll + step)
-            return
-        self._move_vertical(step)
 
     def _toggle_detail_tab(self) -> None:
         self._view_state.detail_tab = "response" if self._view_state.detail_tab == "request" else "request"
@@ -519,7 +443,6 @@ class RuntimeCLI(logging.Handler):
 
     def _edit_selected_policy(
         self,
-        stdscr: "curses._CursesWindow" | None = None,
         *,
         suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
@@ -536,11 +459,10 @@ class RuntimeCLI(logging.Handler):
             self._view_state.status_message = f"Policy not found: {name}"
             return
 
-        self._edit_policy_rule_interactive(stdscr, name, rule, suspend_ui=suspend_ui)
+        self._edit_policy_rule_interactive(name, rule, suspend_ui=suspend_ui)
 
     def _process_pending_policy_edit(
         self,
-        stdscr: "curses._CursesWindow" | None = None,
         *,
         suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
@@ -556,18 +478,17 @@ class RuntimeCLI(logging.Handler):
         if rule is None:
             self._view_state.status_message = f"Policy not found: {pending_name}"
             return
-        self._edit_policy_rule_interactive(stdscr, pending_name, rule, suspend_ui=suspend_ui)
+        self._edit_policy_rule_interactive(pending_name, rule, suspend_ui=suspend_ui)
 
     def _edit_policy_rule_interactive(
         self,
-        stdscr: "curses._CursesWindow" | None,
         name: str,
         rule: PolicyRule,
         *,
         suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
         try:
-            with _suspend_runtime_ui(stdscr, suspend_ui=suspend_ui):
+            with _suspend_runtime_ui(suspend_ui=suspend_ui):
                 success, edited_rule, message = edit_policy_rule_with_external_editor(rule)
             if not success or edited_rule is None:
                 self._view_state.status_message = message
@@ -578,17 +499,6 @@ class RuntimeCLI(logging.Handler):
                 self._view_state.status_message = f"Policy not found: {name}"
         except Exception as exc:  # noqa: BLE001
             self._view_state.status_message = f"Policy edit failed ({exc})."
-
-    def _draw(self, stdscr: "curses._CursesWindow") -> None:
-        if self._renderer is None:
-            self._renderer = RuntimeScreenRenderer()
-        model = self.build_screen_model()
-        result = self._renderer.draw(stdscr, model)
-        self._view_state.site_scroll = result.aux_scrolls.get("sites", self._view_state.site_scroll)
-        self._view_state.policy_scroll = result.aux_scrolls.get("policies", self._view_state.policy_scroll)
-        self._view_state.request_scroll = result.request_scroll
-        self._view_state.request_detail_scroll = result.request_detail_scroll
-        self._view_state.response_detail_scroll = result.response_detail_scroll
 
     def _add_selected_request_to_modify_whitelist(self) -> None:
         entries = self._ordered_entries()
@@ -606,12 +516,8 @@ class RuntimeCLI(logging.Handler):
         )
         self._view_state.status_message = f"Added editor policy: {normalized}"
 
-    def _edit_and_resend_selected_request(self, stdscr: "curses._CursesWindow") -> None:
-        self._edit_and_resend_selected_request_with_ui_suspend(stdscr)
-
     def _edit_and_resend_selected_request_with_ui_suspend(
         self,
-        stdscr: "curses._CursesWindow" | None = None,
         *,
         suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
@@ -626,7 +532,7 @@ class RuntimeCLI(logging.Handler):
             return
 
         try:
-            with _suspend_runtime_ui(stdscr, suspend_ui=suspend_ui):
+            with _suspend_runtime_ui(suspend_ui=suspend_ui):
                 success, message = edit_and_resend_logged_request(
                     selected,
                     request_url=request_url,
@@ -640,24 +546,22 @@ class RuntimeCLI(logging.Handler):
 
     def _process_pending_editor(
         self,
-        stdscr: "curses._CursesWindow" | None = None,
         *,
         suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
         pending = self._response_modifier.poll_pending_edit()
         if pending is None:
             return
-        self._open_editor_for_pending(stdscr, pending, suspend_ui=suspend_ui)
+        self._open_editor_for_pending(pending, suspend_ui=suspend_ui)
 
     def _open_editor_for_pending(
         self,
-        stdscr: "curses._CursesWindow" | None,
         pending: PendingResponseEdit,
         *,
         suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
         try:
-            with _suspend_runtime_ui(stdscr, suspend_ui=suspend_ui):
+            with _suspend_runtime_ui(suspend_ui=suspend_ui):
                 success, message = edit_pending_response_with_external_editor(pending)
             self._view_state.status_message = message
             if not success:
@@ -744,31 +648,10 @@ def _entry_search_text(entry: LoggedExchange) -> str:
     return "\n".join(parts).lower()
 
 
-class _CursesUISuspend(AbstractContextManager[None]):
-    def __init__(self, stdscr: "curses._CursesWindow") -> None:
-        self._stdscr = stdscr
-
-    def __enter__(self) -> None:
-        curses.def_prog_mode()
-        curses.endwin()
-        return None
-
-    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
-        try:
-            curses.reset_prog_mode()
-            self._stdscr.refresh()
-        except curses.error:
-            pass
-        return False
-
-
 def _suspend_runtime_ui(
-    stdscr: "curses._CursesWindow" | None,
     *,
     suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
 ) -> AbstractContextManager[None]:
     if suspend_ui is not None:
         return suspend_ui()
-    if stdscr is not None:
-        return _CursesUISuspend(stdscr)
     return nullcontext()

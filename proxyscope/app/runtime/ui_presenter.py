@@ -2,7 +2,7 @@ from collections import Counter
 
 from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.runtime.journal import LoggedExchange
-from proxyscope.app.runtime.tui import AuxPanelTabModel, RuntimeScreenModel
+from proxyscope.app.runtime.ui_models import AuxPanelTabModel, RuntimeScreenModel
 from proxyscope.app.runtime.ui_state import RuntimeUIViewState
 
 
@@ -43,9 +43,6 @@ def build_runtime_screen_model(
         request_title=request_title,
         request_entries=entries,
         request_cursor=state.request_cursor,
-        request_scroll=state.request_scroll,
-        request_detail_scroll=state.request_detail_scroll,
-        response_detail_scroll=state.response_detail_scroll,
         main_mode=state.main_mode,
         active_pane=state.active_pane,
         detail_tab=state.detail_tab,
@@ -54,9 +51,7 @@ def build_runtime_screen_model(
             site_items=site_items,
             policy_items=policy_items,
             site_cursor=state.site_cursor,
-            site_scroll=state.site_scroll,
             policy_cursor=state.policy_cursor,
-            policy_scroll=state.policy_scroll,
         ),
         aux_active_key=state.aux_tab_key,
         command_buffer=state.command_buffer,
@@ -70,9 +65,7 @@ def _build_aux_tabs(
     site_items: list[tuple[str, int]],
     policy_items: list[str],
     site_cursor: int,
-    site_scroll: int,
     policy_cursor: int,
-    policy_scroll: int,
 ) -> list[AuxPanelTabModel]:
     site_rows = [f"{count:5d}  {host}" for host, count in site_items]
     return [
@@ -81,7 +74,6 @@ def _build_aux_tabs(
             title="SIDEBAR:SITES",
             items=site_rows,
             cursor=site_cursor,
-            scroll=site_scroll,
             empty_label="No sites recorded.",
         ),
         AuxPanelTabModel(
@@ -89,7 +81,6 @@ def _build_aux_tabs(
             title="SIDEBAR:POLICIES",
             items=policy_items,
             cursor=policy_cursor,
-            scroll=policy_scroll,
             empty_label="No policies configured.",
         ),
     ]

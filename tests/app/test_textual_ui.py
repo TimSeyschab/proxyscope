@@ -10,7 +10,7 @@ from proxyscope.app.runtime.textual_ui import (
     _request_rows_signature,
     determine_runtime_layout,
 )
-from proxyscope.app.runtime.tui import AuxPanelTabModel, RuntimeScreenModel
+from proxyscope.app.runtime.ui_models import AuxPanelTabModel, RuntimeScreenModel
 
 
 def _screen_model(*, width_mode: str = "detail", active_pane: str = "requests", aux_visible: bool = True) -> RuntimeScreenModel:
@@ -18,9 +18,6 @@ def _screen_model(*, width_mode: str = "detail", active_pane: str = "requests", 
         request_title="MAIN 1/1",
         request_entries=[],
         request_cursor=0,
-        request_scroll=0,
-        request_detail_scroll=0,
-        response_detail_scroll=0,
         main_mode="request_detail" if width_mode == "detail" else "requests",
         active_pane=active_pane,  # type: ignore[arg-type]
         detail_tab="request",
@@ -31,7 +28,6 @@ def _screen_model(*, width_mode: str = "detail", active_pane: str = "requests", 
                 title="SIDEBAR:SITES",
                 items=["example.com"],
                 cursor=0,
-                scroll=0,
             )
         ],
         aux_active_key="sites",

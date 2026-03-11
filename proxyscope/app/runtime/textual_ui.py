@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Literal
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -8,7 +8,7 @@ from textual.widgets import DataTable, Input, OptionList, Static
 
 from proxyscope.app.runtime.cli import RuntimeCLI
 from proxyscope.app.runtime.journal import LoggedExchange
-from proxyscope.app.runtime.tui import RuntimeScreenModel
+from proxyscope.app.runtime.ui_models import RuntimeScreenModel
 
 RuntimeContentLayout = Literal["horizontal", "vertical"]
 
@@ -41,20 +41,7 @@ def determine_runtime_layout(*, width: int, model: RuntimeScreenModel) -> Runtim
     )
 
 
-class RuntimeTextualUI(RuntimeCLI):
-    def run(
-        self,
-        *,
-        shutdown_server: Callable[[], None],
-        on_cache_toggle: Callable[[], None] | None = None,
-    ) -> None:
-        self._shutdown_server = shutdown_server
-        self._on_cache_toggle = on_cache_toggle
-        app = _RuntimeTextualApp(self)
-        app.run()
-
-
-class _RuntimeTextualApp(App[None]):
+class RuntimeTextualApp(App[None]):
     CSS = """
     Screen {
         background: #11161c;
@@ -64,23 +51,29 @@ class _RuntimeTextualApp(App[None]):
     #root {
         layout: vertical;
         height: 100%;
+        padding: 0;
+        margin: 0;
     }
 
     #content {
         layout: horizontal;
         height: 1fr;
+        padding: 0;
+        margin: 0;
     }
 
     .pane {
         border: round #4b647a;
         background: #16202a;
-        padding: 0 1;
+        padding: 0;
+        margin: 0;
     }
 
     .pane-title {
         color: #8fd3ff;
         text-style: bold;
-        margin: 0 0 1 0;
+        padding: 0 1;
+        margin: 0;
     }
 
     .pane-title.-active {
@@ -113,7 +106,8 @@ class _RuntimeTextualApp(App[None]):
     }
 
     #detail-body {
-        padding: 0 1;
+        padding: 0;
+        margin: 0;
     }
 
     #sidebar-list {
@@ -123,23 +117,28 @@ class _RuntimeTextualApp(App[None]):
     }
 
     #command-pane {
-        height: 5;
+        height: 4;
         border-top: solid #31424f;
-        padding: 0 1;
+        padding: 0;
+        margin: 0;
         background: #0d1318;
     }
 
     #command-input {
-        margin: 0 0 1 0;
+        margin: 0;
     }
 
     #status-line {
         color: #ffd280;
         text-style: bold;
+        padding: 0 1;
+        margin: 0;
     }
 
     #config-line {
         color: #91a7bb;
+        padding: 0 1;
+        margin: 0;
     }
     """
 
