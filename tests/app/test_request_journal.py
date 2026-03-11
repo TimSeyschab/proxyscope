@@ -34,6 +34,7 @@ class TestRequestJournal(unittest.TestCase):
         self.assertEqual(entry.request_id, request_id)
         self.assertEqual(entry.request.method, "POST")
         self.assertEqual(entry.request.path, "/submit")
+        self.assertEqual(entry.request.body, b'{"ok":true}')
         assert entry.response is not None
         self.assertEqual(entry.response.status_code, 201)
         self.assertEqual(entry.response.reason, "Created")
@@ -95,3 +96,4 @@ class TestRequestJournal(unittest.TestCase):
         entry = journal.get_entry(request_id)
         assert entry is not None
         self.assertEqual(entry.request.body_preview, "abc\\x00def")
+        self.assertEqual(entry.request.body, b"abc\x00def")

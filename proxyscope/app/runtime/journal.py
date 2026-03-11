@@ -10,6 +10,7 @@ class LoggedRequestMessage:
     start_line: str
     headers: tuple[tuple[str, str], ...]
     body_preview: str
+    body: bytes | None
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ class RequestJournal:
                     start_line=start_line,
                     headers=tuple(headers.items()),
                     body_preview=_body_preview(body),
+                    body=body,
                 ),
                 response=None,
             )

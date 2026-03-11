@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import base64
 
 import requests
 
@@ -56,13 +57,21 @@ def edit_and_resend_logged_request(
 
 def _build_edit_payload(entry: LoggedExchange, *, request_url: str) -> dict[str, object]:
     headers = {name: value for name, value in entry.request.headers}
-    return {
+    payload: dict[str, object] = {
         "method": entry.request.method,
         "url": request_url,
         "headers": headers,
-        # Body preview may be truncated in in-memory journal.
-        "body_text": entry.request.body_preview,
     }
+    body = entry.request.body
+    if body is None:
+        payload["body_text"] = ""
+        return payload
+    try:
+        payload["body_text"] = body.decode("utf-8")
+    except UnicodeDecodeError:
+        payload["body_base64"] = base64.b64encode(body).decode("ascii")
+        payload["body_encoding"] = "base64"
+    return payload
 
 
 def _parse_replay_payload(payload: object) -> dict[str, object]:
@@ -85,8 +94,17 @@ def _parse_replay_payload(payload: object) -> dict[str, object]:
     headers = dict(headers_raw) if isinstance(headers_raw, dict) else {}
     normalized_headers = {str(k): str(v) for k, v in headers.items()}
 
-    body_text = str(payload.get("body_text", ""))
-    body_bytes = body_text.encode("utf-8")
+    body_text_raw = payload.get("body_text")
+    body_base64_raw = payload.get("body_base64")
+    if body_base64_raw not in (None, ""):
+        try:
+            body_bytes = base64.b64decode(str(body_base64_raw), validate=True)
+        except ValueError as exc:
+            raise ValueError("body_base64 must be valid base64.") from exc
+    elif body_text_raw is None:
+        body_bytes = b""
+    else:
+        body_bytes = str(body_text_raw).encode("utf-8")
 
     return {
         "method": method,
