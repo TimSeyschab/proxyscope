@@ -1,6 +1,7 @@
 from collections import Counter
 from dataclasses import dataclass
 import curses
+import json
 import logging
 from threading import Lock
 import time
@@ -12,7 +13,7 @@ from proxyscope.app.editing.policy import edit_policy_rule_with_external_editor
 from proxyscope.app.runtime.commands import RuntimeCommandService
 from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
 from proxyscope.app.runtime.replay import edit_and_resend_logged_request
-from proxyscope.app.runtime.exporting import export_entries
+from proxyscope.app.runtime.exporting import export_entries, load_entries_from_json
 from proxyscope.app.editing.response import edit_pending_response_with_external_editor
 from proxyscope.app.editing.modifier import PendingResponseEdit, ResponseModifierService
 from proxyscope.app.runtime.tui import AuxPanelTabModel, RuntimeScreenModel, RuntimeScreenRenderer
@@ -155,6 +156,7 @@ class RuntimeCLI(logging.Handler):
                 "Commands: help | clear | sites | loglevel <LEVEL> | "
                 "filter [show|clear|host|method|status|text] ... | find <text>|find clear | "
                 "export <json|har> <path> | "
+                "session <save|load> <path> | "
                 "whitelist [add|remove|clear|show] ... | cache [show|on|off|toggle] | "
                 "config [show|save [path]|reload] | "
                 "policy [show|add-editor|remove-editor|clear-editor|add-static|edit|remove|enable|disable] ... | "
@@ -194,6 +196,10 @@ class RuntimeCLI(logging.Handler):
 
         if cmd == "export":
             self._status_message = self._handle_export_command(parts)
+            return False
+
+        if cmd == "session":
+            self._status_message = self._handle_session_command(parts)
             return False
 
         command_result = self._command_service.execute(
@@ -394,6 +400,33 @@ class RuntimeCLI(logging.Handler):
         except OSError as exc:
             return f"Export failed ({exc})."
         return f"Exported {format_name} snapshot to {destination}"
+
+    def _handle_session_command(self, parts: list[str]) -> str:
+        if len(parts) < 3:
+            return "Usage: session <save|load> <path>"
+        action = parts[1].lower()
+        path = " ".join(parts[2:]).strip()
+        if not path:
+            return "Usage: session <save|load> <path>"
+        if action == "save":
+            try:
+                destination = export_entries(
+                    list(self._request_journal.list_entries()),
+                    format_name="json",
+                    destination=path,
+                )
+            except OSError as exc:
+                return f"Session save failed ({exc})."
+            return f"Saved session snapshot to {destination}"
+        if action == "load":
+            try:
+                entries = load_entries_from_json(path)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                return f"Session load failed ({exc})."
+            self._request_journal.replace_entries(entries)
+            self._reset_request_view_after_filter_change()
+            return f"Loaded session snapshot from {path}"
+        return "Usage: session <save|load> <path>"
 
     def _reset_request_view_after_filter_change(self) -> None:
         self._request_cursor = 0

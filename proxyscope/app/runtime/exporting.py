@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import json
 from pathlib import Path
 
-from proxyscope.app.runtime.journal import LoggedExchange
+from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
 
 
 def export_entries(entries: list[LoggedExchange], *, format_name: str, destination: str | Path) -> Path:
@@ -26,6 +26,15 @@ def export_entries(entries: list[LoggedExchange], *, format_name: str, destinati
 
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return path
+
+
+def load_entries_from_json(source: str | Path) -> list[LoggedExchange]:
+    path = Path(source)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    entries_raw = payload.get("entries")
+    if not isinstance(entries_raw, list):
+        raise ValueError("Session file must contain an 'entries' array.")
+    return [_parse_exchange(item) for item in entries_raw]
 
 
 def _serialize_exchange(entry: LoggedExchange) -> dict[str, object]:
@@ -59,6 +68,45 @@ def _serialize_exchange(entry: LoggedExchange) -> dict[str, object]:
         },
         "response": response_payload,
     }
+
+
+def _parse_exchange(payload: object) -> LoggedExchange:
+    if not isinstance(payload, dict):
+        raise ValueError("Each session entry must be an object.")
+    request_payload = payload.get("request")
+    if not isinstance(request_payload, dict):
+        raise ValueError("Session entry is missing a request object.")
+    response_payload = payload.get("response")
+    request = LoggedRequestMessage(
+        method=str(request_payload.get("method", "GET")),
+        path=str(request_payload.get("path", "")),
+        start_line=str(request_payload.get("start_line", "")),
+        headers=_parse_headers(request_payload.get("headers")),
+        body_preview=str(request_payload.get("body_preview", "")),
+        body=_parse_request_body(request_payload),
+    )
+    response = None
+    if isinstance(response_payload, dict):
+        response = LoggedResponseMessage(
+            status_code=int(response_payload.get("status_code", 0)),
+            reason=str(response_payload.get("reason", "")),
+            start_line=str(response_payload.get("start_line", f"HTTP/1.1 {response_payload.get('status_code', 0)}")),
+            headers=_parse_headers(response_payload.get("headers")),
+            body_preview=str(response_payload.get("body_preview", "")),
+            body_size=_parse_optional_int(response_payload.get("body_size")),
+        )
+    return LoggedExchange(
+        request_id=int(payload.get("request_id", 0)),
+        started_at=_parse_timestamp(payload.get("started_at")),
+        finished_at=_parse_optional_timestamp(payload.get("finished_at")),
+        duration_ms=_parse_optional_float(payload.get("duration_ms")),
+        client_ip=str(payload.get("client_ip", "")),
+        target_host=_parse_optional_str(payload.get("target_host")),
+        target_port=_parse_optional_int(payload.get("target_port")),
+        protocol=str(payload.get("protocol", "http")),
+        request=request,
+        response=response,
+    )
 
 
 def _serialize_har_entry(entry: LoggedExchange) -> dict[str, object]:
@@ -135,6 +183,16 @@ def _serialize_request_body(body: bytes | None) -> dict[str, object]:
         return {"body_base64": base64.b64encode(body).decode("ascii")}
 
 
+def _parse_request_body(payload: dict[str, object]) -> bytes | None:
+    body_base64 = payload.get("body_base64")
+    if isinstance(body_base64, str):
+        return base64.b64decode(body_base64.encode("ascii"))
+    body_text = payload.get("body_text")
+    if isinstance(body_text, str):
+        return body_text.encode("utf-8")
+    return None
+
+
 def _entry_url(entry: LoggedExchange) -> str:
     host = entry.target_host or "-"
     path = entry.request.path
@@ -171,3 +229,39 @@ def _iso8601(timestamp: float | None) -> str | None:
     if timestamp is None:
         return None
     return datetime.fromtimestamp(timestamp, tz=UTC).isoformat().replace("+00:00", "Z")
+
+
+def _parse_headers(payload: object) -> tuple[tuple[str, str], ...]:
+    if isinstance(payload, dict):
+        return tuple((str(name), str(value)) for name, value in payload.items())
+    return ()
+
+
+def _parse_timestamp(payload: object) -> float:
+    if not isinstance(payload, str):
+        return 0.0
+    return datetime.fromisoformat(payload.replace("Z", "+00:00")).timestamp()
+
+
+def _parse_optional_timestamp(payload: object) -> float | None:
+    if payload is None:
+        return None
+    return _parse_timestamp(payload)
+
+
+def _parse_optional_int(payload: object) -> int | None:
+    if payload is None:
+        return None
+    return int(payload)
+
+
+def _parse_optional_float(payload: object) -> float | None:
+    if payload is None:
+        return None
+    return float(payload)
+
+
+def _parse_optional_str(payload: object) -> str | None:
+    if payload is None:
+        return None
+    return str(payload)

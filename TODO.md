@@ -21,7 +21,7 @@ Priorisierte naechste Schritte fuer `proxyscope`, abgeleitet aus dem aktuellen R
 - [x] Export von Mitschnitten als HAR oder JSON
   Das Projekt sammelt bereits strukturierte Exchanges. Ein Exportformat waere der naechste logische Schritt fuer Team-Sharing, Bugreports und Offline-Analyse.
 
-- [ ] Persistente Session-Historie fuer Requests einfuehren
+- [x] Persistente Session-Historie fuer Requests einfuehren
   Im Moment ist das Journal rein im Speicher. Optionales Speichern und Wiederladen vergangener Sessions wuerde den Wert des Tools deutlich erhoehen.
 
 - [ ] Policy-System um URL-Prefix-/Host-Regeln und Prioritaeten ausbauen

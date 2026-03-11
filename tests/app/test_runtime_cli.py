@@ -363,3 +363,25 @@ class TestRuntimeCLI(unittest.TestCase):
 
             self.assertTrue(path.exists())
             self.assertIn("Exported json snapshot", cli._status_message)  # type: ignore[attr-defined]
+
+    def test_session_save_and_load_commands(self) -> None:
+        source_cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=self._journal_with_requests(),
+            response_modifier=ResponseModifierService(),
+        )
+        target_journal = RequestJournal()
+        target_cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=target_journal,
+            response_modifier=ResponseModifierService(),
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "session.json"
+            source_cli.execute_command(f"session save {path}")
+            self.assertTrue(path.exists())
+
+            target_cli.execute_command(f"session load {path}")
+            self.assertEqual(len(target_journal.list_entries()), 2)
+            self.assertIn("Loaded session snapshot", target_cli._status_message)  # type: ignore[attr-defined]

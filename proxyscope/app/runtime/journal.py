@@ -135,6 +135,12 @@ class RequestJournal:
         with self._lock:
             self._entries.clear()
 
+    def replace_entries(self, entries: list[LoggedExchange]) -> None:
+        with self._lock:
+            self._entries = list(entries)
+            max_request_id = max((entry.request_id for entry in self._entries), default=0)
+            self._next_id = max_request_id + 1
+
 
 _request_journal = RequestJournal()
 _request_journal_lock = RLock()

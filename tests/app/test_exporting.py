@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from proxyscope.app.runtime.exporting import export_entries
+from proxyscope.app.runtime.exporting import export_entries, load_entries_from_json
 from proxyscope.app.runtime.journal import RequestJournal
 
 
@@ -62,6 +62,20 @@ class TestRuntimeExporting(unittest.TestCase):
             path = Path(tmpdir) / "snapshot.txt"
             with self.assertRaisesRegex(ValueError, "Unsupported export format"):
                 export_entries(self._entries(), format_name="txt", destination=path)
+
+    def test_load_entries_from_json_roundtrips_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "snapshot.json"
+            export_entries(self._entries(), format_name="json", destination=path)
+
+            entries = load_entries_from_json(path)
+
+            self.assertEqual(len(entries), 1)
+            entry = entries[0]
+            self.assertEqual(entry.request.method, "POST")
+            self.assertEqual(entry.request.body, b'{"ok":true}')
+            assert entry.response is not None
+            self.assertEqual(entry.response.status_code, 201)
 
 
 if __name__ == "__main__":

@@ -128,3 +128,35 @@ class TestRequestJournal(unittest.TestCase):
         assert entry.response is not None
         self.assertEqual(entry.response.body_size, 10)
         self.assertEqual(entry.response.body_preview, "abc\n...[truncated 7 bytes]")
+
+    def test_replace_entries_resets_next_request_id(self) -> None:
+        journal = RequestJournal()
+        request_id = journal.start_request(
+            method="GET",
+            path="/existing",
+            start_line="GET /existing HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        existing = journal.get_entry(request_id)
+        assert existing is not None
+
+        replacement = RequestJournal()
+        replacement.replace_entries([existing])
+        next_request_id = replacement.start_request(
+            method="GET",
+            path="/next",
+            start_line="GET /next HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+
+        self.assertEqual(next_request_id, request_id + 1)
