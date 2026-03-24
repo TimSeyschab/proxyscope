@@ -109,26 +109,27 @@ class HTTP1ResponseModifierRewriter:
             )
             static_template = get_static_response_template_for_request(method=method, url=request_url)
             if static_template is not None:
-                original_response = ForwardResponse(
+                final_response = ForwardResponse(
                     status_code=static_template.status_code,
                     reason=static_template.reason,
                     headers=dict(static_template.headers),
                     body=static_template.body,
                 )
-            edited_response = self._response_modifier.maybe_modify_response(
-                request_url=request_url,
-                method=method,
-                response=original_response,
-            )
+            else:
+                edited_response = self._response_modifier.maybe_modify_response(
+                    request_url=request_url,
+                    method=method,
+                    response=original_response,
+                )
+                if edited_response is original_response:
+                    out.extend(raw_header_block)
+                    out.extend(b"\r\n\r\n")
+                    out.extend(raw_body)
+                    self._active_request_meta = None
+                    continue
+                final_response = edited_response
 
-            if edited_response is original_response and static_template is None:
-                out.extend(raw_header_block)
-                out.extend(b"\r\n\r\n")
-                out.extend(raw_body)
-                self._active_request_meta = None
-                continue
-
-            out.extend(_build_response_bytes(version=version, response=edited_response))
+            out.extend(_build_response_bytes(version=version, response=final_response))
             self._active_request_meta = None
 
         return bytes(out)

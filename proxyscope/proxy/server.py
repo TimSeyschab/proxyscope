@@ -245,12 +245,13 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             return
         else:
             forward_response = server.forwarder.forward(forward_request)
-        modifier = get_response_modifier()
-        forward_response = modifier.maybe_modify_response(
-            request_url=target_url,
-            method=self.command,
-            response=forward_response,
-        )
+        if static_template is None:
+            modifier = get_response_modifier()
+            forward_response = modifier.maybe_modify_response(
+                request_url=target_url,
+                method=self.command,
+                response=forward_response,
+            )
         write_forward_response(self, forward_response, send_body=send_body)
 
         duration_ms = (time.perf_counter() - started) * 1000

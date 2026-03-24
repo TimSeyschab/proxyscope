@@ -90,6 +90,46 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
         self.assertIn("HTTP/1.1 202 Accepted", text)
         self.assertIn("Content-Length: 11", text)
         self.assertTrue(text.endswith("\r\n\r\nfrom-policy"))
+        self.assertEqual(modifier.seen_urls, [])
+
+    def test_static_policy_takes_precedence_over_editor_modifier(self) -> None:
+        config = RuntimeConfig()
+        config.add_modification_whitelist_entry("https://example.com/edit")
+        config.add_static_response_rule(
+            url="https://example.com/edit",
+            status_code=203,
+            reason="Non-Authoritative Information",
+            headers={"Content-Type": "text/plain"},
+            body=b"from-static-policy",
+            method="GET",
+        )
+        set_runtime_config(config)
+
+        modifier = _FakeModifier()
+        requests = [("GET", "https://example.com/edit")]
+
+        def acquire_request_meta() -> tuple[str, str] | None:
+            if not requests:
+                return None
+            return requests.pop(0)
+
+        rewriter = HTTP1ResponseModifierRewriter(
+            response_modifier=modifier,  # type: ignore[arg-type]
+            acquire_request_meta=acquire_request_meta,
+        )
+
+        raw_response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/plain\r\n"
+            b"Content-Length: 8\r\n"
+            b"\r\n"
+            b"original"
+        )
+        out = rewriter.feed(raw_response)
+        text = out.decode("iso-8859-1")
+        self.assertIn("HTTP/1.1 203 Non-Authoritative Information", text)
+        self.assertTrue(text.endswith("\r\n\r\nfrom-static-policy"))
+        self.assertEqual(modifier.seen_urls, [])
 
     def test_keeps_request_meta_for_103_then_final_response(self) -> None:
         modifier = _FakeModifier()

@@ -4,6 +4,7 @@ import socketserver
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
 from proxyscope.app.runtime.journal import get_request_journal
@@ -23,6 +24,15 @@ class StaticForwarder:
             },
             body=body,
         )
+
+
+class _CountingModifier:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def maybe_modify_response(self, *, request_url: str, method: str, response: ForwardResponse) -> ForwardResponse:
+        self.calls += 1
+        return response
 
 
 class TestRequestLoggingServer(unittest.TestCase):
@@ -243,6 +253,44 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.assertEqual(data, b'{"source":"policy"}')
         self.assertEqual(forwarder.calls, 0)
 
+    def test_static_response_policy_skips_editor_modifier(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+        config = RuntimeConfig()
+        config.add_open_editor_policy("http://example.com/mock", method="GET")
+        config.add_static_response_rule(
+            url="http://example.com/mock",
+            status_code=200,
+            reason="OK",
+            headers={"Content-Type": "application/json"},
+            body=b'{"source":"policy"}',
+            method="GET",
+        )
+        set_runtime_config(config)
+
+        modifier = _CountingModifier()
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            forwarder=StaticForwarder(),
+            auto_enable_mitm=False,
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+
+        with patch("proxyscope.proxy.server.get_response_modifier", return_value=modifier):
+            status, data = self._request(
+                "GET",
+                "http://example.com/mock",
+                headers={"Host": "example.com"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(data, b'{"source":"policy"}')
+        self.assertEqual(modifier.calls, 0)
+
     def test_streams_large_upstream_response_with_truncated_preview(self) -> None:
         class UpstreamHandler(socketserver.BaseRequestHandler):
             response_body = b"x" * 5000
@@ -287,9 +335,15 @@ class TestRequestLoggingServer(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(data, UpstreamHandler.response_body)
 
-            entries = get_request_journal().list_entries()
-            self.assertTrue(entries)
-            entry = entries[-1]
+            entry = None
+            for _ in range(10):
+                entries = get_request_journal().list_entries()
+                if entries and entries[-1].response is not None:
+                    entry = entries[-1]
+                    break
+                time.sleep(0.01)
+            self.assertIsNotNone(entry)
+            assert entry is not None
             assert entry.response is not None
             self.assertEqual(entry.response.body_size, 5000)
             self.assertTrue(entry.response.body_preview.endswith("...[truncated 904 bytes]"))
