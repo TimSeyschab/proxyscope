@@ -63,6 +63,19 @@ class RequestFilterState:
 
 
 class RuntimeCLI(logging.Handler):
+    HELP_SUMMARY = (
+        "Commands: help | clear | sites | loglevel <LEVEL> | "
+        "filter [show|clear|host|method|status|text] ... | find <text>|find clear | "
+        "export <json|har> <path> | "
+        "session <save|load> <path> | "
+        "mitm [show|on|off|certs-dir <path>] | "
+        "whitelist [add|remove|clear|show] ... | cache [show|on|off|toggle] | "
+        "config [show|save [path]|reload] | "
+        "policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|"
+        "add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ... | "
+        "Hotkeys (Shift): A/B/D/E/I/M/P/R/S/U/X | quit"
+    )
+
     def __init__(
         self,
         *,
@@ -85,14 +98,6 @@ class RuntimeCLI(logging.Handler):
         self._command_service = RuntimeCommandService(runtime_config=self._runtime_config)
 
     @property
-    def _command_buffer(self) -> str:
-        return self._view_state.command_buffer
-
-    @_command_buffer.setter
-    def _command_buffer(self, value: str) -> None:
-        self._view_state.command_buffer = value
-
-    @property
     def _active_pane(self) -> str:
         return self._view_state.active_pane
 
@@ -107,14 +112,6 @@ class RuntimeCLI(logging.Handler):
     @_aux_tab_key.setter
     def _aux_tab_key(self, value: str) -> None:
         self._view_state.aux_tab_key = value
-
-    @property
-    def _main_mode(self) -> str:
-        return self._view_state.main_mode
-
-    @_main_mode.setter
-    def _main_mode(self, value: str) -> None:
-        self._view_state.main_mode = value  # type: ignore[assignment]
 
     @property
     def _status_message(self) -> str:
@@ -166,19 +163,8 @@ class RuntimeCLI(logging.Handler):
                 self._shutdown_server()
             return True
 
-        if cmd == "help":
-            self._view_state.status_message = (
-                "Commands: help | clear | sites | loglevel <LEVEL> | "
-                "filter [show|clear|host|method|status|text] ... | find <text>|find clear | "
-                "export <json|har> <path> | "
-                "session <save|load> <path> | "
-                "mitm [show|on|off|certs-dir <path>] | "
-                "whitelist [add|remove|clear|show] ... | cache [show|on|off|toggle] | "
-                "config [show|save [path]|reload] | "
-                "policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|"
-                "add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ... | "
-                "Hotkeys (Shift): A/B/D/E/I/M/P/R/S/T/V/X | quit"
-            )
+        if self.is_help_command(normalized):
+            self._view_state.status_message = self.HELP_SUMMARY
             return False
 
         if cmd == "clear":
@@ -230,6 +216,48 @@ class RuntimeCLI(logging.Handler):
         self._view_state.status_message = f"Unknown command: {command}"
         return False
 
+    def is_help_command(self, command: str) -> bool:
+        normalized = command.strip()
+        if not normalized:
+            return False
+        return normalized.split()[0].lower() in {"help", "?"}
+
+    def build_help_text(self) -> str:
+        return (
+            "Commands\n"
+            "  help, ?                     Show this help dialog.\n"
+            "  clear                       Clear the captured request list.\n"
+            "  sites                       Show the busiest hosts.\n"
+            "  loglevel <LEVEL>            Show or change the runtime log level.\n"
+            "  filter ...                  Filter requests by host, method, status, or text.\n"
+            "  find <text>                 Shortcut for full-text request filtering.\n"
+            "  export <json|har> <path>    Export the current request list.\n"
+            "  session <save|load> <path>  Save or load a captured session.\n"
+            "  mitm ...                    Show or update MITM settings.\n"
+            "  whitelist ...               Inspect or change the logging whitelist.\n"
+            "  cache ...                   Inspect or toggle cache invalidation.\n"
+            "  config ...                  Show, save, or reload runtime config.\n"
+            "  policy ...                  Manage editor and static-response rules.\n"
+            "  quit, exit, q               Stop the proxy.\n\n"
+            "Navigation\n"
+            "  Enter on a request          Open request detail.\n"
+            "  Enter on a policy           Open policy editor (Policies tab).\n"
+            "  Tab / Shift+Tab             Move forward or backward through panes.\n"
+            "  Shift+S                     Toggle the sidebar; reselect Sites when visible.\n"
+            "  Shift+P                     Show the sidebar and switch to Policies.\n"
+            "  Shift+B                     Close sidebar/detail view (step back).\n"
+            "  Shift+A                     Add the selected site to the whitelist.\n"
+            "  Shift+U                     Remove the selected site from the whitelist.\n"
+            "  Shift+D                     Disable the selected policy (Policies tab).\n"
+            "  Shift+E                     Enable the selected policy (Policies tab).\n"
+            "  Shift+I                     Edit the selected policy (Policies tab).\n"
+            "  Shift+M                     Add and edit selected request as editor policy.\n"
+            "  Shift+R                     Replay the selected request after editing.\n"
+            "  Shift+X                     Remove the selected policy (Policies tab).\n"
+            "  Shift+<letter>              Terminal sends uppercase character (e.g. Shift+M == M).\n"
+            "  Esc / Enter                 Close this help dialog."
+        )
+
     def _go_back(self) -> None:
         if not self._view_state.go_back():
             self._view_state.status_message = "Nothing to close."
@@ -239,9 +267,6 @@ class RuntimeCLI(logging.Handler):
 
     def _toggle_aux_visibility(self) -> None:
         self._view_state.toggle_aux_visibility()
-
-    def _toggle_detail_tab(self) -> None:
-        self._view_state.detail_tab = "response" if self._view_state.detail_tab == "request" else "request"
 
     def _open_selected_request_detail(self) -> None:
         if not self._ordered_entries():
@@ -369,7 +394,7 @@ class RuntimeCLI(logging.Handler):
             self._view_state.switch_to_request_list_mode()
 
     def _ordered_policy_items(self) -> list[tuple[str, str]]:
-        rules = self._runtime_config.policy_rules()
+        rules = self._runtime_config.sorted_policy_rules()
         return [(rule.name, _format_policy_item(rule)) for rule in rules]
 
     def _selected_site(self) -> str | None:
@@ -388,6 +413,12 @@ class RuntimeCLI(logging.Handler):
         if self._view_state.policy_cursor >= len(policies):
             self._view_state.policy_cursor = max(0, len(policies) - 1)
         return policies[self._view_state.policy_cursor][0]
+
+    def _ensure_policy_tab_active(self) -> bool:
+        if self._view_state.aux_visible and self._view_state.aux_tab_key == "policies":
+            return True
+        self._view_state.status_message = "Open Policies tab first (Shift+P)."
+        return False
 
     def _add_selected_site_to_whitelist(self) -> None:
         selected = self._selected_site()
@@ -409,6 +440,8 @@ class RuntimeCLI(logging.Handler):
             self._view_state.status_message = f"Selected site not in whitelist: {selected}"
 
     def _enable_selected_policy(self) -> None:
+        if not self._ensure_policy_tab_active():
+            return
         name = self._selected_policy_name()
         if name is None:
             self._view_state.status_message = "No policy selected."
@@ -419,6 +452,8 @@ class RuntimeCLI(logging.Handler):
             self._view_state.status_message = f"Policy not found: {name}"
 
     def _disable_selected_policy(self) -> None:
+        if not self._ensure_policy_tab_active():
+            return
         name = self._selected_policy_name()
         if name is None:
             self._view_state.status_message = "No policy selected."
@@ -429,6 +464,8 @@ class RuntimeCLI(logging.Handler):
             self._view_state.status_message = f"Policy not found: {name}"
 
     def _remove_selected_policy(self) -> None:
+        if not self._ensure_policy_tab_active():
+            return
         name = self._selected_policy_name()
         if name is None:
             self._view_state.status_message = "No policy selected."
@@ -446,6 +483,8 @@ class RuntimeCLI(logging.Handler):
         *,
         suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
     ) -> None:
+        if not self._ensure_policy_tab_active():
+            return
         name = self._selected_policy_name()
         if name is None:
             self._view_state.status_message = "No policy selected."
@@ -500,7 +539,11 @@ class RuntimeCLI(logging.Handler):
         except Exception as exc:  # noqa: BLE001
             self._view_state.status_message = f"Policy edit failed ({exc})."
 
-    def _add_selected_request_to_modify_whitelist(self) -> None:
+    def _add_selected_request_to_editor_policy(
+        self,
+        *,
+        suspend_ui: Callable[[], AbstractContextManager[None]] | None = None,
+    ) -> None:
         entries = self._ordered_entries()
         if not entries:
             self._view_state.status_message = "No request selected."
@@ -510,11 +553,29 @@ class RuntimeCLI(logging.Handler):
         if target_url is None:
             self._view_state.status_message = "Cannot build URL from selected request."
             return
-        normalized = self._runtime_config.add_open_editor_policy(
-            target_url,
-            method=selected.request.method,
-        )
-        self._view_state.status_message = f"Added editor policy: {normalized}"
+        existing_names = {rule.name for rule in self._runtime_config.policy_rules()}
+        try:
+            normalized = self._runtime_config.add_open_editor_policy(
+                target_url,
+                method=selected.request.method,
+            )
+        except ValueError as exc:
+            self._view_state.status_message = str(exc)
+            return
+
+        created_rule: PolicyRule | None = None
+        for rule in reversed(self._runtime_config.policy_rules()):
+            if rule.name in existing_names:
+                continue
+            if rule.action == "open_editor":
+                created_rule = rule
+                break
+
+        if created_rule is None:
+            self._view_state.status_message = f"Added editor policy: {normalized}"
+            return
+
+        self._edit_policy_rule_interactive(created_rule.name, created_rule, suspend_ui=suspend_ui)
 
     def _edit_and_resend_selected_request_with_ui_suspend(
         self,

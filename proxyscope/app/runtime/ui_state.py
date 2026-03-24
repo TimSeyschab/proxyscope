@@ -9,7 +9,6 @@ DetailTab = Literal["request", "response"]
 @dataclass
 class RuntimeUIViewState:
     status_message: str = "Type 'help' for commands."
-    command_buffer: str = ""
     should_exit: bool = False
     pending_policy_edit_name: str | None = None
 
@@ -48,8 +47,10 @@ class RuntimeUIViewState:
         self.detail_tab = "request"
 
     def go_back(self) -> bool:
-        if self.active_pane == "aux" and self.aux_visible:
-            self.toggle_aux_visibility()
+        if self.aux_visible:
+            self.aux_visible = False
+            if self.active_pane == "aux":
+                self.active_pane = "detail" if self.main_mode == "request_detail" else "requests"
             return True
         if self.main_mode == "request_detail":
             self.switch_to_request_list_mode()

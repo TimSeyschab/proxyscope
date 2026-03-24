@@ -65,6 +65,45 @@ class TestRuntimeCommandService(unittest.TestCase):
         self.assertEqual(result.status_message, "Policy not found: missing")
         self.assertEqual(scheduled, [])
 
+    def test_policy_show_uses_matching_precedence_order(self) -> None:
+        config = RuntimeConfig()
+        config.add_static_response_rule(
+            url="https://example.com/base",
+            method="GET",
+            priority=0,
+            name="low-priority",
+        )
+        config.add_static_response_rule(
+            url="https://example.com/api",
+            method="GET",
+            priority=5,
+            url_prefix=True,
+            name="mid-priority-prefix",
+        )
+        config.add_static_response_rule(
+            url="https://example.com/api/v1/users",
+            method="GET",
+            priority=5,
+            name="high-priority-exact",
+        )
+        service = RuntimeCommandService(runtime_config=config)
+
+        result = service.execute(
+            "policy show",
+            on_cache_toggle=None,
+            on_schedule_policy_edit=lambda _name: None,
+        )
+        self.assertTrue(result.handled)
+        self.assertIn("Policies (3):", result.status_message)
+        self.assertLess(
+            result.status_message.find("high-priority-exact"),
+            result.status_message.find("mid-priority-prefix"),
+        )
+        self.assertLess(
+            result.status_message.find("mid-priority-prefix"),
+            result.status_message.find("low-priority"),
+        )
+
     def test_loglevel_returns_updated_level(self) -> None:
         config = RuntimeConfig()
         service = RuntimeCommandService(runtime_config=config)

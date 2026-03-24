@@ -47,10 +47,15 @@ poetry run proxyscope --no-ui
 - `clear`
 - `sites`
 - `loglevel <DEBUG|INFO|WARNING|ERROR>`
+- `filter [show|clear|host|method|status|text] ...`
+- `find <text>|clear`
+- `export <json|har> <path>`
+- `session <save|load> <path>`
+- `mitm [show|on|off|certs-dir <path>]`
 - `whitelist [show|add|remove|clear] ...`
 - `cache [show|on|off|toggle]`
 - `config [show|save [path]|reload]`
-- `policy [show|add-editor|add-static|edit|remove|enable|disable] ...`
+- `policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ...`
 - `quit`
 
 ## Keyboard Shortcuts (TUI)
@@ -59,26 +64,26 @@ poetry run proxyscope --no-ui
 - `Up` / `Down`: Auswahl bewegen oder vertikal scrollen (abhängig vom aktiven Panel).
 - `PageUp` / `PageDown`: Schnelles vertikales Scrollen.
 - `Enter`: Request-Detail für den ausgewählten Request öffnen (oder Kommando ausführen, wenn Eingabezeile befüllt ist).
+- `Enter` im `Policies`-Tab: Ausgewählte Policy im externen Editor öffnen.
 - `Backspace`: Zeichen in der Kommandozeile löschen.
-- `Tab` / `Shift+Tab`: Im Request-Detail zwischen `Request` und `Response` Tab wechseln.
+- `Tab` / `Shift+Tab`: Vorwärts oder rückwärts durch Requests, Detail-Tabs, Sidebar-Tabs und Kommandozeile wechseln.
 - `Shift+B`: Request-Detail schließen, zurück zur Request-Liste.
-- `Shift+P`: Rechtes Panel auf `Policies` fokussieren.
-- `Shift+S`: Rechtes Panel auf `Sites` fokussieren.
-- `Shift+V`: Rechtes Panel ein-/ausblenden.
+- `Shift+S`: Rechtes Panel auf `Sites` schalten; bei erneutem Drücken im `Sites`-Tab wird die Sidebar ausgeblendet.
+- `Shift+P`: Rechtes Panel auf `Policies` schalten.
 - `Shift+M`: Ausgewählten Request als Editor-Policy (`METHOD + URL`) hinzufügen.
 - `Shift+R`: Ausgewählten Request editieren und erneut senden.
-- `Shift+T`: Im Request-Detail zwischen `Request` und `Response` Tab wechseln.
 - `Shift+A`: Ausgewählte Site zur Log-Whitelist hinzufügen (`Sites`-Tab).
-- `Shift+D`: Ausgewählte Site aus der Log-Whitelist entfernen (`Sites`-Tab).
-- `Shift+E`: Ausgewählte Policy aktivieren (`Policies`-Tab).
 - `Shift+D`: Ausgewählte Policy deaktivieren (`Policies`-Tab).
+- `Shift+E`: Ausgewählte Policy aktivieren (`Policies`-Tab).
 - `Shift+I`: Ausgewählte Policy bearbeiten (`Policies`-Tab).
+- `Shift+U`: Ausgewählte Site aus der Log-Whitelist entfernen (`Sites`-Tab).
 - `Shift+X`: Ausgewählte Policy entfernen (`Policies`-Tab).
+
+Hinweis: Buchstaben-Shortcuts werden nur als Shift-Kombination verarbeitet (`Shift+M` entspricht `M`).
 
 ## TLS Interception (MITM)
 
 On startup, proxyscope now auto-creates local CA materials under `certs/ca` if they are missing.
-
 Import `certs/ca/mitm-ca.crt` into your browser trust store for local testing.
 
 To regenerate CA files, delete the existing cert material and restart proxyscope:

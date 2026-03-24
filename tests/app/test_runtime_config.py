@@ -277,3 +277,32 @@ class TestRuntimeConfig(unittest.TestCase):
         self.assertEqual(updated_template.status_code, 201)
         self.assertTrue(config.remove_policy_rule(static_name))
         self.assertFalse(config.remove_policy_rule("missing-policy"))
+
+    def test_policy_descriptions_follow_matching_precedence_order(self) -> None:
+        config = RuntimeConfig()
+        config.add_static_response_rule(
+            url="https://example.com/base",
+            method="GET",
+            priority=0,
+            name="low-priority",
+        )
+        config.add_static_response_rule(
+            url="https://example.com/api",
+            method="GET",
+            priority=5,
+            url_prefix=True,
+            name="mid-priority-prefix",
+        )
+        config.add_static_response_rule(
+            url="https://example.com/api/v1/users",
+            method="GET",
+            priority=5,
+            name="high-priority-exact",
+        )
+
+        descriptions = config.policy_descriptions()
+        ordered_names = [item.split(" ", 1)[0] for item in descriptions]
+        self.assertEqual(
+            ordered_names,
+            ["high-priority-exact", "mid-priority-prefix", "low-priority"],
+        )

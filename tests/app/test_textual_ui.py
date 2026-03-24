@@ -5,9 +5,14 @@ from textual.widgets._option_list import Option
 
 from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
 from proxyscope.app.runtime.textual_ui import (
+    RuntimeTextualApp,
     _detail_signature,
     _format_detail,
+    _format_detail_tabs,
+    _focus_step_order,
+    _plain_text,
     _request_rows_signature,
+    _shortcut_token_from_key_event,
     determine_runtime_layout,
 )
 from proxyscope.app.runtime.ui_models import AuxPanelTabModel, RuntimeScreenModel
@@ -31,7 +36,6 @@ def _screen_model(*, width_mode: str = "detail", active_pane: str = "requests", 
             )
         ],
         aux_active_key="sites",
-        command_buffer="",
         status_message="ok",
         config_text="cfg",
     )
@@ -58,6 +62,21 @@ class TestTextualUILayout(unittest.TestCase):
 
 
 class TestTextualUIDetailFormatting(unittest.TestCase):
+    def test_plain_text_preserves_markup_like_content(self) -> None:
+        rendered = _plain_text("DETAIL [response] body=[abc]")
+
+        self.assertEqual(rendered.plain, "DETAIL [response] body=[abc]")
+
+    def test_detail_tabs_show_response_target(self) -> None:
+        tabs = _format_detail_tabs(detail_tab="request", has_response=True)
+
+        self.assertEqual(tabs, "[Request] |  Response ")
+
+    def test_detail_tabs_mark_pending_response(self) -> None:
+        tabs = _format_detail_tabs(detail_tab="request", has_response=False)
+
+        self.assertEqual(tabs, "[Request] |  Response (pending) ")
+
     def test_response_detail_renders_status_and_preview(self) -> None:
         entry = LoggedExchange(
             request_id=1,
@@ -190,12 +209,63 @@ class TestTextualUIDetailFormatting(unittest.TestCase):
         )
 
 
+class TestTextualUIFocusOrder(unittest.TestCase):
+    def test_focus_order_includes_sidebar_tabs_separately(self) -> None:
+        steps = _focus_step_order(
+            main_mode="request_detail",
+            aux_visible=True,
+            aux_tabs=[
+                AuxPanelTabModel(key="sites", title="SIDEBAR:SITES", items=["example.com"], cursor=0),
+                AuxPanelTabModel(key="policies", title="SIDEBAR:POLICIES", items=["policy-1"], cursor=0),
+            ],
+        )
+
+        self.assertEqual(
+            steps,
+            ["requests", "detail-request", "detail-response", "aux-sites", "aux-policies", "command"],
+        )
+
+    def test_focus_order_omits_sidebar_tabs_when_hidden(self) -> None:
+        steps = _focus_step_order(
+            main_mode="request_detail",
+            aux_visible=False,
+            aux_tabs=[
+                AuxPanelTabModel(key="sites", title="SIDEBAR:SITES", items=["example.com"], cursor=0),
+                AuxPanelTabModel(key="policies", title="SIDEBAR:POLICIES", items=["policy-1"], cursor=0),
+            ],
+        )
+
+        self.assertEqual(steps, ["requests", "detail-request", "detail-response", "command"])
+
+
+class TestTextualUIBindings(unittest.TestCase):
+    def test_runtime_bindings_have_unique_keys(self) -> None:
+        keys = [binding.key for binding in RuntimeTextualApp.BINDINGS]
+
+        self.assertEqual(len(keys), len(set(keys)))
+
+    def test_runtime_bindings_are_priority_shortcuts(self) -> None:
+        self.assertTrue(all(binding.priority for binding in RuntimeTextualApp.BINDINGS))
+
+
 class TestTextualEventCompatibility(unittest.TestCase):
     def test_option_highlighted_exposes_option_index(self) -> None:
         event = OptionList.OptionHighlighted(OptionList(), Option("alpha"), 3)
 
         self.assertEqual(event.option_index, 3)
         self.assertFalse(hasattr(event, "index"))
+
+
+class TestTextualShortcutParsing(unittest.TestCase):
+    def test_shift_plus_letter_maps_to_shortcut_token(self) -> None:
+        self.assertEqual(_shortcut_token_from_key_event(key="shift+m", character=None), "m")
+
+    def test_uppercase_character_maps_to_shortcut_token(self) -> None:
+        self.assertEqual(_shortcut_token_from_key_event(key="m", character="M"), "m")
+        self.assertEqual(_shortcut_token_from_key_event(key="M", character=None), "m")
+
+    def test_lowercase_without_shift_is_not_treated_as_shortcut(self) -> None:
+        self.assertIsNone(_shortcut_token_from_key_event(key="m", character="m"))
 
 
 if __name__ == "__main__":

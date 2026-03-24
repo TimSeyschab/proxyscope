@@ -28,6 +28,5 @@ class RuntimeScreenModel:
     aux_visible: bool
     aux_tabs: list[AuxPanelTabModel]
     aux_active_key: str
-    command_buffer: str
     status_message: str
     config_text: str

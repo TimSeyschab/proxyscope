@@ -54,7 +54,6 @@ def build_runtime_screen_model(
             policy_cursor=state.policy_cursor,
         ),
         aux_active_key=state.aux_tab_key,
-        command_buffer=state.command_buffer,
         status_message=state.status_message,
         config_text=config_text,
     )

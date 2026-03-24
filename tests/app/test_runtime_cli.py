@@ -2,6 +2,7 @@ import unittest
 import gzip
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.runtime.journal import RequestJournal
@@ -67,6 +68,18 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertIn("filter", cli._status_message)  # type: ignore[attr-defined]
         self.assertIn("mitm", cli._status_message)  # type: ignore[attr-defined]
 
+    def test_execute_question_mark_command_uses_help(self) -> None:
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        should_exit = cli.execute_command("?")
+
+        self.assertFalse(should_exit)
+        self.assertEqual(cli._status_message, cli.HELP_SUMMARY)  # type: ignore[attr-defined]
+
     def test_go_back_closes_active_sidebar_first(self) -> None:
         cli = RuntimeCLI(
             runtime_config=RuntimeConfig(),
@@ -99,11 +112,38 @@ class TestRuntimeCLI(unittest.TestCase):
             response_modifier=ResponseModifierService(),
         )
         cli._open_selected_request_detail()  # type: ignore[attr-defined]
+        cli._view_state.aux_visible = False  # type: ignore[attr-defined]
 
         cli._go_back()  # type: ignore[attr-defined]
 
         self.assertEqual(cli._view_state.main_mode, "requests")  # type: ignore[attr-defined]
         self.assertEqual(cli._view_state.active_pane, "requests")  # type: ignore[attr-defined]
+
+    def test_go_back_hides_sidebar_before_leaving_detail_view(self) -> None:
+        journal = RequestJournal()
+        journal.start_request(
+            method="GET",
+            path="/hello",
+            start_line="GET /hello HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=journal,
+            response_modifier=ResponseModifierService(),
+        )
+        cli._open_selected_request_detail()  # type: ignore[attr-defined]
+
+        cli._go_back()  # type: ignore[attr-defined]
+
+        self.assertFalse(cli._view_state.aux_visible)  # type: ignore[attr-defined]
+        self.assertEqual(cli._view_state.main_mode, "request_detail")  # type: ignore[attr-defined]
+        self.assertEqual(cli._view_state.active_pane, "detail")  # type: ignore[attr-defined]
 
     def test_execute_clear_command_clears_requests(self) -> None:
         journal = RequestJournal()
@@ -301,6 +341,87 @@ class TestRuntimeCLI(unittest.TestCase):
         cli.execute_command(f"policy remove {rule_name}")
         self.assertEqual(len(config.policy_rules()), 0)
 
+    def test_selected_policy_actions_require_policies_tab(self) -> None:
+        config = RuntimeConfig()
+        rule_name = config.add_static_response_rule(
+            url="https://example.com/mock",
+            status_code=200,
+            reason="OK",
+            headers={"Content-Type": "text/plain"},
+            body=b"demo",
+            method="GET",
+        )
+        cli = RuntimeCLI(
+            runtime_config=config,
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        cli._disable_selected_policy()  # type: ignore[attr-defined]
+
+        self.assertEqual(cli._status_message, "Open Policies tab first (Shift+P).")  # type: ignore[attr-defined]
+        self.assertIsNotNone(
+            config.get_static_response_template_for_request(method="GET", url="https://example.com/mock")
+        )
+        rule = config.get_policy_rule(rule_name)
+        self.assertIsNotNone(rule)
+        assert rule is not None
+        self.assertTrue(rule.enabled)
+
+    def test_selected_policy_actions_work_in_policies_tab(self) -> None:
+        config = RuntimeConfig()
+        config.add_static_response_rule(
+            url="https://example.com/mock",
+            status_code=200,
+            reason="OK",
+            headers={"Content-Type": "text/plain"},
+            body=b"demo",
+            method="GET",
+        )
+        cli = RuntimeCLI(
+            runtime_config=config,
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+        cli._focus_aux_tab("policies")  # type: ignore[attr-defined]
+
+        cli._disable_selected_policy()  # type: ignore[attr-defined]
+
+        self.assertIsNone(config.get_static_response_template_for_request(method="GET", url="https://example.com/mock"))
+
+    def test_policy_sidebar_order_matches_runtime_matching_precedence(self) -> None:
+        config = RuntimeConfig()
+        config.add_static_response_rule(
+            url="https://example.com/base",
+            name="low-priority",
+            priority=0,
+            method="GET",
+        )
+        config.add_static_response_rule(
+            url="https://example.com/api",
+            name="mid-priority-prefix",
+            priority=5,
+            method="GET",
+            url_prefix=True,
+        )
+        config.add_static_response_rule(
+            url="https://example.com/api/v1/users",
+            name="high-priority-exact",
+            priority=5,
+            method="GET",
+        )
+        cli = RuntimeCLI(
+            runtime_config=config,
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        ordered_names = [name for name, _desc in cli._ordered_policy_items()]  # type: ignore[attr-defined]
+        self.assertEqual(
+            ordered_names,
+            ["high-priority-exact", "mid-priority-prefix", "low-priority"],
+        )
+
     def test_execute_policy_edit_command_schedules_editor(self) -> None:
         config = RuntimeConfig()
         rule_name = config.add_static_response_rule(
@@ -318,6 +439,24 @@ class TestRuntimeCLI(unittest.TestCase):
         )
         cli.execute_command(f"policy edit {rule_name}")
         self.assertEqual(cli._pending_policy_edit_name, rule_name)  # type: ignore[attr-defined]
+
+    def test_shift_m_adds_editor_policy_and_opens_editor(self) -> None:
+        config = RuntimeConfig()
+        cli = RuntimeCLI(
+            runtime_config=config,
+            request_journal=self._journal_with_requests(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        with patch(
+            "proxyscope.app.runtime.cli.edit_policy_rule_with_external_editor",
+            return_value=(False, None, "cancelled"),
+        ) as edit_mock:
+            cli._add_selected_request_to_editor_policy()  # type: ignore[attr-defined]
+
+        self.assertTrue(config.open_editor_policy_entries())
+        edit_mock.assert_called_once()
+        self.assertEqual(cli._status_message, "cancelled")  # type: ignore[attr-defined]
 
     def test_decode_gzip_encoded_body(self) -> None:
         payload = b'{"ok":true}'

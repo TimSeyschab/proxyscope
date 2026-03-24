@@ -163,6 +163,11 @@ class RuntimeConfig:
         with self._lock:
             return tuple(self._policy_rules)
 
+    def sorted_policy_rules(self) -> tuple[PolicyRule, ...]:
+        with self._lock:
+            ordered = sorted(self._policy_rules, key=policy_sort_key, reverse=True)
+            return tuple(ordered)
+
     def set_policy_rules(self, rules: Iterable[PolicyRule]) -> None:
         with self._lock:
             self._policy_rules = list(rules)
@@ -179,8 +184,7 @@ class RuntimeConfig:
         self._persist_if_configured()
 
     def policy_descriptions(self) -> tuple[str, ...]:
-        with self._lock:
-            return tuple(policy_description(rule) for rule in self._policy_rules)
+        return tuple(policy_description(rule) for rule in self.sorted_policy_rules())
 
     def remove_policy_rule(self, name: str) -> bool:
         normalized = name.strip()
