@@ -4,6 +4,47 @@ from typing import Callable
 
 from proxyscope.app.config.runtime import RuntimeConfig, normalize_http_method, normalize_modification_url
 
+MIN_HTTP_STATUS_CODE = 100
+MAX_HTTP_STATUS_CODE = 599
+DEFAULT_POLICY_METHOD = "GET"
+DEFAULT_STATIC_RESPONSE_STATUS_CODE = 200
+DEFAULT_STATIC_RESPONSE_CONTENT_TYPE = "text/plain; charset=utf-8"
+POLICY_SHOW_PREVIEW_LIMIT = 3
+
+KNOWN_HTTP_METHODS = frozenset(
+    {
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS",
+        "TRACE",
+        "CONNECT",
+    }
+)
+
+HTTP_REASON_PHRASES = {
+    200: "OK",
+    201: "Created",
+    202: "Accepted",
+    204: "No Content",
+    301: "Moved Permanently",
+    302: "Found",
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    409: "Conflict",
+    418: "I'm a teapot",
+    429: "Too Many Requests",
+    500: "Internal Server Error",
+    502: "Bad Gateway",
+    503: "Service Unavailable",
+    504: "Gateway Timeout",
+}
+
 
 @dataclass(frozen=True)
 class CommandExecutionResult:
@@ -162,8 +203,8 @@ class RuntimeCommandService:
             entries = self._runtime_config.policy_descriptions()
             if not entries:
                 return CommandExecutionResult(handled=True, status_message="No policy rules configured.")
-            preview = ", ".join(entries[:3])
-            if len(entries) > 3:
+            preview = ", ".join(entries[:POLICY_SHOW_PREVIEW_LIMIT])
+            if len(entries) > POLICY_SHOW_PREVIEW_LIMIT:
                 preview += ", ..."
             return CommandExecutionResult(
                 handled=True,
@@ -181,10 +222,10 @@ class RuntimeCommandService:
                     ),
                 )
             method, url, status_code, content_type, body_text = parsed
-            if status_code < 100 or status_code > 599:
+            if status_code < MIN_HTTP_STATUS_CODE or status_code > MAX_HTTP_STATUS_CODE:
                 return CommandExecutionResult(
                     handled=True,
-                    status_message="Status code must be in range 100..599.",
+                    status_message=f"Status code must be in range {MIN_HTTP_STATUS_CODE}..{MAX_HTTP_STATUS_CODE}.",
                 )
             headers = {"Content-Type": content_type}
             rule_name = self._runtime_config.add_static_response_rule(
@@ -208,7 +249,7 @@ class RuntimeCommandService:
             try:
                 normalized = self._runtime_config.add_open_editor_policy(
                     value,
-                    method=method or "GET",
+                    method=method or DEFAULT_POLICY_METHOD,
                     url_prefix=(action == "add-editor-prefix"),
                 )
             except ValueError as exc:
@@ -435,25 +476,14 @@ def _parse_modify_method_and_url(tokens: list[str]) -> tuple[str | None, str]:
     first = tokens[0].strip()
     if not first:
         return None, " ".join(tokens[1:]).strip()
-    known_methods = {
-        "GET",
-        "POST",
-        "PUT",
-        "PATCH",
-        "DELETE",
-        "HEAD",
-        "OPTIONS",
-        "TRACE",
-        "CONNECT",
-    }
-    if first.upper() in known_methods:
+    if first.upper() in KNOWN_HTTP_METHODS:
         return first.upper(), " ".join(tokens[1:]).strip()
     return None, " ".join(tokens).strip()
 
 
 def _parse_add_static_policy_arguments(tokens: list[str]) -> tuple[str, str, int, str, str] | None:
     method, value = _parse_modify_method_and_url(tokens)
-    method_value = method or "GET"
+    method_value = method or DEFAULT_POLICY_METHOD
     if not value:
         return None
 
@@ -461,8 +491,8 @@ def _parse_add_static_policy_arguments(tokens: list[str]) -> tuple[str, str, int
     if not parsed_tokens:
         return None
     url = parsed_tokens[0]
-    status_code = 200
-    content_type = "text/plain; charset=utf-8"
+    status_code = DEFAULT_STATIC_RESPONSE_STATUS_CODE
+    content_type = DEFAULT_STATIC_RESPONSE_CONTENT_TYPE
     body_text = ""
 
     offset = 1
@@ -479,23 +509,4 @@ def _parse_add_static_policy_arguments(tokens: list[str]) -> tuple[str, str, int
 
 
 def _default_reason_phrase(status_code: int) -> str:
-    mapping = {
-        200: "OK",
-        201: "Created",
-        202: "Accepted",
-        204: "No Content",
-        301: "Moved Permanently",
-        302: "Found",
-        400: "Bad Request",
-        401: "Unauthorized",
-        403: "Forbidden",
-        404: "Not Found",
-        409: "Conflict",
-        418: "I'm a teapot",
-        429: "Too Many Requests",
-        500: "Internal Server Error",
-        502: "Bad Gateway",
-        503: "Service Unavailable",
-        504: "Gateway Timeout",
-    }
-    return mapping.get(status_code, "OK")
+    return HTTP_REASON_PHRASES.get(status_code, "OK")
