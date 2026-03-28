@@ -1,35 +1,47 @@
 # proxyscope
 
-`proxyscope` is an interactive HTTP/HTTPS proxy for request inspection, response editing, static-response policies, and live runtime control in a terminal UI.
+`proxyscope` is an interactive HTTP/HTTPS debugging proxy with a terminal UI.  
+It supports request/response inspection, response editing, replay, and both static and editor-based policy rules.
 
-## Highlights
+## Features
 
-- Forward HTTP requests through an upstream connection.
-- Handle HTTPS via `CONNECT` and optional TLS interception (MITM).
-- Group request/response logs by request id.
-- Inspect request/response details in a TUI.
-- Edit matching responses in an external editor.
-- Persist runtime configuration and policy rules.
-- Replay captured requests.
+- HTTP forward proxy and HTTPS via `CONNECT`
+- Optional TLS interception (MITM) with a local CA
+- Runtime control directly in the TUI
+- Request/response log with details, filters, export (`json`, `har`), and session persistence
+- Policy type `open_editor` (manually edit responses)
+- Policy type `static_response` (serve static responses)
 
 ## Requirements
 
-- Python `3.13+`
-- Poetry `2.x`
+- Python `>=3.13`
+- Poetry `2.x` (for development)
 
 ## Installation
 
+From the repository (recommended for development):
+
 ```bash
+git clone <repo-url>
+cd proxyscope
 poetry install
 ```
 
-## Run
+Install from PyPI:
+
+```bash
+pip install proxyscope
+```
+
+## Start
+
+Default start:
 
 ```bash
 poetry run proxyscope --host 127.0.0.1 --port 8080
 ```
 
-With persisted runtime configuration:
+With a static configuration file:
 
 ```bash
 poetry run proxyscope --config ./runtime-config.json
@@ -41,14 +53,53 @@ Without TUI:
 poetry run proxyscope --no-ui
 ```
 
+Available CLI options:
+
+- `--host <ip-or-hostname>`
+- `--port <port>`
+- `--config <path>`
+- `--mitm on|off`
+- `--certs-dir <path>`
+- `--no-ui`
+
+## Use Proxy With A Client
+
+Example with `curl`:
+
+```bash
+curl -x http://127.0.0.1:8080 http://httpbin.org/get
+curl -x http://127.0.0.1:8080 https://httpbin.org/get
+```
+
+## Screenshots
+
+### Overview
+
+![Runtime overview](docs/screenshots/01-overview.svg)
+
+### Request Detail
+
+![Request detail view](docs/screenshots/02-request-detail.svg)
+
+### Policies Sidebar
+
+![Policies sidebar](docs/screenshots/03-policies.svg)
+
+Regenerate screenshots:
+
+```bash
+poetry run python scripts/generate_readme_screenshots.py
+```
+
 ## Runtime Commands (TUI)
 
-- `help`
+- `help`, `?`
 - `clear`
 - `sites`
 - `loglevel <DEBUG|INFO|WARNING|ERROR>`
 - `filter [show|clear|host|method|status|text] ...`
-- `find <text>|clear`
+- `find <text>`
+- `find clear`
 - `export <json|har> <path>`
 - `session <save|load> <path>`
 - `mitm [show|on|off|certs-dir <path>]`
@@ -56,41 +107,85 @@ poetry run proxyscope --no-ui
 - `cache [show|on|off|toggle]`
 - `config [show|save [path]|reload]`
 - `policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ...`
-- `quit`
+- `quit`, `exit`, `q`
 
 ## Keyboard Shortcuts (TUI)
 
-- `Left` / `Right`: Focus zwischen Panels wechseln.
-- `Up` / `Down`: Auswahl bewegen oder vertikal scrollen (abhängig vom aktiven Panel).
-- `PageUp` / `PageDown`: Schnelles vertikales Scrollen.
-- `Enter`: Request-Detail für den ausgewählten Request öffnen (oder Kommando ausführen, wenn Eingabezeile befüllt ist).
-- `Enter` im `Policies`-Tab: Ausgewählte Policy im externen Editor öffnen.
-- `Backspace`: Zeichen in der Kommandozeile löschen.
-- `Tab` / `Shift+Tab`: Vorwärts oder rückwärts durch Requests, Detail-Tabs, Sidebar-Tabs und Kommandozeile wechseln.
-- `Shift+B`: Request-Detail schließen, zurück zur Request-Liste.
-- `Shift+S`: Rechtes Panel auf `Sites` schalten; bei erneutem Drücken im `Sites`-Tab wird die Sidebar ausgeblendet.
-- `Shift+P`: Rechtes Panel auf `Policies` schalten.
-- `Shift+M`: Ausgewählten Request als Editor-Policy (`METHOD + URL`) hinzufügen.
-- `Shift+R`: Ausgewählten Request editieren und erneut senden.
-- `Shift+A`: Ausgewählte Site zur Log-Whitelist hinzufügen (`Sites`-Tab).
-- `Shift+D`: Ausgewählte Policy deaktivieren (`Policies`-Tab).
-- `Shift+E`: Ausgewählte Policy aktivieren (`Policies`-Tab).
-- `Shift+I`: Ausgewählte Policy bearbeiten (`Policies`-Tab).
-- `Shift+U`: Ausgewählte Site aus der Log-Whitelist entfernen (`Sites`-Tab).
-- `Shift+X`: Ausgewählte Policy entfernen (`Policies`-Tab).
+- `Tab` / `Shift+Tab`: Cycle focus through panes
+- `Enter`: Open request detail or execute the current command input
+- `Shift+S`: Toggle sidebar (Sites)
+- `Shift+P`: Open Policies sidebar
+- `Shift+B`: Go back in the current view
+- `Shift+M`: Create an editor policy from the selected request
+- `Shift+R`: Edit and resend the selected request
+- `Shift+A` / `Shift+U`: Add/remove selected site to/from whitelist
+- `Shift+D` / `Shift+E`: Disable/enable selected policy
+- `Shift+I`: Open selected policy in external editor
+- `Shift+X`: Remove selected policy
 
-Hinweis: Buchstaben-Shortcuts werden nur als Shift-Kombination verarbeitet (`Shift+M` entspricht `M`).
+## Static Configuration (`runtime-config.json`)
 
-## TLS Interception (MITM)
+The file can be loaded at startup via `--config`.  
+If a `config_path` is attached, many runtime changes are automatically persisted to this file.
 
-On startup, proxyscope now auto-creates local CA materials under `certs/ca` if they are missing.
-Import `certs/ca/mitm-ca.crt` into your browser trust store for local testing.
+Example:
 
-To regenerate CA files, delete the existing cert material and restart proxyscope:
+```json
+{
+  "log_level": "INFO",
+  "log_whitelist": [
+    "api.example.com",
+    "service.internal"
+  ],
+  "cache_invalidation_enabled": true,
+  "mitm_enabled": true,
+  "mitm_certs_dir": "certs",
+  "policies": [
+    {
+      "name": "health-static",
+      "enabled": true,
+      "priority": 20,
+      "action": {
+        "type": "static_response",
+        "status_code": 200,
+        "reason": "OK",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store"
+        },
+        "body": "{\"status\":\"ok\",\"source\":\"proxyscope\"}"
+      },
+      "match": {
+        "methods": ["GET"],
+        "url_exact": "https://service.internal/health"
+      }
+    },
+    {
+      "name": "edit-login-response",
+      "enabled": true,
+      "priority": 10,
+      "action": {
+        "type": "open_editor"
+      },
+      "match": {
+        "methods": ["POST"],
+        "url_prefix": "https://api.example.com/v1/login"
+      }
+    }
+  ]
+}
+```
+
+Start with file:
 
 ```bash
-rm -f certs/ca/mitm-ca.key.pem certs/ca/mitm-ca.cert.pem certs/ca/mitm-ca.crt certs/ca/mitm-ca.cnf certs/hosts/*.pem certs/hosts/*.srl
+poetry run proxyscope --config ./runtime-config.json
 ```
+
+## MITM / Certificates
+
+On startup, proxyscope automatically creates missing CA files under `<mitm_certs_dir>/ca`.  
+For HTTPS interception, the root certificate `<mitm_certs_dir>/ca/mitm-ca.crt` must be trusted by your client/browser.
 
 ## Tests
 
@@ -98,54 +193,6 @@ rm -f certs/ca/mitm-ca.key.pem certs/ca/mitm-ca.cert.pem certs/ca/mitm-ca.crt ce
 poetry run python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-## Release / Publish
-
-### 1. Bump Version
-
-```bash
-poetry version patch
-# or: poetry version minor / poetry version major
-```
-
-### 2. Validate + Build
-
-```bash
-poetry check
-poetry build
-```
-
-### 3. Configure PyPI Token
-
-Either use an environment variable:
-
-```bash
-export POETRY_PYPI_TOKEN_PYPI="pypi-..."
-```
-
-or persistent Poetry config:
-
-```bash
-poetry config pypi-token.pypi "pypi-..."
-```
-
-### 4. Publish to PyPI
-
-```bash
-poetry publish --no-interaction
-```
-
-Alternative:
-
-```bash
-./scripts/publish_pypi.sh
-```
-
-### 5. Install from PyPI (verification)
-
-```bash
-pip install proxyscope
-```
-
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
