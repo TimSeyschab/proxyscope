@@ -283,7 +283,7 @@ class RuntimeTextualApp(App[None]):
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         self._controller._active_pane = "requests"
-        self._controller._view_state.request_cursor = event.cursor_row
+        self._controller._set_request_cursor(event.cursor_row)
         self._refresh_detail_only()
 
     def on_descendant_focus(self, event: events.DescendantFocus) -> None:
@@ -336,7 +336,7 @@ class RuntimeTextualApp(App[None]):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self._controller._active_pane = "requests"
-        self._controller._view_state.request_cursor = event.cursor_row
+        self._controller._set_request_cursor(event.cursor_row)
         self._controller._open_selected_request_detail()
         self.query_one("#detail-scroll", VerticalScroll).focus()
         self._controller._active_pane = "detail"

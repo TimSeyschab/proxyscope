@@ -170,6 +170,7 @@ class RuntimeCLI(logging.Handler):
         if cmd == "clear":
             self._request_journal.clear()
             self._view_state.request_cursor = 0
+            self._view_state.selected_request_id = None
             self._view_state.main_mode = "requests"
             self._view_state.active_pane = "requests"
             self._view_state.aux_tab_key = "sites"
@@ -269,10 +270,15 @@ class RuntimeCLI(logging.Handler):
         self._view_state.toggle_aux_visibility()
 
     def _open_selected_request_detail(self) -> None:
-        if not self._ordered_entries():
+        entries = self._ordered_entries()
+        if not entries:
             self._view_state.status_message = "No requests available."
             return
+        self._sync_request_selection(entries)
         self._view_state.open_selected_request_detail()
+
+    def _set_request_cursor(self, cursor: int) -> None:
+        self._sync_request_selection(self._ordered_entries(), preferred_cursor=cursor)
 
     def _ordered_entries(self) -> list[LoggedExchange]:
         entries = list(self._request_journal.list_entries())
@@ -280,6 +286,29 @@ class RuntimeCLI(logging.Handler):
         if self._request_filter.is_active():
             entries = [entry for entry in entries if self._request_filter.matches(entry)]
         return entries
+
+    def _sync_request_selection(
+        self,
+        entries: list[LoggedExchange],
+        *,
+        preferred_cursor: int | None = None,
+    ) -> None:
+        if not entries:
+            self._view_state.request_cursor = 0
+            self._view_state.selected_request_id = None
+            return
+
+        selected_id = self._view_state.selected_request_id
+        if selected_id is not None and preferred_cursor is None:
+            for index, entry in enumerate(entries):
+                if entry.request_id == selected_id:
+                    self._view_state.request_cursor = index
+                    return
+
+        cursor_source = self._view_state.request_cursor if preferred_cursor is None else preferred_cursor
+        clamped_cursor = min(max(cursor_source, 0), len(entries) - 1)
+        self._view_state.request_cursor = clamped_cursor
+        self._view_state.selected_request_id = entries[clamped_cursor].request_id
 
     def _all_entries(self) -> list[LoggedExchange]:
         entries = list(self._request_journal.list_entries())
@@ -548,6 +577,7 @@ class RuntimeCLI(logging.Handler):
         if not entries:
             self._view_state.status_message = "No request selected."
             return
+        self._sync_request_selection(entries)
         selected = entries[self._view_state.request_cursor]
         target_url = _entry_to_url(selected)
         if target_url is None:
@@ -586,6 +616,7 @@ class RuntimeCLI(logging.Handler):
         if not entries:
             self._view_state.status_message = "No request selected."
             return
+        self._sync_request_selection(entries)
         selected = entries[self._view_state.request_cursor]
         request_url = _entry_to_url(selected)
         if request_url is None:
@@ -645,8 +676,7 @@ class RuntimeCLI(logging.Handler):
 
         all_entries = self._all_entries()
         entries = self._ordered_entries()
-        if self._view_state.request_cursor >= len(entries):
-            self._view_state.request_cursor = max(0, len(entries) - 1)
+        self._sync_request_selection(entries)
 
         policy_items = [description for _name, description in self._ordered_policy_items()]
         if self._view_state.policy_cursor >= len(policy_items):

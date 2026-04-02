@@ -145,6 +145,54 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(cli._view_state.main_mode, "request_detail")  # type: ignore[attr-defined]
         self.assertEqual(cli._view_state.active_pane, "detail")  # type: ignore[attr-defined]
 
+    def test_selected_detail_request_stays_stable_when_new_entry_arrives(self) -> None:
+        journal = RequestJournal()
+        alpha_request_id = journal.start_request(
+            method="GET",
+            path="/alpha",
+            start_line="GET /alpha HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        journal.start_request(
+            method="GET",
+            path="/beta",
+            start_line="GET /beta HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        cli = RuntimeCLI(
+            runtime_config=RuntimeConfig(),
+            request_journal=journal,
+            response_modifier=ResponseModifierService(),
+        )
+        cli._set_request_cursor(1)  # type: ignore[attr-defined]
+        cli._open_selected_request_detail()  # type: ignore[attr-defined]
+
+        journal.start_request(
+            method="GET",
+            path="/gamma",
+            start_line="GET /gamma HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        model = cli.build_screen_model()
+
+        self.assertEqual(model.request_entries[model.request_cursor].request_id, alpha_request_id)
+        self.assertEqual(model.request_cursor, 2)
+
     def test_execute_clear_command_clears_requests(self) -> None:
         journal = RequestJournal()
         request_id = journal.start_request(

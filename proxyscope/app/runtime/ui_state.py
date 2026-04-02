@@ -15,6 +15,7 @@ class RuntimeUIViewState:
     site_cursor: int = 0
     policy_cursor: int = 0
     request_cursor: int = 0
+    selected_request_id: int | None = None
     detail_tab: DetailTab = "request"
 
     main_mode: MainMode = "requests"
@@ -24,6 +25,7 @@ class RuntimeUIViewState:
 
     def reset_request_view(self) -> None:
         self.request_cursor = 0
+        self.selected_request_id = None
 
     def switch_to_request_list_mode(self) -> None:
         self.main_mode = "requests"
