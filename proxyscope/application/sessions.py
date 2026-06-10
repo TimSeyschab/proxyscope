@@ -1,12 +1,24 @@
 import json
+from pathlib import Path
+from typing import Callable
 
-from proxyscope.app.runtime.exporting import export_entries, load_entries_from_json
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.application.journal import LoggedExchange, RequestJournal
+
+ExportEntries = Callable[..., Path]
+LoadEntries = Callable[[str], list[LoggedExchange]]
 
 
 class SessionApplicationService:
-    def __init__(self, request_journal: RequestJournal) -> None:
+    def __init__(
+        self,
+        request_journal: RequestJournal,
+        *,
+        export_entries: ExportEntries,
+        load_entries: LoadEntries,
+    ) -> None:
         self._request_journal = request_journal
+        self._export_entries = export_entries
+        self._load_entries = load_entries
 
     def export(self, arguments: list[str]) -> str:
         if len(arguments) < 2:
@@ -16,7 +28,7 @@ class SessionApplicationService:
         if not path:
             return "Usage: export <json|har> <path>"
         try:
-            destination = export_entries(
+            destination = self._export_entries(
                 list(self._request_journal.list_entries()),
                 format_name=format_name,
                 destination=path,
@@ -36,7 +48,7 @@ class SessionApplicationService:
             return "Usage: session <save|load> <path>"
         if action == "save":
             try:
-                destination = export_entries(
+                destination = self._export_entries(
                     list(self._request_journal.list_entries()),
                     format_name="json",
                     destination=path,
@@ -46,7 +58,7 @@ class SessionApplicationService:
             return f"Saved session snapshot to {destination}"
         if action == "load":
             try:
-                entries = load_entries_from_json(path)
+                entries = self._load_entries(path)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 return f"Session load failed ({exc})."
             self._request_journal.replace_entries(entries)

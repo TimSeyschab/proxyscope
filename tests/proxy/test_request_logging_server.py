@@ -5,12 +5,12 @@ import threading
 import time
 import unittest
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.runtime.context import create_proxy_runtime_context
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.app.composition import create_proxy_runtime_context
+from proxyscope.application.journal import RequestJournal
+from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse
 from proxyscope.proxy.server import create_server
+from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
 
 
 class StaticForwarder:
@@ -38,11 +38,11 @@ class _CountingModifier:
 
 class TestRequestLoggingServer(unittest.TestCase):
     def setUp(self) -> None:
-        self.config = RuntimeConfig()
+        self.config = RuntimeTestContext()
         self.journal = RequestJournal()
         self.modifier = ResponseModifierService()
         self.runtime_context = create_proxy_runtime_context(
-            runtime_config=self.config,
+            **processing_dependencies(self.config),
             request_journal=self.journal,
             response_modifier=self.modifier,
         )
@@ -128,7 +128,7 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.assertIn(b"Invalid CONNECT target:", data)
 
     def test_request_is_logged(self) -> None:
-        with self.assertLogs("tproxy.request", level="INFO") as captured:
+        with self.assertLogs("pscope.request", level="INFO") as captured:
             self._request("GET", "/log-test", headers={"X-Demo": "m1"})
 
         logs = "\n".join(captured.output)
@@ -159,7 +159,7 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.thread.start()
         self.host, self.port = self.server.server_address
 
-        with self.assertLogs("tproxy.response", level="INFO") as captured:
+        with self.assertLogs("pscope.response", level="INFO") as captured:
             status, _ = self._request("GET", "/response-log-test")
             time.sleep(0.05)
 
@@ -230,7 +230,7 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         config.add_static_response_rule(
             url="http://example.com/mock",
             status_code=200,
@@ -240,7 +240,7 @@ class TestRequestLoggingServer(unittest.TestCase):
             method="GET",
         )
         self.runtime_context = create_proxy_runtime_context(
-            runtime_config=config,
+            **processing_dependencies(config),
             request_journal=self.journal,
         )
 
@@ -270,7 +270,7 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         config.add_open_editor_policy("http://example.com/mock", method="GET")
         config.add_static_response_rule(
             url="http://example.com/mock",
@@ -282,7 +282,7 @@ class TestRequestLoggingServer(unittest.TestCase):
         )
         modifier = _CountingModifier()
         self.runtime_context = create_proxy_runtime_context(
-            runtime_config=config,
+            **processing_dependencies(config),
             request_journal=self.journal,
             response_modifier=modifier,  # type: ignore[arg-type]
         )

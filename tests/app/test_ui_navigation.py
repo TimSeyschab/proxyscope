@@ -1,8 +1,8 @@
 import unittest
 
-from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
-from proxyscope.app.runtime.ui_navigation import RuntimeUINavigationService
-from proxyscope.app.runtime.ui_state import RuntimeUIViewState
+from proxyscope.adapters.tui.navigation import RuntimeUINavigationService
+from proxyscope.adapters.tui.state import RuntimeUIViewState
+from proxyscope.application.journal import LoggedExchange, RequestJournal
 
 
 class TestRuntimeUINavigationService(unittest.TestCase):

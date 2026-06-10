@@ -1,19 +1,19 @@
 import asyncio
 import unittest
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.runtime.cli import RuntimeCLI
-from proxyscope.app.runtime.journal import RequestJournal
-from proxyscope.app.runtime.runtime_controller import RuntimeController
-from proxyscope.app.runtime.textual_ui import RuntimeTextualApp
-from proxyscope.app.runtime.ui_controller import RuntimeUIController
+from proxyscope.adapters.tui.cli import RuntimeCLI
+from proxyscope.adapters.tui.controller import RuntimeController
+from proxyscope.adapters.tui.textual import RuntimeTextualApp
+from proxyscope.adapters.tui.ui_controller import RuntimeUIController
+from proxyscope.application.journal import RequestJournal
+from proxyscope.application.response_edits import ResponseModifierService
+from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
 
 
 class TestRuntimeUIController(unittest.TestCase):
     def _controller(self, *, journal: RequestJournal | None = None) -> RuntimeCLI:
         return RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=journal or RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -25,7 +25,7 @@ class TestRuntimeUIController(unittest.TestCase):
 
     def test_runtime_controller_implements_ui_controller_protocol(self) -> None:
         controller = RuntimeController(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )

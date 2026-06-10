@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.runtime.cli import RuntimeCLI
-from proxyscope.app.runtime.journal import RequestJournal
-from proxyscope.app.runtime.textual_ui import RuntimeTextualApp
+from proxyscope.adapters.tui.cli import RuntimeCLI
+from proxyscope.adapters.tui.textual import RuntimeTextualApp
+from proxyscope.application.configuration import RuntimeConfigurationService
+from proxyscope.application.journal import RequestJournal
+from proxyscope.application.policy_administration import PolicyAdministrationService
+from proxyscope.application.response_edits import ResponseModifierService
+from proxyscope.application.runtime_settings import RuntimeSettingsState
+from proxyscope.config.repository import JsonConfigRepository
 
 SCREENSHOT_DIR = Path("docs/screenshots")
 OVERVIEW_SCREENSHOT = SCREENSHOT_DIR / "01-overview.svg"
@@ -15,7 +18,11 @@ DETAIL_SCREENSHOT = SCREENSHOT_DIR / "02-request-detail.svg"
 POLICIES_SCREENSHOT = SCREENSHOT_DIR / "03-policies.svg"
 
 
-def _seed_runtime_data(runtime_cli: RuntimeCLI, journal: RequestJournal, config: RuntimeConfig) -> None:
+def _seed_runtime_data(
+    runtime_cli: RuntimeCLI,
+    journal: RequestJournal,
+    policies: PolicyAdministrationService,
+) -> None:
     first_id = journal.start_request(
         method="GET",
         path="/api/users",
@@ -76,8 +83,8 @@ def _seed_runtime_data(runtime_cli: RuntimeCLI, journal: RequestJournal, config:
     runtime_cli.on_site_visit("api.example.com")
     runtime_cli.on_site_visit("service.internal")
 
-    config.add_open_editor_policy("https://api.example.com/api/login", method="POST", priority=20)
-    config.add_static_response_rule(
+    policies.add_open_editor("https://api.example.com/api/login", method="POST", priority=20)
+    policies.add_static_response(
         url="https://service.internal/health",
         method="GET",
         status_code=200,
@@ -92,15 +99,23 @@ def _seed_runtime_data(runtime_cli: RuntimeCLI, journal: RequestJournal, config:
 async def _capture_screenshots() -> None:
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
-    config = RuntimeConfig()
+    settings = RuntimeSettingsState()
+    policies = PolicyAdministrationService()
+    configuration = RuntimeConfigurationService(
+        settings=settings,
+        policies=policies,
+        repository=JsonConfigRepository(),
+    )
     journal = RequestJournal()
     runtime_cli = RuntimeCLI(
-        runtime_config=config,
+        settings=settings,
+        policies=policies,
+        configuration=configuration,
         request_journal=journal,
         response_modifier=ResponseModifierService(),
         proxy_base_url="http://127.0.0.1:8080",
     )
-    _seed_runtime_data(runtime_cli, journal, config)
+    _seed_runtime_data(runtime_cli, journal, policies)
     runtime_cli.set_status_message("Demo session loaded.")
 
     app = RuntimeTextualApp(runtime_cli)

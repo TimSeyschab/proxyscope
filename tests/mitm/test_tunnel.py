@@ -3,9 +3,8 @@ import ssl
 import unittest
 from unittest.mock import Mock, patch
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.runtime.context import create_proxy_runtime_context
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.app.composition import create_proxy_runtime_context
+from proxyscope.application.journal import RequestJournal
 from proxyscope.mitm.tunnel import (
     MitmTLSInterceptor,
     _build_https_request_url,
@@ -13,6 +12,7 @@ from proxyscope.mitm.tunnel import (
     _relay_tls_bidirectional,
 )
 from proxyscope.proxy.connect_tunnel import ConnectTarget, ConnectUpstreamConnectionError, ConnectUpstreamTimeoutError
+from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
 
 
 class _FakeSocket:
@@ -179,7 +179,7 @@ class TestMitmRelay(unittest.TestCase):
 class TestMitmTLSInterceptor(unittest.TestCase):
     def setUp(self) -> None:
         self.runtime_context = create_proxy_runtime_context(
-            runtime_config=RuntimeConfig(),
+            **processing_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
         )
 

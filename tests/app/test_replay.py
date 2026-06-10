@@ -1,7 +1,7 @@
 import unittest
 
-from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage
-from proxyscope.app.runtime.replay import _build_edit_payload, _parse_replay_payload
+from proxyscope.adapters.replay.requests_adapter import _build_edit_payload, _parse_replay_payload
+from proxyscope.application.journal import LoggedExchange, LoggedRequestMessage
 
 
 class TestReplayPayloads(unittest.TestCase):

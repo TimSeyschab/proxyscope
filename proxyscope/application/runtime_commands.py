@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.application.configuration import RuntimeConfigService
+from proxyscope.application.configuration import RuntimeConfigurationService
+from proxyscope.application.policy_administration import PolicyAdministrationService
+from proxyscope.application.runtime_settings import RuntimeSettingsState
 from proxyscope.policies.matching import normalize_http_method, normalize_policy_url
 
 MIN_HTTP_STATUS_CODE = 100
@@ -62,11 +63,13 @@ class RuntimeCommandService:
     def __init__(
         self,
         *,
-        runtime_config: RuntimeConfig,
-        config_service: RuntimeConfigService | None = None,
+        settings: RuntimeSettingsState,
+        policies: PolicyAdministrationService,
+        configuration: RuntimeConfigurationService,
     ) -> None:
-        self._runtime_config = runtime_config
-        self._config_service = config_service or RuntimeConfigService(runtime_config)
+        self._settings = settings
+        self._policies = policies
+        self._configuration = configuration
 
     def execute(
         self,
@@ -98,21 +101,22 @@ class RuntimeCommandService:
         if len(parts) == 1:
             return CommandExecutionResult(
                 handled=True,
-                status_message=f"Current log level: {self._runtime_config.log_level_name()}",
+                status_message=f"Current log level: {self._settings.log_level_name()}",
             )
         try:
-            new_level = self._runtime_config.set_log_level(parts[1])
+            new_level = self._settings.set_log_level(parts[1])
+            self._configuration.save()
         except ValueError as exc:
             return CommandExecutionResult(handled=True, status_message=str(exc))
         return CommandExecutionResult(
             handled=True,
-            status_message=f"Log level set to {self._runtime_config.log_level_name()}",
+            status_message=f"Log level set to {self._settings.log_level_name()}",
             updated_log_level=new_level,
         )
 
     def _handle_whitelist(self, parts: list[str]) -> CommandExecutionResult:
         if len(parts) == 1 or parts[1].lower() == "show":
-            entries = self._runtime_config.whitelist_entries()
+            entries = self._settings.whitelist_entries()
             if not entries:
                 return CommandExecutionResult(
                     handled=True,
@@ -133,7 +137,8 @@ class RuntimeCommandService:
                     status_message="Usage: whitelist add <host-or-url>",
                 )
             try:
-                added = self._runtime_config.add_whitelist_entry(value)
+                added = self._settings.add_whitelist_entry(value)
+                self._configuration.save()
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             return CommandExecutionResult(handled=True, status_message=f"Added to whitelist: {added}")
@@ -145,7 +150,9 @@ class RuntimeCommandService:
                     status_message="Usage: whitelist remove <host-or-url>",
                 )
             try:
-                removed = self._runtime_config.remove_whitelist_entry(value)
+                removed = self._settings.remove_whitelist_entry(value)
+                if removed:
+                    self._configuration.save()
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             if removed:
@@ -156,7 +163,8 @@ class RuntimeCommandService:
             return CommandExecutionResult(handled=True, status_message=f"Not in whitelist: {value}")
 
         if action == "clear":
-            self._runtime_config.clear_whitelist()
+            self._settings.clear_whitelist()
+            self._configuration.save()
             return CommandExecutionResult(
                 handled=True,
                 status_message="Whitelist cleared (logging enabled for all hosts).",
@@ -174,21 +182,24 @@ class RuntimeCommandService:
         on_cache_toggle: Callable[[], None] | None,
     ) -> CommandExecutionResult:
         if len(parts) == 1 or parts[1].lower() == "show":
-            enabled = self._runtime_config.cache_invalidation_enabled
+            enabled = self._settings.cache_invalidation_enabled
             state = "on" if enabled else "off"
             return CommandExecutionResult(handled=True, status_message=f"Cache invalidation: {state}")
 
         action = parts[1].lower()
         if action == "on":
-            self._runtime_config.set_cache_invalidation_enabled(True)
+            self._settings.set_cache_invalidation_enabled(True)
+            self._configuration.save()
             _trigger_callback(on_cache_toggle)
             return CommandExecutionResult(handled=True, status_message="Cache invalidation enabled.")
         if action == "off":
-            self._runtime_config.set_cache_invalidation_enabled(False)
+            self._settings.set_cache_invalidation_enabled(False)
+            self._configuration.save()
             _trigger_callback(on_cache_toggle)
             return CommandExecutionResult(handled=True, status_message="Cache invalidation disabled.")
         if action == "toggle":
-            enabled = self._runtime_config.toggle_cache_invalidation()
+            enabled = self._settings.toggle_cache_invalidation()
+            self._configuration.save()
             _trigger_callback(on_cache_toggle)
             state = "enabled" if enabled else "disabled"
             return CommandExecutionResult(handled=True, status_message=f"Cache invalidation {state}.")
@@ -205,7 +216,7 @@ class RuntimeCommandService:
         on_schedule_policy_edit: Callable[[str], None],
     ) -> CommandExecutionResult:
         if len(parts) == 1 or parts[1].lower() == "show":
-            entries = self._runtime_config.policy_descriptions()
+            entries = self._policies.descriptions()
             if not entries:
                 return CommandExecutionResult(handled=True, status_message="No policy rules configured.")
             preview = ", ".join(entries[:POLICY_SHOW_PREVIEW_LIMIT])
@@ -233,7 +244,7 @@ class RuntimeCommandService:
                     status_message=f"Status code must be in range {MIN_HTTP_STATUS_CODE}..{MAX_HTTP_STATUS_CODE}.",
                 )
             headers = {"Content-Type": content_type}
-            rule_name = self._runtime_config.add_static_response_rule(
+            rule_name = self._policies.add_static_response(
                 url=url,
                 status_code=status_code,
                 reason=_default_reason_phrase(status_code),
@@ -242,6 +253,7 @@ class RuntimeCommandService:
                 method=method,
                 url_prefix=(action == "add-static-prefix"),
             )
+            self._configuration.save()
             return CommandExecutionResult(handled=True, status_message=f"Added static policy: {rule_name}")
 
         if action in {"add-editor", "add-editor-prefix"}:
@@ -252,11 +264,12 @@ class RuntimeCommandService:
                     status_message="Usage: policy add-editor[ -prefix ] [METHOD] <url>",
                 )
             try:
-                normalized = self._runtime_config.add_open_editor_policy(
+                normalized = self._policies.add_open_editor(
                     value,
                     method=method or DEFAULT_POLICY_METHOD,
                     url_prefix=(action == "add-editor-prefix"),
                 )
+                self._configuration.save()
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             return CommandExecutionResult(handled=True, status_message=f"Added editor policy: {normalized}")
@@ -269,7 +282,9 @@ class RuntimeCommandService:
                     status_message="Usage: policy remove-editor [METHOD] <url>",
                 )
             try:
-                removed = self._runtime_config.remove_open_editor_policy(value, method=method)
+                removed = self._policies.remove_open_editor(value, method=method)
+                if removed:
+                    self._configuration.save()
                 normalized = normalize_policy_url(value)
                 method_label = normalize_http_method(method) if method is not None else "*"
             except ValueError as exc:
@@ -285,7 +300,8 @@ class RuntimeCommandService:
             )
 
         if action == "clear-editor":
-            self._runtime_config.clear_open_editor_policies()
+            self._policies.clear_open_editor()
+            self._configuration.save()
             return CommandExecutionResult(
                 handled=True,
                 status_message="Cleared all open-editor policies.",
@@ -296,7 +312,9 @@ class RuntimeCommandService:
             if not name:
                 return CommandExecutionResult(handled=True, status_message="Usage: policy remove <name>")
             try:
-                removed = self._runtime_config.remove_policy_rule(name)
+                removed = self._policies.remove_rule(name)
+                if removed:
+                    self._configuration.save()
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             if removed:
@@ -311,7 +329,9 @@ class RuntimeCommandService:
                     status_message=f"Usage: policy {action} <name>",
                 )
             try:
-                changed = self._runtime_config.set_policy_rule_enabled(name, enabled=(action == "enable"))
+                changed = self._policies.set_enabled(name, enabled=(action == "enable"))
+                if changed:
+                    self._configuration.save()
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             if changed:
@@ -340,7 +360,9 @@ class RuntimeCommandService:
                     status_message="Priority must be an integer.",
                 )
             try:
-                changed = self._runtime_config.set_policy_rule_priority(name, priority=priority)
+                changed = self._policies.set_priority(name, priority=priority)
+                if changed:
+                    self._configuration.save()
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             if changed:
@@ -355,7 +377,7 @@ class RuntimeCommandService:
             if not name:
                 return CommandExecutionResult(handled=True, status_message="Usage: policy edit <name>")
             try:
-                rule = self._runtime_config.get_policy_rule(name)
+                rule = self._policies.get_rule(name)
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))
             if rule is None:
@@ -373,8 +395,8 @@ class RuntimeCommandService:
 
     def _handle_mitm(self, parts: list[str]) -> CommandExecutionResult:
         if len(parts) == 1 or parts[1].lower() == "show":
-            state = "on" if self._runtime_config.mitm_enabled else "off"
-            certs_dir = self._runtime_config.mitm_certs_dir
+            state = "on" if self._settings.mitm_enabled else "off"
+            certs_dir = self._settings.mitm_certs_dir
             return CommandExecutionResult(
                 handled=True,
                 status_message=f"MITM: {state} certs_dir={certs_dir}",
@@ -382,13 +404,15 @@ class RuntimeCommandService:
 
         action = parts[1].lower()
         if action == "on":
-            self._runtime_config.set_mitm_enabled(True)
+            self._settings.set_mitm_enabled(True)
+            self._configuration.save()
             return CommandExecutionResult(
                 handled=True,
                 status_message="MITM enabled in config (restart server to apply).",
             )
         if action == "off":
-            self._runtime_config.set_mitm_enabled(False)
+            self._settings.set_mitm_enabled(False)
+            self._configuration.save()
             return CommandExecutionResult(
                 handled=True,
                 status_message="MITM disabled in config (restart server to apply).",
@@ -400,7 +424,8 @@ class RuntimeCommandService:
                     handled=True,
                     status_message="Usage: mitm certs-dir <path>",
                 )
-            target = self._runtime_config.set_mitm_certs_dir(path)
+            target = self._settings.set_mitm_certs_dir(path)
+            self._configuration.save()
             return CommandExecutionResult(
                 handled=True,
                 status_message=f"MITM certs dir set to {target} (restart server to apply).",
@@ -418,7 +443,7 @@ class RuntimeCommandService:
         on_cache_toggle: Callable[[], None] | None,
     ) -> CommandExecutionResult:
         if len(parts) == 1 or parts[1].lower() == "show":
-            path = self._runtime_config.config_path
+            path = self._configuration.path
             if path is None:
                 return CommandExecutionResult(handled=True, status_message="Config path: <not attached>")
             return CommandExecutionResult(handled=True, status_message=f"Config path: {path}")
@@ -428,23 +453,23 @@ class RuntimeCommandService:
             target = " ".join(parts[2:]).strip()
             try:
                 if target:
-                    saved_path = self._config_service.save(target)
+                    saved_path = self._configuration.save(target)
                 else:
-                    current = self._runtime_config.config_path
+                    current = self._configuration.path
                     if current is None:
                         return CommandExecutionResult(
                             handled=True,
                             status_message="Usage: config save <path> (or attach --config at startup)",
                         )
-                    saved_path = self._config_service.save()
+                    saved_path = self._configuration.save()
             except (OSError, ValueError) as exc:
                 return CommandExecutionResult(handled=True, status_message=f"Config save failed: {exc}")
             return CommandExecutionResult(handled=True, status_message=f"Config saved: {saved_path}")
 
         if action == "reload":
-            before_cache = self._runtime_config.cache_invalidation_enabled
+            before_cache = self._settings.cache_invalidation_enabled
             try:
-                reloaded = self._config_service.reload()
+                reloaded = self._configuration.reload()
             except (OSError, ValueError) as exc:
                 return CommandExecutionResult(handled=True, status_message=f"Config reload failed: {exc}")
             if not reloaded:
@@ -452,12 +477,12 @@ class RuntimeCommandService:
                     handled=True,
                     status_message="No attached config path. Use: config save <path>",
                 )
-            if before_cache != self._runtime_config.cache_invalidation_enabled:
+            if before_cache != self._settings.cache_invalidation_enabled:
                 _trigger_callback(on_cache_toggle)
             return CommandExecutionResult(
                 handled=True,
-                status_message=f"Config reloaded: {self._runtime_config.config_path}",
-                updated_log_level=self._runtime_config.log_level,
+                status_message=f"Config reloaded: {self._configuration.path}",
+                updated_log_level=self._settings.log_level,
             )
 
         return CommandExecutionResult(

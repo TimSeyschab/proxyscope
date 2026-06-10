@@ -2,7 +2,7 @@ from collections import Counter
 from contextlib import AbstractContextManager
 from typing import Callable, Protocol, runtime_checkable
 
-from proxyscope.app.runtime.journal import LoggedExchange
+from proxyscope.application.journal import LoggedExchange
 
 SuspendUI = Callable[[], AbstractContextManager[None]]
 

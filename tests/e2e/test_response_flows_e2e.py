@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.runtime.context import create_proxy_runtime_context
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.app.composition import create_proxy_runtime_context
+from proxyscope.application.journal import RequestJournal
+from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.proxy.server import create_server
+from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
 
 
 class _UpstreamHandler(socketserver.BaseRequestHandler):
@@ -65,12 +65,12 @@ class TestResponseFlowsE2E(unittest.TestCase):
 
         upstream_host, upstream_port = upstream.server_address
         target_url = f"http://{upstream_host}:{upstream_port}/manual-edit"
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         config.add_open_editor_policy(target_url, method="GET")
         journal = RequestJournal()
         response_modifier = ResponseModifierService(interactive_enabled=True)
         runtime_context = create_proxy_runtime_context(
-            runtime_config=config,
+            **processing_dependencies(config),
             request_journal=journal,
             response_modifier=response_modifier,
         )
@@ -148,7 +148,7 @@ class TestResponseFlowsE2E(unittest.TestCase):
 
         with TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "runtime.json"
-            config = RuntimeConfig()
+            config = RuntimeTestContext()
             config.add_static_response_rule(
                 url=target_url,
                 status_code=299,
@@ -158,10 +158,10 @@ class TestResponseFlowsE2E(unittest.TestCase):
                 method="GET",
             )
             config.save_to_path(config_path)
-            loaded = RuntimeConfig.load_from_file(config_path)
+            loaded = RuntimeTestContext.load_from_file(config_path)
 
         journal = RequestJournal()
-        runtime_context = create_proxy_runtime_context(runtime_config=loaded, request_journal=journal)
+        runtime_context = create_proxy_runtime_context(**processing_dependencies(loaded), request_journal=journal)
         proxy = create_server("127.0.0.1", 0, runtime_context=runtime_context, auto_enable_mitm=False)
         proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
         proxy_thread.start()

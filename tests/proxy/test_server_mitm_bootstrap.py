@@ -1,17 +1,17 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.runtime.context import create_proxy_runtime_context
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.app.composition import create_proxy_runtime_context
+from proxyscope.application.journal import RequestJournal
 from proxyscope.mitm.certificates import MitmCertificateError
 from proxyscope.proxy.server import ProxyHTTPServer, create_server
+from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
 
 
 class TestServerMitmBootstrap(unittest.TestCase):
     def setUp(self) -> None:
         self.runtime_context = create_proxy_runtime_context(
-            runtime_config=RuntimeConfig(),
+            **processing_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
         )
 
@@ -33,7 +33,7 @@ class TestServerMitmBootstrap(unittest.TestCase):
         fake_ca.ensure_ca_material.side_effect = MitmCertificateError("boom")
 
         with patch("proxyscope.proxy.server.default_ca", return_value=fake_ca):
-            with self.assertLogs("tproxy.server", level="WARNING") as captured:
+            with self.assertLogs("pscope.server", level="WARNING") as captured:
                 server = create_server("127.0.0.1", 0, runtime_context=self.runtime_context, auto_enable_mitm=True)
         try:
             self.assertIsNone(server.mitm_interceptor)

@@ -2,12 +2,11 @@ import http.client
 import threading
 import unittest
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.logging.observability import RuntimeEventDispatcher
-from proxyscope.app.logging.request_response import RequestResponseRecorder
-from proxyscope.app.runtime.context import create_proxy_runtime_context
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.adapters.observability.events import RuntimeEventDispatcher
+from proxyscope.adapters.observability.exchange_recorder import RequestResponseRecorder
+from proxyscope.app.composition import create_proxy_runtime_context
+from proxyscope.application.journal import RequestJournal
+from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.runtime import (
     CachePolicy,
@@ -17,14 +16,15 @@ from proxyscope.proxy.runtime import (
     RuntimeEventSink,
 )
 from proxyscope.proxy.server import create_server
+from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
 
 
 class TestRuntimePortContracts(unittest.TestCase):
     def test_app_adapters_implement_runtime_ports(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         journal = RequestJournal()
         modifier = ResponseModifierService()
-        recorder = RequestResponseRecorder(runtime_config=config, request_journal=journal)
+        recorder = RequestResponseRecorder(settings=config.settings_state, request_journal=journal)
         events = RuntimeEventDispatcher()
 
         self.assertIsInstance(PolicyEngine(config.policy_repository), PolicyEvaluator)
@@ -41,7 +41,7 @@ class TestRuntimeContextIsolation(unittest.TestCase):
         servers = []
         threads = []
         for body in (b"first-runtime", b"second-runtime"):
-            config = RuntimeConfig()
+            config = RuntimeTestContext()
             config.add_static_response_rule(
                 url="http://example.com/isolation",
                 headers={"Content-Type": "text/plain"},
@@ -49,7 +49,7 @@ class TestRuntimeContextIsolation(unittest.TestCase):
                 method="GET",
             )
             journal = RequestJournal()
-            context = create_proxy_runtime_context(runtime_config=config, request_journal=journal)
+            context = create_proxy_runtime_context(**processing_dependencies(config), request_journal=journal)
             server = create_server("127.0.0.1", 0, runtime_context=context, auto_enable_mitm=False)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()

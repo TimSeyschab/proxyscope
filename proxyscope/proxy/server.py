@@ -29,7 +29,7 @@ from proxyscope.proxy.runtime import ProxyRuntimeContext
 from proxyscope.proxy.tunnel_registry import TunnelConnectionRegistry
 from proxyscope.proxy.types import Forwarder
 
-SERVER_LOGGER: Final = logging.getLogger("tproxy.server")
+SERVER_LOGGER: Final = logging.getLogger("pscope.server")
 
 
 class ProxyHTTPServer(ThreadingHTTPServer):
@@ -59,7 +59,7 @@ class ProxyHTTPServer(ThreadingHTTPServer):
 
 
 class RequestLoggingHandler(BaseHTTPRequestHandler):
-    server_version = "tproxy/0.1"
+    server_version = "pscope/0.1"
 
     def _send_connect_error_response(self, *, status: int, reason: str, body: bytes) -> None:
         """
@@ -397,7 +397,7 @@ def create_server(
     mitm_interceptor: MitmTLSInterceptor | None = None,
     auto_enable_mitm: bool = True,
     ca_root: str | Path | None = None,
-) -> ThreadingHTTPServer:
+) -> ProxyHTTPServer:
     resolved_forwarder = forwarder or UpstreamForwarder()
     resolved_mitm_interceptor = mitm_interceptor
     if resolved_mitm_interceptor is None and auto_enable_mitm:

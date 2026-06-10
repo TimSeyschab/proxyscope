@@ -1,8 +1,9 @@
 import threading
+import time
 import unittest
 from threading import Event
 
-from proxyscope.app.editing.modifier import PendingResponseEdit, ResponseModifierService
+from proxyscope.application.response_edits import PendingResponseEdit, ResponseModifierService
 from proxyscope.proxy.forwarding import ForwardResponse
 
 
@@ -56,3 +57,33 @@ class TestResponseModifierService(unittest.TestCase):
         lowered = {k.lower(): v for k, v in out.headers.items()}
         self.assertEqual(lowered["content-length"], "5")
         self.assertNotIn("transfer-encoding", lowered)
+
+    def test_timeout_keeps_original_response(self) -> None:
+        service = ResponseModifierService(interactive_enabled=True, edit_timeout_s=0.01)
+        response = ForwardResponse(200, "OK", {}, b"original")
+
+        out = service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
+
+        self.assertIs(out, response)
+        self.assertIsNone(service.poll_pending_edit())
+
+    def test_cancel_pending_edits_unblocks_waiting_requests(self) -> None:
+        service = ResponseModifierService(interactive_enabled=True, edit_timeout_s=10)
+        response = ForwardResponse(200, "OK", {}, b"original")
+        result: list[ForwardResponse] = []
+        thread = threading.Thread(
+            target=lambda: result.append(
+                service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
+            )
+        )
+        thread.start()
+        for _ in range(100):
+            if service.poll_pending_edit() is not None:
+                break
+            time.sleep(0.001)
+
+        self.assertEqual(service.cancel_pending_edits(), 1)
+        thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(result, [response])

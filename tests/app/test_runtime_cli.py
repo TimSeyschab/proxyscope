@@ -4,12 +4,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.editing.response import _decode_content_encoded_body
-from proxyscope.app.runtime.cli import RuntimeCLI
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.adapters.editing.response_editor import _decode_content_encoded_body
+from proxyscope.adapters.tui.cli import RuntimeCLI
+from proxyscope.application.journal import RequestJournal
+from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.policies.engine import PolicyEngine
+from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
 
 
 class TestRuntimeCLI(unittest.TestCase):
@@ -60,7 +60,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_execute_help_command(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -71,7 +71,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_execute_question_mark_command_uses_help(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -83,7 +83,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_go_back_closes_active_sidebar_first(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -109,7 +109,7 @@ class TestRuntimeCLI(unittest.TestCase):
             protocol="http",
         )
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=journal,
             response_modifier=ResponseModifierService(),
         )
@@ -136,7 +136,7 @@ class TestRuntimeCLI(unittest.TestCase):
             protocol="http",
         )
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=journal,
             response_modifier=ResponseModifierService(),
         )
@@ -174,7 +174,7 @@ class TestRuntimeCLI(unittest.TestCase):
             protocol="http",
         )
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=journal,
             response_modifier=ResponseModifierService(),
         )
@@ -220,7 +220,7 @@ class TestRuntimeCLI(unittest.TestCase):
             duration_ms=12.3,
         )
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=journal,
             response_modifier=ResponseModifierService(),
         )
@@ -230,7 +230,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_execute_quit_command_requests_shutdown(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -245,9 +245,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertTrue(called["shutdown"])
 
     def test_execute_loglevel_command_updates_config(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -256,9 +256,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(config.log_level_name(), "DEBUG")
 
     def test_execute_whitelist_commands(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -268,9 +268,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(config.whitelist_entries(), ())
 
     def test_quick_add_selected_site_to_whitelist(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -279,9 +279,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(config.whitelist_entries(), ("example.com",))
 
     def test_execute_cache_command_updates_config(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -291,9 +291,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertFalse(config.cache_invalidation_enabled)
 
     def test_cache_command_calls_toggle_hook(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -303,9 +303,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(called["count"], 1)
 
     def test_execute_mitm_commands_update_config(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -315,9 +315,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(config.mitm_certs_dir, Path("custom-certs"))
 
     def test_execute_policy_add_editor_updates_config(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -325,9 +325,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(config.open_editor_policy_entries(), ("POST https://example.com/path",))
 
     def test_execute_policy_add_editor_with_explicit_method(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -335,9 +335,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(config.open_editor_policy_entries(), ("POST https://example.com/path",))
 
     def test_modify_command_is_no_longer_supported(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -345,9 +345,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(config.open_editor_policy_entries(), ())
 
     def test_execute_policy_add_static_command_updates_config(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -362,7 +362,7 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(template.body, b"hello-policy")
 
     def test_execute_policy_enable_disable_remove_commands(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         rule_name = config.add_static_response_rule(
             url="https://example.com/mock",
             status_code=200,
@@ -372,7 +372,7 @@ class TestRuntimeCLI(unittest.TestCase):
             method="GET",
         )
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -394,7 +394,7 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(len(config.policy_rules()), 0)
 
     def test_selected_policy_actions_require_policies_tab(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         rule_name = config.add_static_response_rule(
             url="https://example.com/mock",
             status_code=200,
@@ -404,7 +404,7 @@ class TestRuntimeCLI(unittest.TestCase):
             method="GET",
         )
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -423,7 +423,7 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertTrue(rule.enabled)
 
     def test_selected_policy_actions_work_in_policies_tab(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         config.add_static_response_rule(
             url="https://example.com/mock",
             status_code=200,
@@ -433,7 +433,7 @@ class TestRuntimeCLI(unittest.TestCase):
             method="GET",
         )
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -448,7 +448,7 @@ class TestRuntimeCLI(unittest.TestCase):
         )
 
     def test_policy_sidebar_order_matches_runtime_matching_precedence(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         config.add_static_response_rule(
             url="https://example.com/base",
             name="low-priority",
@@ -469,7 +469,7 @@ class TestRuntimeCLI(unittest.TestCase):
             method="GET",
         )
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -480,7 +480,7 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertIn("low-priority", policies_tab.items[2])
 
     def test_execute_policy_edit_command_schedules_editor(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         rule_name = config.add_static_response_rule(
             url="https://example.com/mock",
             status_code=200,
@@ -490,7 +490,7 @@ class TestRuntimeCLI(unittest.TestCase):
             method="GET",
         )
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -498,17 +498,16 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(cli._pending_policy_edit_name, rule_name)  # type: ignore[attr-defined]
 
     def test_shift_m_adds_editor_policy_and_opens_editor(self) -> None:
-        config = RuntimeConfig()
-        cli = RuntimeCLI(
-            runtime_config=config,
-            request_journal=self._journal_with_requests(),
-            response_modifier=ResponseModifierService(),
-        )
-
+        config = RuntimeTestContext()
         with patch(
-            "proxyscope.application.actions.edit_policy_rule_with_external_editor",
+            "proxyscope.adapters.factory.edit_policy_rule_with_external_editor",
             return_value=(False, None, "cancelled"),
         ) as edit_mock:
+            cli = RuntimeCLI(
+                **runtime_dependencies(config),
+                request_journal=self._journal_with_requests(),
+                response_modifier=ResponseModifierService(),
+            )
             cli.add_selected_request_to_editor_policy()
 
         self.assertTrue(config.open_editor_policy_entries())
@@ -522,9 +521,9 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(decoded, payload)
 
     def test_config_save_and_reload_commands(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         cli = RuntimeCLI(
-            runtime_config=config,
+            **runtime_dependencies(config),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
@@ -535,7 +534,7 @@ class TestRuntimeCLI(unittest.TestCase):
             self.assertEqual(config.config_path, path)
             self.assertTrue(path.exists())
 
-            external = RuntimeConfig.load_from_file(path)
+            external = RuntimeTestContext.load_from_file(path)
             external.set_log_level("DEBUG")
             external.add_open_editor_policy("https://example.com/hot", method="POST")
             external.save()
@@ -551,7 +550,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_execute_filter_commands_reduce_visible_entries(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=self._journal_with_requests(),
             response_modifier=ResponseModifierService(),
         )
@@ -573,7 +572,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_find_command_filters_by_text_and_clear_restores_entries(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=self._journal_with_requests(),
             response_modifier=ResponseModifierService(),
         )
@@ -588,7 +587,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_filter_clear_resets_all_request_filters(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=self._journal_with_requests(),
             response_modifier=ResponseModifierService(),
         )
@@ -603,7 +602,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_export_command_writes_json_snapshot(self) -> None:
         cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=self._journal_with_requests(),
             response_modifier=ResponseModifierService(),
         )
@@ -617,13 +616,13 @@ class TestRuntimeCLI(unittest.TestCase):
 
     def test_session_save_and_load_commands(self) -> None:
         source_cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=self._journal_with_requests(),
             response_modifier=ResponseModifierService(),
         )
         target_journal = RequestJournal()
         target_cli = RuntimeCLI(
-            runtime_config=RuntimeConfig(),
+            **runtime_dependencies(RuntimeTestContext()),
             request_journal=target_journal,
             response_modifier=ResponseModifierService(),
         )

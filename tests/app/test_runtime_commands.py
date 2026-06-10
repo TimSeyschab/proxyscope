@@ -2,15 +2,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.application.runtime_commands import RuntimeCommandService
 from proxyscope.policies.engine import PolicyEngine
+from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
 
 
 class TestRuntimeCommandService(unittest.TestCase):
     def test_mitm_commands_update_runtime_config(self) -> None:
-        config = RuntimeConfig()
-        service = RuntimeCommandService(runtime_config=config)
+        config = RuntimeTestContext()
+        service = RuntimeCommandService(**runtime_dependencies(config))
 
         result = service.execute(
             "mitm off",
@@ -29,8 +29,8 @@ class TestRuntimeCommandService(unittest.TestCase):
         self.assertEqual(config.mitm_certs_dir, Path("custom-certs"))
 
     def test_policy_prefix_and_priority_commands(self) -> None:
-        config = RuntimeConfig()
-        service = RuntimeCommandService(runtime_config=config)
+        config = RuntimeTestContext()
+        service = RuntimeCommandService(**runtime_dependencies(config))
 
         add_result = service.execute(
             "policy add-editor-prefix GET https://example.com/api",
@@ -55,7 +55,7 @@ class TestRuntimeCommandService(unittest.TestCase):
         self.assertEqual(config.policy_rules()[0].priority, 12)
 
     def test_policy_edit_requires_existing_name(self) -> None:
-        service = RuntimeCommandService(runtime_config=RuntimeConfig())
+        service = RuntimeCommandService(**runtime_dependencies(RuntimeTestContext()))
         scheduled: list[str] = []
         result = service.execute(
             "policy edit missing",
@@ -67,7 +67,7 @@ class TestRuntimeCommandService(unittest.TestCase):
         self.assertEqual(scheduled, [])
 
     def test_policy_show_uses_matching_precedence_order(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         config.add_static_response_rule(
             url="https://example.com/base",
             method="GET",
@@ -87,7 +87,7 @@ class TestRuntimeCommandService(unittest.TestCase):
             priority=5,
             name="high-priority-exact",
         )
-        service = RuntimeCommandService(runtime_config=config)
+        service = RuntimeCommandService(**runtime_dependencies(config))
 
         result = service.execute(
             "policy show",
@@ -106,8 +106,8 @@ class TestRuntimeCommandService(unittest.TestCase):
         )
 
     def test_loglevel_returns_updated_level(self) -> None:
-        config = RuntimeConfig()
-        service = RuntimeCommandService(runtime_config=config)
+        config = RuntimeTestContext()
+        service = RuntimeCommandService(**runtime_dependencies(config))
         result = service.execute(
             "loglevel DEBUG",
             on_cache_toggle=None,
@@ -120,15 +120,15 @@ class TestRuntimeCommandService(unittest.TestCase):
     def test_config_reload_reports_new_loglevel_for_hot_swap(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "runtime.json"
-            config = RuntimeConfig.load_from_file(config_path)
+            config = RuntimeTestContext.load_from_file(config_path)
             config.set_log_level("INFO")
             config.save()
 
-            external = RuntimeConfig.load_from_file(config_path)
+            external = RuntimeTestContext.load_from_file(config_path)
             external.set_log_level("WARNING")
             external.save()
 
-            service = RuntimeCommandService(runtime_config=config)
+            service = RuntimeCommandService(**runtime_dependencies(config))
             result = service.execute(
                 "config reload",
                 on_cache_toggle=None,

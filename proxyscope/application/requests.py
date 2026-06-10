@@ -2,7 +2,7 @@ from collections import Counter
 from dataclasses import dataclass
 from threading import Lock
 
-from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
+from proxyscope.application.journal import LoggedExchange, RequestJournal
 
 
 @dataclass

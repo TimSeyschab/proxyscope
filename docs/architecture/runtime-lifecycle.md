@@ -2,35 +2,36 @@
 
 ## Current Lifecycle
 
-`proxyscope.app.main` is the composition root. It creates runtime config,
-journal, response modifier, exchange recorder, and runtime event dispatcher,
-assembles them in a `ProxyRuntimeContext`, and injects that context into the
-proxy server and MITM interceptor.
-
-Runtime services are instance-local. Multiple proxy servers can run in one
-process with isolated policies, journals, response transformers, and event
-sinks.
-
-Runtime settings are represented by `RuntimeSettings`. Config-file loading and
-atomic saving are delegated to `ConfigRepository`; interactive reload is
-coordinated by `RuntimeConfigService`.
-
-## Target Lifecycle
-
-The composition root will create an explicit application runtime:
+`proxyscope.app.main` parses CLI options and delegates to the explicit
+composition root:
 
 ```python
-with ProxyApplication(options) as application:
+with ProxyApplication(ApplicationOptions(...)) as application:
     application.run()
 ```
 
-The runtime owns server threads, injected services, logging configuration,
-pending edits, and deterministic shutdown.
+`ProxyApplication` lives in `proxyscope.app.application`. It creates config,
+journal, application services, processing runtime, server, and the optional TUI
+adapter. `proxyscope.app.composition` assembles the proxy processing context,
+while `proxyscope.adapters.factory` injects concrete editor, replay, and session
+adapters into the application services.
+
+Runtime settings, policy administration, and configuration persistence are
+constructed separately. No aggregate runtime-config facade participates in the
+composition.
+
+Headless and TUI modes start the same managed server thread and use the same
+shutdown path. The application layer itself does not import `proxyscope.app`,
+`proxyscope.adapters`, or Textual.
 
 ## Lifecycle Rules
 
 - Construction does not mutate process-global service state.
 - Headless mode does not import Textual.
 - Shutdown stops accepting requests before releasing dependencies.
-- Pending interactive edits have a timeout and are cancelled on shutdown.
+- Shutdown closes active tunnels, cancels pending edits, closes the server, and
+  joins the server thread.
+- Pending interactive edits have a configurable timeout, fall back to the
+  original response, and are cancelled on shutdown.
+- Logging setup and restoration belong to the application lifecycle.
 - Tests can create and stop multiple independent application instances.

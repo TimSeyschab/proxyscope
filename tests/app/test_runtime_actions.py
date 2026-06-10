@@ -1,20 +1,38 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
 from proxyscope.application.actions import (
     RuntimePolicyActionService,
     RuntimeReplayActionService,
     RuntimeResponseEditActionService,
 )
+from proxyscope.application.journal import LoggedExchange, RequestJournal
+from tests.support.runtime_context import RuntimeTestContext
 
 
 class TestRuntimePolicyActionService(unittest.TestCase):
-    def test_set_enabled_and_remove_policy(self) -> None:
-        config = RuntimeConfig()
+    def test_successful_policy_mutation_is_persisted_explicitly(self) -> None:
+        config = RuntimeTestContext()
         rule_name = config.add_static_response_rule(url="https://example.com/mock", name="mock")
-        actions = RuntimePolicyActionService(config)
+        configuration = Mock()
+        actions = RuntimePolicyActionService(
+            config.policy_administration,
+            configuration,
+            policy_editor=Mock(),
+        )
+
+        actions.set_enabled(rule_name, enabled=False)
+
+        configuration.save.assert_called_once_with()
+
+    def test_set_enabled_and_remove_policy(self) -> None:
+        config = RuntimeTestContext()
+        rule_name = config.add_static_response_rule(url="https://example.com/mock", name="mock")
+        actions = RuntimePolicyActionService(
+            config.policy_administration,
+            config.configuration,
+            policy_editor=Mock(),
+        )
 
         self.assertEqual(actions.set_enabled(rule_name, enabled=False), "Policy disabled: mock")
         rule = config.get_policy_rule(rule_name)
@@ -26,16 +44,17 @@ class TestRuntimePolicyActionService(unittest.TestCase):
         self.assertIsNone(config.get_policy_rule(rule_name))
 
     def test_pending_edit_is_consumed(self) -> None:
-        config = RuntimeConfig()
+        config = RuntimeTestContext()
         rule_name = config.add_static_response_rule(url="https://example.com/mock", name="mock")
-        actions = RuntimePolicyActionService(config)
+        policy_editor = Mock(return_value=(False, None, "cancelled"))
+        actions = RuntimePolicyActionService(
+            config.policy_administration,
+            config.configuration,
+            policy_editor=policy_editor,
+        )
         actions.schedule_edit(rule_name)
 
-        with patch(
-            "proxyscope.application.actions.edit_policy_rule_with_external_editor",
-            return_value=(False, None, "cancelled"),
-        ):
-            message = actions.process_pending_edit()
+        message = actions.process_pending_edit()
 
         self.assertEqual(message, "cancelled")
         self.assertIsNone(actions.pending_edit_name)
@@ -44,13 +63,10 @@ class TestRuntimePolicyActionService(unittest.TestCase):
 class TestRuntimeReplayActionService(unittest.TestCase):
     def test_replay_builds_request_url_and_returns_message(self) -> None:
         entry = _request_entry(path="/api", target_host="example.com", target_port=443, protocol="https-mitm")
-        actions = RuntimeReplayActionService(proxy_base_url="http://127.0.0.1:8080")
+        replay = Mock(return_value=(True, "replayed"))
+        actions = RuntimeReplayActionService(proxy_base_url="http://127.0.0.1:8080", replay_request=replay)
 
-        with patch(
-            "proxyscope.application.actions.edit_and_resend_logged_request",
-            return_value=(True, "replayed"),
-        ) as replay:
-            message = actions.replay(entry)
+        message = actions.replay(entry)
 
         self.assertEqual(message, "replayed")
         replay.assert_called_once_with(
@@ -65,13 +81,16 @@ class TestRuntimeResponseEditActionService(unittest.TestCase):
         pending = Mock()
         modifier = Mock()
         modifier.poll_pending_edit.return_value = pending
-        actions = RuntimeResponseEditActionService(modifier, RuntimeConfig())
+        response_editor = Mock(return_value=(False, "cancelled"))
+        config = RuntimeTestContext()
+        actions = RuntimeResponseEditActionService(
+            modifier,
+            config.policy_administration,
+            config.configuration,
+            response_editor=response_editor,
+        )
 
-        with patch(
-            "proxyscope.application.actions.edit_pending_response_with_external_editor",
-            return_value=(False, "cancelled"),
-        ):
-            message = actions.process_pending_edit()
+        message = actions.process_pending_edit()
 
         self.assertEqual(message, "cancelled")
         pending.keep_original.assert_called_once_with()

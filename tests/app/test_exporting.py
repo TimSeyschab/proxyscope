@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from proxyscope.app.runtime.exporting import export_entries, load_entries_from_json
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.adapters.sessions.json_export import export_entries, load_entries_from_json
+from proxyscope.application.journal import RequestJournal
 
 
 class TestRuntimeExporting(unittest.TestCase):

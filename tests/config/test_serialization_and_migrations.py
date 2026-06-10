@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.config.migrations import CURRENT_SCHEMA_VERSION
 from proxyscope.config.serialization import ConfigValidationError, parse_config_payload, serialize_config_document
 from proxyscope.config.settings import ConfigDocument, RuntimeSettings
 from proxyscope.policies.engine import PolicyEngine
 from proxyscope.policies.models import OpenEditorAction, PolicyRule, RequestMatchRule, StaticResponseAction
 from proxyscope.policies.repository import InMemoryPolicyRepository
+from tests.support.runtime_context import RuntimeTestContext
 
 
 class TestConfigMigrations(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestConfigMigrations(unittest.TestCase):
             path = Path(tmp_dir) / "config.json"
             path.write_text('{"log_level":"INFO","policies":[]}', encoding="utf-8")
 
-            config = RuntimeConfig.load_from_file(path)
+            config = RuntimeTestContext.load_from_file(path)
             config.save()
 
             saved = json.loads(path.read_text(encoding="utf-8"))

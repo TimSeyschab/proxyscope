@@ -1,6 +1,6 @@
 import unittest
 
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.application.journal import RequestJournal
 
 
 class TestRequestJournal(unittest.TestCase):

@@ -1,1 +1,1 @@
-"""tproxy package."""
+"""proxyscope package."""

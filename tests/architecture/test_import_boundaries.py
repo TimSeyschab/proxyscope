@@ -52,21 +52,15 @@ class TestImportBoundaries(unittest.TestCase):
 
         self.assertEqual(violations, set(), f"Forbidden processing-domain imports: {sorted(violations)}")
 
-    def test_application_services_do_not_depend_on_textual_ui(self) -> None:
+    def test_application_does_not_depend_on_outer_adapters(self) -> None:
         violations: set[tuple[str, str]] = set()
         for path in (PACKAGE_ROOT / "application").rglob("*.py"):
             source_module = _module_name(path)
             for imported_module in _absolute_imports(path):
-                if imported_module.startswith(
-                    (
-                        "textual",
-                        "proxyscope.app.runtime.textual_ui",
-                        "proxyscope.app.runtime.ui_components",
-                    )
-                ):
+                if imported_module.startswith(("textual", "proxyscope.app.", "proxyscope.adapters.")):
                     violations.add((source_module, imported_module))
 
-        self.assertEqual(violations, set(), f"Forbidden application UI imports: {sorted(violations)}")
+        self.assertEqual(violations, set(), f"Forbidden application adapter imports: {sorted(violations)}")
 
 
 def _absolute_imports(path: Path) -> set[str]:

@@ -1,18 +1,29 @@
 from contextlib import nullcontext
+from typing import Callable
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.editing.policy import edit_policy_rule_with_external_editor
-from proxyscope.app.editing.response import edit_pending_response_with_external_editor
-from proxyscope.app.runtime.journal import LoggedExchange
-from proxyscope.app.runtime.replay import edit_and_resend_logged_request
+from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.contracts import SuspendUI
+from proxyscope.application.journal import LoggedExchange
+from proxyscope.application.policy_administration import PolicyAdministrationService
+from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.policies.models import OpenEditorAction, PolicyRule
+
+PolicyEditor = Callable[[PolicyRule], tuple[bool, PolicyRule | None, str]]
+ReplayRequest = Callable[..., tuple[bool, str]]
+ResponseEditor = Callable[..., tuple[bool, str]]
 
 
 class RuntimePolicyActionService:
-    def __init__(self, runtime_config: RuntimeConfig) -> None:
-        self._runtime_config = runtime_config
+    def __init__(
+        self,
+        policies: PolicyAdministrationService,
+        configuration: RuntimeConfigurationService,
+        *,
+        policy_editor: PolicyEditor,
+    ) -> None:
+        self._policies = policies
+        self._configuration = configuration
+        self._policy_editor = policy_editor
         self._pending_edit_name: str | None = None
 
     @property
@@ -25,7 +36,8 @@ class RuntimePolicyActionService:
     def set_enabled(self, name: str | None, *, enabled: bool) -> str:
         if name is None:
             return "No policy selected."
-        if self._runtime_config.set_policy_rule_enabled(name, enabled=enabled):
+        if self._policies.set_enabled(name, enabled=enabled):
+            self._configuration.save()
             state = "enabled" if enabled else "disabled"
             return f"Policy {state}: {name}"
         return f"Policy not found: {name}"
@@ -33,7 +45,8 @@ class RuntimePolicyActionService:
     def remove(self, name: str | None) -> str:
         if name is None:
             return "No policy selected."
-        if self._runtime_config.remove_policy_rule(name):
+        if self._policies.remove_rule(name):
+            self._configuration.save()
             return f"Policy removed: {name}"
         return f"Policy not found: {name}"
 
@@ -59,17 +72,18 @@ class RuntimePolicyActionService:
         if target_url is None:
             return "Cannot build URL from selected request."
 
-        existing_names = {rule.name for rule in self._runtime_config.policy_rules()}
+        existing_names = {rule.name for rule in self._policies.list_rules()}
         try:
-            normalized = self._runtime_config.add_open_editor_policy(
+            normalized = self._policies.add_open_editor(
                 target_url,
                 method=entry.request.method,
             )
+            self._configuration.save()
         except ValueError as exc:
             return str(exc)
 
         created_rule: PolicyRule | None = None
-        for rule in reversed(self._runtime_config.policy_rules()):
+        for rule in reversed(self._policies.list_rules()):
             if rule.name in existing_names:
                 continue
             if isinstance(rule.action, OpenEditorAction):
@@ -82,7 +96,7 @@ class RuntimePolicyActionService:
 
     def _edit_policy_by_name(self, name: str, *, suspend_ui: SuspendUI | None) -> str:
         try:
-            rule = self._runtime_config.get_policy_rule(name)
+            rule = self._policies.get_rule(name)
         except ValueError as exc:
             return str(exc)
         if rule is None:
@@ -98,10 +112,11 @@ class RuntimePolicyActionService:
     ) -> str:
         try:
             with _suspend_runtime_ui(suspend_ui):
-                success, edited_rule, message = edit_policy_rule_with_external_editor(rule)
+                success, edited_rule, message = self._policy_editor(rule)
             if not success or edited_rule is None:
                 return message
-            if self._runtime_config.replace_policy_rule(name, edited_rule):
+            if self._policies.replace_rule(name, edited_rule):
+                self._configuration.save()
                 return message
             return f"Policy not found: {name}"
         except Exception as exc:  # noqa: BLE001
@@ -109,8 +124,9 @@ class RuntimePolicyActionService:
 
 
 class RuntimeReplayActionService:
-    def __init__(self, *, proxy_base_url: str | None) -> None:
+    def __init__(self, *, proxy_base_url: str | None, replay_request: ReplayRequest) -> None:
         self._proxy_base_url = proxy_base_url
+        self._replay_request = replay_request
 
     def replay(self, entry: LoggedExchange, *, suspend_ui: SuspendUI | None = None) -> str:
         request_url = entry_to_url(entry)
@@ -118,7 +134,7 @@ class RuntimeReplayActionService:
             return "Cannot build URL from selected request."
         try:
             with _suspend_runtime_ui(suspend_ui):
-                _success, message = edit_and_resend_logged_request(
+                _success, message = self._replay_request(
                     entry,
                     request_url=request_url,
                     proxy_base_url=self._proxy_base_url,
@@ -129,9 +145,18 @@ class RuntimeReplayActionService:
 
 
 class RuntimeResponseEditActionService:
-    def __init__(self, response_modifier: ResponseModifierService, runtime_config: RuntimeConfig) -> None:
+    def __init__(
+        self,
+        response_modifier: ResponseModifierService,
+        policies: PolicyAdministrationService,
+        configuration: RuntimeConfigurationService,
+        *,
+        response_editor: ResponseEditor,
+    ) -> None:
         self._response_modifier = response_modifier
-        self._runtime_config = runtime_config
+        self._policies = policies
+        self._configuration = configuration
+        self._response_editor = response_editor
 
     def process_pending_edit(self, *, suspend_ui: SuspendUI | None = None) -> str | None:
         pending = self._response_modifier.poll_pending_edit()
@@ -139,12 +164,14 @@ class RuntimeResponseEditActionService:
             return None
         try:
             with _suspend_runtime_ui(suspend_ui):
-                success, message = edit_pending_response_with_external_editor(
+                success, message = self._response_editor(
                     pending,
-                    runtime_config=self._runtime_config,
+                    policies=self._policies,
                 )
             if not success:
                 pending.keep_original()
+            else:
+                self._configuration.save()
             return message
         except Exception as exc:  # noqa: BLE001
             pending.keep_original()

@@ -2,19 +2,19 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.editing.modifier import ResponseModifierService
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.adapters.factory import create_default_runtime_application_services
 from proxyscope.application.contracts import PolicyUseCases, RequestUseCases, SessionUseCases, SettingsUseCases
-from proxyscope.application.services import create_runtime_application_services
+from proxyscope.application.journal import RequestJournal
+from proxyscope.application.response_edits import ResponseModifierService
+from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
 
 
 class TestRuntimeApplicationServices(unittest.TestCase):
     def setUp(self) -> None:
-        self.config = RuntimeConfig()
+        self.config = RuntimeTestContext()
         self.journal = RequestJournal()
-        self.services = create_runtime_application_services(
-            runtime_config=self.config,
+        self.services = create_default_runtime_application_services(
+            **runtime_dependencies(self.config),
             request_journal=self.journal,
             response_modifier=ResponseModifierService(),
             proxy_base_url=None,

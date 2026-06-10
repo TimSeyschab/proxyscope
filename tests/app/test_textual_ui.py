@@ -3,15 +3,8 @@ import unittest
 from textual.widgets import OptionList
 from textual.widgets._option_list import Option
 
-from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
-from proxyscope.app.runtime.textual_ui import (
-    RuntimeTextualApp,
-    _focus_step_order,
-    _shortcut_token_from_key_event,
-    determine_runtime_layout,
-)
-from proxyscope.app.runtime.ui_components.rendering import format_detail_tabs, plain_text
-from proxyscope.app.runtime.ui_models import (
+from proxyscope.adapters.tui.components.rendering import format_detail_tabs, plain_text
+from proxyscope.adapters.tui.models import (
     AuxPanelModel,
     AuxPanelTabModel,
     RequestDetailModel,
@@ -19,7 +12,14 @@ from proxyscope.app.runtime.ui_models import (
     RuntimeScreenModel,
     StatusBarModel,
 )
-from proxyscope.app.runtime.ui_presenter import _build_request_rows, _format_detail
+from proxyscope.adapters.tui.presenter import _build_request_rows, _format_detail
+from proxyscope.adapters.tui.textual import (
+    RuntimeTextualApp,
+    _focus_step_order,
+    _shortcut_token_from_key_event,
+    determine_runtime_layout,
+)
+from proxyscope.application.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
 
 
 def _screen_model(

@@ -2,16 +2,16 @@ import logging
 import unittest
 from unittest.mock import patch
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.logging.request_response import RequestResponseRecorder
-from proxyscope.app.logging.setup import configure_logging
-from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.adapters.observability.exchange_recorder import RequestResponseRecorder
+from proxyscope.adapters.observability.logging import configure_logging
+from proxyscope.application.journal import RequestJournal
 from proxyscope.proxy.forwarding import ForwardResponse
+from tests.support.runtime_context import RuntimeTestContext
 
 
 class TestLoggingSetup(unittest.TestCase):
     def test_configure_logging_forwards_arguments_to_basic_config(self) -> None:
-        with patch("proxyscope.app.logging.setup.logging.basicConfig") as basic_config_mock:
+        with patch("proxyscope.adapters.observability.logging.logging.basicConfig") as basic_config_mock:
             configure_logging(level=logging.DEBUG)
         basic_config_mock.assert_called_once()
         kwargs = basic_config_mock.call_args.kwargs
@@ -22,8 +22,8 @@ class TestLoggingSetup(unittest.TestCase):
 class TestRequestResponseLogging(unittest.TestCase):
     def setUp(self) -> None:
         self.journal = RequestJournal()
-        self.config = RuntimeConfig()
-        self.recorder = RequestResponseRecorder(runtime_config=self.config, request_journal=self.journal)
+        self.config = RuntimeTestContext()
+        self.recorder = RequestResponseRecorder(settings=self.config.settings_state, request_journal=self.journal)
 
     def test_log_incoming_and_outgoing_persists_exchange(self) -> None:
         request_id = self.recorder.record_request(
@@ -55,7 +55,7 @@ class TestRequestResponseLogging(unittest.TestCase):
 
     def test_log_incoming_skips_non_whitelisted_host(self) -> None:
         recorder = RequestResponseRecorder(
-            runtime_config=RuntimeConfig(log_whitelist=("allowed.example",)),
+            settings=RuntimeTestContext(log_whitelist=("allowed.example",)).settings_state,
             request_journal=self.journal,
         )
         request_id = recorder.record_request(

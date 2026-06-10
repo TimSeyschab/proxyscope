@@ -1,9 +1,8 @@
 import unittest
 from pathlib import Path
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.application.configuration import RuntimeConfigService
 from proxyscope.config.settings import ConfigDocument, RuntimeSettings
+from tests.support.runtime_context import RuntimeTestContext
 
 
 class _MemoryConfigRepository:
@@ -18,14 +17,14 @@ class _MemoryConfigRepository:
         self.saved = (path, document)
 
 
-class TestRuntimeConfigService(unittest.TestCase):
+class TestRuntimeConfigurationService(unittest.TestCase):
     def test_reload_applies_repository_document(self) -> None:
         repository = _MemoryConfigRepository(
             ConfigDocument(settings=RuntimeSettings.create(log_level=10, mitm_enabled=False))
         )
-        config = RuntimeConfig(config_path="config.json", config_repository=repository)
+        config = RuntimeTestContext(config_path="config.json", config_repository=repository)
 
-        reloaded = RuntimeConfigService(config).reload()
+        reloaded = config.configuration.reload()
 
         self.assertTrue(reloaded)
         self.assertEqual(config.log_level, 10)
@@ -33,8 +32,8 @@ class TestRuntimeConfigService(unittest.TestCase):
 
     def test_save_uses_repository_and_can_attach_path(self) -> None:
         repository = _MemoryConfigRepository(ConfigDocument(settings=RuntimeSettings()))
-        config = RuntimeConfig(config_repository=repository)
-        service = RuntimeConfigService(config)
+        config = RuntimeTestContext(config_repository=repository)
+        service = config.configuration
 
         self.assertIsNone(service.save())
         saved_path = service.save("demo.json")

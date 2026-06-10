@@ -3,10 +3,10 @@
 ## Current Flow
 
 Runtime policies are stored behind a `PolicyRepository` and evaluated by the
-transport-independent `PolicyEngine`. `RuntimeConfig` coordinates mutable
-runtime policy administration, while the versioned config repository owns
-config-file persistence and migration. `RuntimeConfig` does not evaluate
-requests.
+transport-independent `PolicyEngine`. `PolicyAdministrationService` coordinates
+mutable policy administration, while `RuntimeConfigurationService` owns
+config-file persistence and migration. Mutating application use cases
+explicitly orchestrate persistence.
 
 ```text
 Plain HTTP: RequestLoggingHandler -> ExchangePipeline -> forward/static/edit

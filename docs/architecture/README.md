@@ -7,7 +7,7 @@ UI code, and persistence details.
 ## Target Layers
 
 ```text
-UI / CLI / future APIs
+UI / CLI / future APIs (`proxyscope.adapters`)
         |
 Application services
         |
@@ -19,8 +19,9 @@ HTTP, MITM, Textual, filesystem, and network adapters
 ```
 
 The transport-independent `proxyscope.processing` package owns shared exchange
-processing. Architecture tests keep policy, config, and processing domains
-independent from app, proxy, and MITM adapters.
+processing. `proxyscope.app` is limited to startup, lifecycle, and composition.
+Architecture tests keep the application and domain packages independent from
+outer adapters.
 
 ## Documents
 
