@@ -17,5 +17,10 @@ if [[ -z "${POETRY_PYPI_TOKEN_PYPI:-}" ]]; then
 fi
 
 poetry check
+poetry run ruff format --check proxyscope tests scripts
+poetry run ruff check proxyscope tests scripts
+poetry run pyright
+poetry run coverage run -m unittest discover -s tests -p "test_*.py"
+poetry run coverage report
 poetry build
 poetry publish --no-interaction
