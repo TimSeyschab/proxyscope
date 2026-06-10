@@ -1,12 +1,12 @@
-from dataclasses import dataclass
 import gzip
 import os
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import tempfile
 import zlib
+from dataclasses import dataclass
+from pathlib import Path
 
 from proxyscope.app.config.runtime import get_runtime_config
 from proxyscope.app.editing.modifier import PendingResponseEdit
@@ -244,10 +244,11 @@ def _maybe_save_static_response_rule(
     body: bytes,
 ) -> str | None:
     try:
-        answer = input(
-            f"[tproxy] Save edited response as static policy for "
-            f"{pending.method} {pending.request_url}? [y/N]: "
-        ).strip().lower()
+        answer = (
+            input(f"[tproxy] Save edited response as static policy for {pending.method} {pending.request_url}? [y/N]: ")
+            .strip()
+            .lower()
+        )
     except EOFError:
         return None
     if answer not in {"y", "yes"}:

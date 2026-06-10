@@ -1,6 +1,6 @@
-from collections.abc import Iterable
 import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from threading import RLock
 
@@ -20,6 +20,8 @@ from proxyscope.app.config.matching import (
 from proxyscope.app.config.models import PolicyRule, RequestMatchRule, StaticResponseTemplate
 from proxyscope.app.config.serialization import (
     parse_policy_rule as parse_policy_rule_payload,
+)
+from proxyscope.app.config.serialization import (
     serialize_policy_rule as serialize_policy_rule_payload,
 )
 

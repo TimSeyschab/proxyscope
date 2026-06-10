@@ -8,12 +8,11 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from proxyscope.app.runtime.ui_controller import RuntimeUIController
 from proxyscope.app.runtime.ui_components import AuxSidebar, CommandBar, RequestDetailPane, RequestList
 from proxyscope.app.runtime.ui_components.rendering import (
-    format_detail_tabs as _format_detail_tabs,
     plain_text as _plain_text,
 )
+from proxyscope.app.runtime.ui_controller import RuntimeUIController
 from proxyscope.app.runtime.ui_models import RuntimeScreenModel
 from proxyscope.app.runtime.ui_navigation import focus_step_order as _focus_step_order
 

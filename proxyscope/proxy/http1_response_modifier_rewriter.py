@@ -219,15 +219,15 @@ def _try_consume_chunked(data: bytes) -> tuple[bytes, bytes] | None:
             if trailer_end >= 0:
                 idx = trailer_end + 4
                 return data[:idx], bytes(decoded)
-            if idx + 2 <= data_len and data[idx:idx + 2] == b"\r\n":
+            if idx + 2 <= data_len and data[idx : idx + 2] == b"\r\n":
                 idx += 2
                 return data[:idx], bytes(decoded)
             return None
 
         if idx + chunk_size + 2 > data_len:
             return None
-        decoded.extend(data[idx: idx + chunk_size])
+        decoded.extend(data[idx : idx + chunk_size])
         idx = idx + chunk_size
-        if data[idx:idx + 2] != b"\r\n":
+        if data[idx : idx + 2] != b"\r\n":
             return None
         idx += 2

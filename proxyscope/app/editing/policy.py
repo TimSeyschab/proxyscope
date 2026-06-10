@@ -1,10 +1,10 @@
 import json
 import os
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 
 from proxyscope.app.config.runtime import PolicyRule, parse_policy_rule, serialize_policy_rule
 

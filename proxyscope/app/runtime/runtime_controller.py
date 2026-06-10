@@ -1,24 +1,24 @@
+import json
 from collections import Counter
 from dataclasses import dataclass
-import json
 from threading import Lock
 from typing import Callable
 
 from proxyscope.app.config.runtime import PolicyRule, RuntimeConfig
+from proxyscope.app.editing.modifier import ResponseModifierService
 from proxyscope.app.runtime.actions import (
     RuntimePolicyActionService,
     RuntimeReplayActionService,
     RuntimeResponseEditActionService,
 )
 from proxyscope.app.runtime.commands import RuntimeCommandService
-from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
 from proxyscope.app.runtime.exporting import export_entries, load_entries_from_json
+from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
+from proxyscope.app.runtime.ui_controller import SuspendUI
 from proxyscope.app.runtime.ui_models import ActivePane, DetailTab, RuntimeScreenModel
 from proxyscope.app.runtime.ui_navigation import RuntimeUINavigationService
 from proxyscope.app.runtime.ui_presenter import build_runtime_screen_model
 from proxyscope.app.runtime.ui_state import RuntimeUIViewState
-from proxyscope.app.runtime.ui_controller import SuspendUI
-from proxyscope.app.editing.modifier import ResponseModifierService
 
 
 @dataclass
@@ -505,8 +505,7 @@ def _format_policy_item(rule: PolicyRule) -> str:
     target = rule.match.url_exact or rule.match.url_prefix or "*"
     if rule.action == "static_response" and rule.static_response is not None:
         return (
-            f"{state:>3} p={rule.priority} {rule.name} | "
-            f"static {method} {target} -> {rule.static_response.status_code}"
+            f"{state:>3} p={rule.priority} {rule.name} | static {method} {target} -> {rule.static_response.status_code}"
         )
     return f"{state:>3} p={rule.priority} {rule.name} | {rule.action} {method} {target}"
 

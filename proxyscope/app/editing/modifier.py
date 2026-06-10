@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from queue import Empty, Queue
 from threading import Event, Lock
 

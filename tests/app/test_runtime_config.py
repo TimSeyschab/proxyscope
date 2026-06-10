@@ -60,12 +60,16 @@ class TestRuntimeConfig(unittest.TestCase):
     def test_modification_whitelist_host_wide_and_prefix(self) -> None:
         config = RuntimeConfig()
         config.add_modification_whitelist_entry("example.com")
-        self.assertTrue(config.should_modify_response_for_request(method="GET", url="https://example.com/anything/here"))
+        self.assertTrue(
+            config.should_modify_response_for_request(method="GET", url="https://example.com/anything/here")
+        )
 
         config = RuntimeConfig()
         config.add_modification_whitelist_entry("https://example.com/api")
         self.assertTrue(config.should_modify_response_for_request(method="GET", url="https://example.com/api/v1/users"))
-        self.assertFalse(config.should_modify_response_for_request(method="GET", url="https://example.com/static/app.js"))
+        self.assertFalse(
+            config.should_modify_response_for_request(method="GET", url="https://example.com/static/app.js")
+        )
 
     def test_modification_whitelist_is_method_sensitive(self) -> None:
         config = RuntimeConfig()
@@ -224,12 +228,8 @@ class TestRuntimeConfig(unittest.TestCase):
             self.assertFalse(config.mitm_enabled)
             self.assertEqual(config.mitm_certs_dir, Path("after-certs"))
             self.assertEqual(config.whitelist_entries(), ("after.example",))
-            self.assertFalse(
-                config.should_modify_response_for_request(method="GET", url="https://before.example/edit")
-            )
-            self.assertTrue(
-                config.should_modify_response_for_request(method="POST", url="https://after.example/edit")
-            )
+            self.assertFalse(config.should_modify_response_for_request(method="GET", url="https://before.example/edit"))
+            self.assertTrue(config.should_modify_response_for_request(method="POST", url="https://after.example/edit"))
 
     def test_policy_management_enable_disable_remove_and_descriptions(self) -> None:
         config = RuntimeConfig()
@@ -250,7 +250,9 @@ class TestRuntimeConfig(unittest.TestCase):
         self.assertTrue(config.set_policy_rule_enabled(static_name, enabled=False))
         self.assertIsNone(config.get_static_response_template_for_request(method="GET", url="https://example.com/mock"))
         self.assertTrue(config.set_policy_rule_enabled(static_name, enabled=True))
-        self.assertIsNotNone(config.get_static_response_template_for_request(method="GET", url="https://example.com/mock"))
+        self.assertIsNotNone(
+            config.get_static_response_template_for_request(method="GET", url="https://example.com/mock")
+        )
         rule = config.get_policy_rule(static_name)
         self.assertIsNotNone(rule)
         assert rule is not None
@@ -267,7 +269,9 @@ class TestRuntimeConfig(unittest.TestCase):
                     reason="Created",
                     headers={"Content-Type": "application/json"},
                     body=b"{}",
-                ) if rule.static_response is not None else None,
+                )
+                if rule.static_response is not None
+                else None,
             ),
         )
         self.assertTrue(replaced)

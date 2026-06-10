@@ -8,15 +8,7 @@ class TestHTTP1MessageSniffer(unittest.TestCase):
         seen: list[tuple[str, dict[str, str], bytes]] = []
         sniffer = HTTP1MessageSniffer(lambda start_line, headers, body: seen.append((start_line, headers, body)))
 
-        sniffer.feed(
-            (
-                b"POST /submit HTTP/1.1\r\n"
-                b"Host: example.com\r\n"
-                b"Content-Length: 5\r\n"
-                b"\r\n"
-                b"hello"
-            )
-        )
+        sniffer.feed((b"POST /submit HTTP/1.1\r\nHost: example.com\r\nContent-Length: 5\r\n\r\nhello"))
 
         self.assertEqual(len(seen), 1)
         self.assertEqual(seen[0][0], "POST /submit HTTP/1.1")
@@ -27,20 +19,7 @@ class TestHTTP1MessageSniffer(unittest.TestCase):
         seen: list[tuple[str, dict[str, str], bytes]] = []
         sniffer = HTTP1MessageSniffer(lambda start_line, headers, body: seen.append((start_line, headers, body)))
 
-        sniffer.feed(
-            (
-                b"HTTP/1.1 200 OK\r\n"
-                b"Transfer-Encoding: chunked\r\n"
-                b"\r\n"
-                b"4\r\n"
-                b"Wiki\r\n"
-                b"5\r\n"
-                b"pedia\r\n"
-                b"0\r\n"
-                b"\r\n"
-                b"\r\n"
-            )
-        )
+        sniffer.feed((b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n\r\n"))
 
         self.assertEqual(len(seen), 1)
         self.assertEqual(seen[0][0], "HTTP/1.1 200 OK")
@@ -51,11 +30,6 @@ class TestHTTP1MessageSniffer(unittest.TestCase):
         seen: list[str] = []
         sniffer = HTTP1MessageSniffer(lambda start_line, _headers, _body: seen.append(start_line))
 
-        sniffer.feed(
-            (
-                b"GET /a HTTP/1.1\r\nHost: example.com\r\n\r\n"
-                b"GET /b HTTP/1.1\r\nHost: example.com\r\n\r\n"
-            )
-        )
+        sniffer.feed((b"GET /a HTTP/1.1\r\nHost: example.com\r\n\r\nGET /b HTTP/1.1\r\nHost: example.com\r\n\r\n"))
 
         self.assertEqual(seen, ["GET /a HTTP/1.1", "GET /b HTTP/1.1"])

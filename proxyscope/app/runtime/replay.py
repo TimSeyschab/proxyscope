@@ -1,15 +1,23 @@
+import base64
 import json
 import os
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import tempfile
-import base64
+from pathlib import Path
+from typing import TypedDict
 
 import requests
 
 from proxyscope.app.runtime.journal import LoggedExchange
+
+
+class ReplayPayload(TypedDict):
+    method: str
+    url: str
+    headers: dict[str, str]
+    body: bytes
 
 
 def edit_and_resend_logged_request(
@@ -74,7 +82,7 @@ def _build_edit_payload(entry: LoggedExchange, *, request_url: str) -> dict[str,
     return payload
 
 
-def _parse_replay_payload(payload: object) -> dict[str, object]:
+def _parse_replay_payload(payload: object) -> ReplayPayload:
     if not isinstance(payload, dict):
         raise ValueError("Replay payload must be a JSON object.")
 

@@ -1,7 +1,12 @@
-import unittest
 import socket
+import unittest
 
-from proxyscope.proxy.connect_tunnel import ConnectTarget, ConnectUpstreamConnectionError, handle_connect_tunnel, parse_connect_target
+from proxyscope.proxy.connect_tunnel import (
+    ConnectTarget,
+    ConnectUpstreamConnectionError,
+    handle_connect_tunnel,
+    parse_connect_target,
+)
 
 
 class TestConnectTunnelStubs(unittest.TestCase):

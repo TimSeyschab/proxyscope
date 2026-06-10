@@ -3,8 +3,8 @@ from threading import Event
 from unittest.mock import patch
 
 from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.editing.response import _maybe_save_static_response_rule
 from proxyscope.app.editing.modifier import PendingResponseEdit
+from proxyscope.app.editing.response import _maybe_save_static_response_rule
 from proxyscope.proxy.forwarding import ForwardResponse
 
 

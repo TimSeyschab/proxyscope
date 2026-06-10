@@ -39,13 +39,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             acquire_request_meta=acquire_request_meta,
         )
 
-        raw_response = (
-            b"HTTP/1.1 200 OK\r\n"
-            b"Content-Type: text/plain\r\n"
-            b"Content-Length: 8\r\n"
-            b"\r\n"
-            b"original"
-        )
+        raw_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
         out = rewriter.feed(raw_response)
         text = out.decode("iso-8859-1")
         self.assertIn("HTTP/1.1 200 OK", text)
@@ -78,13 +72,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             acquire_request_meta=acquire_request_meta,
         )
 
-        raw_response = (
-            b"HTTP/1.1 200 OK\r\n"
-            b"Content-Type: text/plain\r\n"
-            b"Content-Length: 8\r\n"
-            b"\r\n"
-            b"original"
-        )
+        raw_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
         out = rewriter.feed(raw_response)
         text = out.decode("iso-8859-1")
         self.assertIn("HTTP/1.1 202 Accepted", text)
@@ -118,13 +106,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             acquire_request_meta=acquire_request_meta,
         )
 
-        raw_response = (
-            b"HTTP/1.1 200 OK\r\n"
-            b"Content-Type: text/plain\r\n"
-            b"Content-Length: 8\r\n"
-            b"\r\n"
-            b"original"
-        )
+        raw_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
         out = rewriter.feed(raw_response)
         text = out.decode("iso-8859-1")
         self.assertIn("HTTP/1.1 203 Non-Authoritative Information", text)
@@ -145,18 +127,8 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             acquire_request_meta=acquire_request_meta,
         )
 
-        early_hints = (
-            b"HTTP/1.1 103 Early Hints\r\n"
-            b"Link: </style.css>; rel=preload; as=style\r\n"
-            b"\r\n"
-        )
-        final_response = (
-            b"HTTP/1.1 200 OK\r\n"
-            b"Content-Type: text/plain\r\n"
-            b"Content-Length: 8\r\n"
-            b"\r\n"
-            b"original"
-        )
+        early_hints = b"HTTP/1.1 103 Early Hints\r\nLink: </style.css>; rel=preload; as=style\r\n\r\n"
+        final_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
 
         out = rewriter.feed(early_hints + final_response)
         text = out.decode("iso-8859-1")

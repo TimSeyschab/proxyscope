@@ -193,6 +193,24 @@ For HTTPS interception, the root certificate `<mitm_certs_dir>/ca/mitm-ca.crt` m
 poetry run python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
+## Architecture And Quality Checks
+
+The current architecture, module boundaries, and refactoring roadmap are
+documented under [`docs/architecture/`](docs/architecture/README.md) and
+[`docs/architecture-refactoring-plan.md`](docs/architecture-refactoring-plan.md).
+
+Run the local quality gates:
+
+```bash
+poetry check
+poetry run ruff format --check proxyscope tests scripts
+poetry run ruff check proxyscope tests scripts
+poetry run pyright
+poetry run coverage run -m unittest discover -s tests -p "test_*.py"
+poetry run coverage report
+poetry build
+```
+
 ## License
 
 MIT, see [LICENSE](LICENSE).

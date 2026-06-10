@@ -25,7 +25,7 @@ class TestHTTP1RequestHeaderRewriter(unittest.TestCase):
         raw = (
             b"GET /x HTTP/1.1\r\n"
             b"Host: example.com\r\n"
-            b"If-None-Match: \"abc\"\r\n"
+            b'If-None-Match: "abc"\r\n'
             b"If-Modified-Since: Mon, 01 Jan 2024 00:00:00 GMT\r\n"
             b"\r\n"
         )
@@ -41,7 +41,7 @@ class TestHTTP1RequestHeaderRewriter(unittest.TestCase):
 
     def test_rewriter_handles_split_header_chunks(self) -> None:
         rewriter = HTTP1RequestHeaderRewriter()
-        part1 = b"GET /x HTTP/1.1\r\nHost: example.com\r\nIf-None-Match: \"abc\""
+        part1 = b'GET /x HTTP/1.1\r\nHost: example.com\r\nIf-None-Match: "abc"'
         part2 = b"\r\n\r\n"
         out1 = rewriter.feed(part1)
         out2 = rewriter.feed(part2)

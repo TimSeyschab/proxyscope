@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import requests

@@ -49,4 +49,3 @@ class TestTunnelConnectionRegistry(unittest.TestCase):
         registry.unregister(sock)
 
         self.assertEqual(registry.close_all(), 0)
-

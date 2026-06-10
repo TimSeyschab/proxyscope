@@ -1,8 +1,8 @@
-from dataclasses import dataclass
 import ipaddress
-from pathlib import Path
 import re
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
 
 
 class MitmCertificateError(Exception):
@@ -91,9 +91,7 @@ class MitmCertificateAuthority:
 
     def issue_host_certificate(self, host: str) -> tuple[Path, Path]:
         if not self.is_ready():
-            raise MitmCertificateError(
-                f"Missing CA files: cert={self.ca_cert_path} key={self.ca_key_path}"
-            )
+            raise MitmCertificateError(f"Missing CA files: cert={self.ca_cert_path} key={self.ca_key_path}")
 
         self.hosts_dir.mkdir(parents=True, exist_ok=True)
         safe_host = _SAFE_HOST_RE.sub("_", host)

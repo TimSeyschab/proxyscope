@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Callable
 
 from proxyscope.app.config.runtime import RuntimeConfig, normalize_http_method, normalize_modification_url

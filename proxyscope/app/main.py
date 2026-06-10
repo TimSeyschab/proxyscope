@@ -1,14 +1,14 @@
-from argparse import ArgumentParser
 import logging
 import sys
 import threading
+from argparse import ArgumentParser
 
 from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.logging.setup import configure_logging
-from proxyscope.app.logging.observability import set_runtime_observer
-from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
 from proxyscope.app.editing.modifier import ResponseModifierService, set_response_modifier
+from proxyscope.app.logging.observability import set_runtime_observer
+from proxyscope.app.logging.setup import configure_logging
 from proxyscope.app.runtime.cli import RuntimeCLI
+from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
 from proxyscope.proxy.server import ProxyHTTPServer, create_server
 
 LOGGER = logging.getLogger("tproxy.app")

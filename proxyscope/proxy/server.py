@@ -5,6 +5,12 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import urlsplit
 
+from proxyscope.app.config.runtime import get_static_response_template_for_request, should_modify_response_for_request
+from proxyscope.app.editing.modifier import get_response_modifier
+from proxyscope.app.logging.observability import emit_site_visit
+from proxyscope.app.logging.request_response import REQUEST_LOGGER, log_incoming_request, log_outgoing_response
+from proxyscope.mitm.certificates import MitmCertificateError, certificate_authority_for_root, default_ca
+from proxyscope.mitm.tunnel import MitmTLSInterceptor
 from proxyscope.proxy.connect_tunnel import (
     ConnectUpstreamConnectionError,
     ConnectUpstreamTimeoutError,
@@ -13,24 +19,18 @@ from proxyscope.proxy.connect_tunnel import (
 )
 from proxyscope.proxy.forwarding import (
     BODY_PREVIEW_BYTES,
-    capture_body_preview,
+    STREAM_CHUNK_SIZE,
     ForwardRequest,
     ForwardResponse,
-    STREAM_CHUNK_SIZE,
     UpstreamForwarder,
+    capture_body_preview,
     prepare_forward_headers,
     prepare_forward_request,
     resolve_target_url,
 )
 from proxyscope.proxy.http_bridge import map_incoming_request, write_forward_response
-from proxyscope.mitm.certificates import MitmCertificateError, certificate_authority_for_root, default_ca
-from proxyscope.mitm.tunnel import MitmTLSInterceptor
-from proxyscope.app.logging.observability import emit_site_visit
-from proxyscope.app.config.runtime import get_static_response_template_for_request, should_modify_response_for_request
-from proxyscope.app.editing.modifier import get_response_modifier
-from proxyscope.proxy.types import Forwarder
 from proxyscope.proxy.tunnel_registry import TunnelConnectionRegistry
-from proxyscope.app.logging.request_response import REQUEST_LOGGER, log_incoming_request, log_outgoing_response
+from proxyscope.proxy.types import Forwarder
 
 SERVER_LOGGER: Final = logging.getLogger("tproxy.server")
 
@@ -143,10 +143,14 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             preview = b""
             body_size = 0
             if send_body:
+
+                def write_chunk(chunk: bytes) -> None:
+                    self.wfile.write(chunk)
+
                 preview, body_size = capture_body_preview(
                     upstream_response.raw.stream(STREAM_CHUNK_SIZE, decode_content=False),
                     max_bytes=BODY_PREVIEW_BYTES,
-                    on_chunk=self.wfile.write,
+                    on_chunk=write_chunk,
                 )
 
             return ForwardResponse(

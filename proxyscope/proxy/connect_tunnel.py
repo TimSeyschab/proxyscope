@@ -1,8 +1,8 @@
-from dataclasses import dataclass
 import re
 import selectors
 import socket
-
+from dataclasses import dataclass
+from typing import cast
 
 _AUTHORITY_PATTERN = re.compile(r"^(?P<host>[A-Za-z0-9.\-]+):(?P<port>\d{1,5})$")
 
@@ -102,8 +102,8 @@ def _relay_bidirectional(
                 return
 
             for key, _mask in events:
-                source_sock: socket.socket = key.fileobj
-                destination_sock: socket.socket = key.data
+                source_sock = cast(socket.socket, key.fileobj)
+                destination_sock = cast(socket.socket, key.data)
 
                 chunk = source_sock.recv(65536)
 

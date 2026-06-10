@@ -3,8 +3,7 @@ from typing import Protocol
 
 
 class RuntimeObserver(Protocol):
-    def on_site_visit(self, host: str) -> None:
-        ...
+    def on_site_visit(self, host: str) -> None: ...
 
 
 _observer_lock = Lock()
@@ -23,4 +22,3 @@ def emit_site_visit(host: str) -> None:
     if observer is None:
         return
     observer.on_site_visit(host)
-

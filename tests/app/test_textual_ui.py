@@ -6,13 +6,11 @@ from textual.widgets._option_list import Option
 from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
 from proxyscope.app.runtime.textual_ui import (
     RuntimeTextualApp,
-    _format_detail_tabs,
     _focus_step_order,
-    _plain_text,
     _shortcut_token_from_key_event,
     determine_runtime_layout,
 )
-from proxyscope.app.runtime.ui_presenter import _build_request_rows, _format_detail
+from proxyscope.app.runtime.ui_components.rendering import format_detail_tabs, plain_text
 from proxyscope.app.runtime.ui_models import (
     AuxPanelModel,
     AuxPanelTabModel,
@@ -21,9 +19,12 @@ from proxyscope.app.runtime.ui_models import (
     RuntimeScreenModel,
     StatusBarModel,
 )
+from proxyscope.app.runtime.ui_presenter import _build_request_rows, _format_detail
 
 
-def _screen_model(*, width_mode: str = "detail", active_pane: str = "requests", aux_visible: bool = True) -> RuntimeScreenModel:
+def _screen_model(
+    *, width_mode: str = "detail", active_pane: str = "requests", aux_visible: bool = True
+) -> RuntimeScreenModel:
     return RuntimeScreenModel(
         request_list=RequestListModel(
             title="MAIN 1/1",
@@ -76,17 +77,17 @@ class TestTextualUILayout(unittest.TestCase):
 
 class TestTextualUIDetailFormatting(unittest.TestCase):
     def test_plain_text_preserves_markup_like_content(self) -> None:
-        rendered = _plain_text("DETAIL [response] body=[abc]")
+        rendered = plain_text("DETAIL [response] body=[abc]")
 
         self.assertEqual(rendered.plain, "DETAIL [response] body=[abc]")
 
     def test_detail_tabs_show_response_target(self) -> None:
-        tabs = _format_detail_tabs(detail_tab="request", has_response=True)
+        tabs = format_detail_tabs(detail_tab="request", has_response=True)
 
         self.assertEqual(tabs, "[Request] |  Response ")
 
     def test_detail_tabs_mark_pending_response(self) -> None:
-        tabs = _format_detail_tabs(detail_tab="request", has_response=False)
+        tabs = format_detail_tabs(detail_tab="request", has_response=False)
 
         self.assertEqual(tabs, "[Request] |  Response (pending) ")
 

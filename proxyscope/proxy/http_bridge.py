@@ -1,4 +1,3 @@
-
 from http.server import BaseHTTPRequestHandler
 
 from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse

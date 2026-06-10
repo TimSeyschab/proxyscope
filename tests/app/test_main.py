@@ -1,12 +1,12 @@
-from argparse import Namespace
 import logging
 import unittest
+from argparse import Namespace
 from unittest.mock import Mock, patch
 
-from proxyscope.app.main import main
 from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
 from proxyscope.app.editing.modifier import ResponseModifierService, set_response_modifier
+from proxyscope.app.main import main
+from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
 
 
 class _FakeThread:
@@ -86,7 +86,10 @@ class TestAppMain(unittest.TestCase):
             patch("proxyscope.app.main.sys.stdin.isatty", return_value=True),
             patch("proxyscope.app.main.sys.stdout.isatty", return_value=True),
             patch("proxyscope.app.main.set_runtime_observer") as observer_mock,
-            patch("proxyscope.app.main.threading.Thread", side_effect=lambda target, daemon: _FakeThread(target=target, daemon=daemon)),
+            patch(
+                "proxyscope.app.main.threading.Thread",
+                side_effect=lambda target, daemon: _FakeThread(target=target, daemon=daemon),
+            ),
         ):
             main()
 

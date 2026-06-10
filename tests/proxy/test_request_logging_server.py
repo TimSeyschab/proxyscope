@@ -92,9 +92,7 @@ class TestRequestLoggingServer(unittest.TestCase):
             echo_host, echo_port = echo_server.server_address
             with socket.create_connection((self.host, self.port), timeout=2) as proxy_client:
                 connect_request = (
-                    f"CONNECT {echo_host}:{echo_port} HTTP/1.1\r\n"
-                    f"Host: {echo_host}:{echo_port}\r\n"
-                    "\r\n"
+                    f"CONNECT {echo_host}:{echo_port} HTTP/1.1\r\nHost: {echo_host}:{echo_port}\r\n\r\n"
                 ).encode("utf-8")
                 proxy_client.sendall(connect_request)
 
@@ -303,11 +301,7 @@ class TestRequestLoggingServer(unittest.TestCase):
                         return
                     request_data += chunk
                 response = (
-                    b"HTTP/1.1 200 OK\r\n"
-                    b"Content-Type: text/plain\r\n"
-                    b"Content-Length: 5000\r\n"
-                    b"\r\n"
-                    + self.response_body
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5000\r\n\r\n" + self.response_body
                 )
                 self.request.sendall(response)
 

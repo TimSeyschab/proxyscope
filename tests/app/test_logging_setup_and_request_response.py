@@ -115,4 +115,3 @@ class TestRequestResponseLogging(unittest.TestCase):
             request_id=None,
         )
         self.assertEqual(self.journal.list_entries(), ())
-

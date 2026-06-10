@@ -1,6 +1,6 @@
+import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import threading
 
 from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
 from proxyscope.proxy.forwarding import ForwardRequest, UpstreamForwarder, capture_body_preview

@@ -1,18 +1,18 @@
-from collections import deque
-from dataclasses import dataclass
 import socket
 import ssl
 import threading
 import time
+from collections import deque
+from dataclasses import dataclass
 
 from proxyscope.app.config.runtime import is_cache_invalidation_enabled
-from proxyscope.mitm.certificates import MitmCertificateAuthority
 from proxyscope.app.editing.modifier import get_response_modifier
+from proxyscope.app.logging.request_response import log_mitm_http_request, log_mitm_http_response
+from proxyscope.mitm.certificates import MitmCertificateAuthority
 from proxyscope.proxy.connect_tunnel import ConnectTarget, ConnectUpstreamConnectionError, ConnectUpstreamTimeoutError
 from proxyscope.proxy.http1_request_rewriter import HTTP1RequestHeaderRewriter
 from proxyscope.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
 from proxyscope.proxy.http1_sniffer import HTTP1MessageSniffer
-from proxyscope.app.logging.request_response import log_mitm_http_request, log_mitm_http_response
 
 
 @dataclass(frozen=True)
@@ -114,12 +114,8 @@ class MitmTLSInterceptor:
                                 return None
                             return pending_request_meta.popleft()
 
-                    request_sniffer = HTTP1MessageSniffer(
-                        on_request
-                    )
-                    response_sniffer = HTTP1MessageSniffer(
-                        on_response
-                    )
+                    request_sniffer = HTTP1MessageSniffer(on_request)
+                    response_sniffer = HTTP1MessageSniffer(on_response)
                     response_rewriter = HTTP1ResponseModifierRewriter(
                         response_modifier=get_response_modifier(),
                         acquire_request_meta=acquire_request_meta,

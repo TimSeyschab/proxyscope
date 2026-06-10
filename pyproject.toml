@@ -34,3 +34,32 @@ packages = [{ include = "proxyscope" }]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.15.16,<0.16.0)",
+    "pyright (>=1.1.410,<2.0.0)",
+    "coverage (>=7.14.1,<8.0.0)"
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.pyright]
+include = ["proxyscope"]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
+reportMissingImports = false
+reportMissingModuleSource = false
+
+[tool.coverage.run]
+source = ["proxyscope"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = true

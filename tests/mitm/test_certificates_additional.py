@@ -1,7 +1,7 @@
-from pathlib import Path
 import subprocess
-from tempfile import TemporaryDirectory
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from proxyscope.mitm.certificates import (
@@ -94,4 +94,3 @@ class TestMitmCertificateErrorPaths(unittest.TestCase):
             with self.assertRaises(MitmCertificateError) as raised:
                 authority._run_openssl(["req", "-x509"])  # noqa: SLF001
         self.assertIn("invalid config", str(raised.exception))
-

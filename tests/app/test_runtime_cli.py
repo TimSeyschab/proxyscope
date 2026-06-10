@@ -1,14 +1,14 @@
-import unittest
 import gzip
 import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.runtime.journal import RequestJournal
-from proxyscope.app.editing.response import _decode_content_encoded_body
 from proxyscope.app.editing.modifier import ResponseModifierService
+from proxyscope.app.editing.response import _decode_content_encoded_body
 from proxyscope.app.runtime.cli import RuntimeCLI
+from proxyscope.app.runtime.journal import RequestJournal
 
 
 class TestRuntimeCLI(unittest.TestCase):

@@ -200,4 +200,3 @@ class TestResponseFlowsE2E(unittest.TestCase):
             upstream.shutdown()
             upstream.server_close()
             upstream_thread.join(timeout=2)
-

@@ -1,6 +1,6 @@
 import base64
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
@@ -149,7 +149,11 @@ def _serialize_har_entry(entry: LoggedExchange) -> dict[str, object]:
         },
         "response": response_section,
         "cache": {},
-        "timings": {"send": DEFAULT_TIMING_MS, "wait": entry.duration_ms or DEFAULT_TIMING_MS, "receive": DEFAULT_TIMING_MS},
+        "timings": {
+            "send": DEFAULT_TIMING_MS,
+            "wait": entry.duration_ms or DEFAULT_TIMING_MS,
+            "receive": DEFAULT_TIMING_MS,
+        },
     }
 
 
@@ -233,12 +237,16 @@ def _parse_optional_timestamp(payload: object) -> float | None:
 def _parse_optional_int(payload: object) -> int | None:
     if payload is None:
         return None
+    if not isinstance(payload, (int, float, str)):
+        raise ValueError("Expected an integer value.")
     return int(payload)
 
 
 def _parse_optional_float(payload: object) -> float | None:
     if payload is None:
         return None
+    if not isinstance(payload, (int, float, str)):
+        raise ValueError("Expected a numeric value.")
     return float(payload)
 
 

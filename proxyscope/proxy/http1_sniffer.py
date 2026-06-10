@@ -154,6 +154,7 @@ class HTTP1MessageSniffer:
 
             del self._buffer[:total_needed]
 
+
 def _header_value(headers: dict[str, str], name: str) -> str:
     target = name.lower()
     for key, value in headers.items():

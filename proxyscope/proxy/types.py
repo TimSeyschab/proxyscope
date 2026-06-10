@@ -4,5 +4,4 @@ from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse
 
 
 class Forwarder(Protocol):
-    def forward(self, request: ForwardRequest) -> ForwardResponse:
-        ...
+    def forward(self, request: ForwardRequest) -> ForwardResponse: ...
