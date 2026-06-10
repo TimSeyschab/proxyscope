@@ -11,6 +11,7 @@ from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.editing.modifier import ResponseModifierService
 from proxyscope.app.runtime.context import create_proxy_runtime_context
 from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.server import create_server
 
 
@@ -68,7 +69,10 @@ class TestResponseFlowsE2E(unittest.TestCase):
         config = RuntimeConfig()
         config.add_open_editor_policy(target_url, method="GET")
         journal = RequestJournal()
-        response_modifier = ResponseModifierService(policy_evaluator=config, interactive_enabled=True)
+        response_modifier = ResponseModifierService(
+            policy_evaluator=PolicyEngine(config.policy_repository),
+            interactive_enabled=True,
+        )
         runtime_context = create_proxy_runtime_context(
             runtime_config=config,
             request_journal=journal,

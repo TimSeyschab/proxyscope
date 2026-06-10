@@ -2,21 +2,24 @@
 
 ## Current Flow
 
-Runtime policies are stored and evaluated by `RuntimeConfig`. Plain HTTP and
-MITM traffic currently query this state through separate processing paths:
+Runtime policies are stored behind a `PolicyRepository` and evaluated by the
+transport-independent `PolicyEngine`. `RuntimeConfig` still coordinates policy
+mutation and config-file persistence until Phase 4, but it does not evaluate
+requests.
 
 ```text
-Plain HTTP: RequestLoggingHandler -> RuntimeConfig -> forward/static/edit
-MITM HTTP: MitmTLSInterceptor -> response rewriter -> RuntimeConfig -> edit/static
+Plain HTTP: RequestLoggingHandler -> PolicyEngine -> forward/static/edit
+MITM HTTP: MitmTLSInterceptor -> response rewriter -> PolicyEngine -> edit/static
 ```
 
-Policy actions are currently represented by string values such as
-`open_editor` and `static_response`.
+Policy actions are represented by `OpenEditorAction` and
+`StaticResponseAction`. The action type owns all required state, so invalid
+action/template combinations cannot be represented.
 
 ## Target Flow
 
-A transport-independent policy engine evaluates a request once and returns a
-typed decision:
+A transport-independent policy engine evaluates a request and returns a typed
+`PolicyEvaluation`:
 
 ```text
 RequestContext -> PolicyEngine -> Forward | StaticResponse | EditResponse

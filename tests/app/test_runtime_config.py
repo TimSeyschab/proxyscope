@@ -4,9 +4,21 @@ import unittest
 from pathlib import Path
 
 from proxyscope.app.config.runtime import RuntimeConfig, normalize_whitelist_entry
+from proxyscope.policies.engine import PolicyEngine
+from proxyscope.policies.models import StaticResponseAction
+from proxyscope.policies.repository import InMemoryPolicyRepository
 
 
 class TestRuntimeConfig(unittest.TestCase):
+    def test_policy_mutations_use_injected_repository(self) -> None:
+        repository = InMemoryPolicyRepository()
+        config = RuntimeConfig(policy_repository=repository)
+
+        config.add_open_editor_policy("https://example.com/edit")
+
+        self.assertEqual(config.policy_rules(), repository.list())
+        self.assertEqual(len(repository.list()), 1)
+
     def test_empty_whitelist_logs_everything(self) -> None:
         config = RuntimeConfig()
         self.assertTrue(config.should_log_for_host("example.com"))
@@ -49,33 +61,61 @@ class TestRuntimeConfig(unittest.TestCase):
         config = RuntimeConfig()
         added = config.add_modification_whitelist_entry("https://example.com/path?x=1")
         self.assertEqual(added, "GET https://example.com/path")
-        self.assertTrue(config.should_modify_response_for_request(method="GET", url="https://example.com/path"))
-        self.assertFalse(config.should_modify_response_for_request(method="GET", url="https://example.com/other"))
+        self.assertTrue(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="GET", url="https://example.com/path"
+            )
+        )
+        self.assertFalse(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="GET", url="https://example.com/other"
+            )
+        )
 
     def test_modification_whitelist_matches_http_https_variants(self) -> None:
         config = RuntimeConfig()
         config.add_modification_whitelist_entry("http://example.com/path")
-        self.assertTrue(config.should_modify_response_for_request(method="GET", url="https://example.com/path"))
+        self.assertTrue(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="GET", url="https://example.com/path"
+            )
+        )
 
     def test_modification_whitelist_host_wide_and_prefix(self) -> None:
         config = RuntimeConfig()
         config.add_modification_whitelist_entry("example.com")
         self.assertTrue(
-            config.should_modify_response_for_request(method="GET", url="https://example.com/anything/here")
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="GET", url="https://example.com/anything/here"
+            )
         )
 
         config = RuntimeConfig()
         config.add_modification_whitelist_entry("https://example.com/api")
-        self.assertTrue(config.should_modify_response_for_request(method="GET", url="https://example.com/api/v1/users"))
+        self.assertTrue(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="GET", url="https://example.com/api/v1/users"
+            )
+        )
         self.assertFalse(
-            config.should_modify_response_for_request(method="GET", url="https://example.com/static/app.js")
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="GET", url="https://example.com/static/app.js"
+            )
         )
 
     def test_modification_whitelist_is_method_sensitive(self) -> None:
         config = RuntimeConfig()
         config.add_modification_whitelist_entry("https://example.com/path", method="GET")
-        self.assertTrue(config.should_modify_response_for_request(method="GET", url="https://example.com/path"))
-        self.assertFalse(config.should_modify_response_for_request(method="POST", url="https://example.com/path"))
+        self.assertTrue(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="GET", url="https://example.com/path"
+            )
+        )
+        self.assertFalse(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                method="POST", url="https://example.com/path"
+            )
+        )
 
     def test_open_editor_policy_api_aliases_work(self) -> None:
         config = RuntimeConfig()
@@ -95,7 +135,7 @@ class TestRuntimeConfig(unittest.TestCase):
             body=b"brew",
             method="GET",
         )
-        template = config.get_static_response_template_for_request(
+        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
             method="GET",
             url="https://example.com/static",
         )
@@ -131,12 +171,12 @@ class TestRuntimeConfig(unittest.TestCase):
             self.assertFalse(reloaded.mitm_enabled)
             self.assertEqual(reloaded.mitm_certs_dir, Path("cert-bundle"))
             self.assertTrue(
-                reloaded.should_modify_response_for_request(
+                PolicyEngine(reloaded.policy_repository).should_modify_response_for_request(
                     method="POST",
                     url="https://example.com/edit",
                 )
             )
-            template = reloaded.get_static_response_template_for_request(
+            template = PolicyEngine(reloaded.policy_repository).get_static_response_template_for_request(
                 method="GET",
                 url="https://example.com/mock",
             )
@@ -168,7 +208,7 @@ class TestRuntimeConfig(unittest.TestCase):
             priority=10,
         )
 
-        template = config.get_static_response_template_for_request(
+        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
             method="GET",
             url="https://example.com/api/users",
         )
@@ -187,7 +227,7 @@ class TestRuntimeConfig(unittest.TestCase):
         )
 
         self.assertTrue(
-            config.should_modify_response_for_request(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
                 method="GET",
                 url="https://example.com/api/v2/users",
             )
@@ -228,8 +268,16 @@ class TestRuntimeConfig(unittest.TestCase):
             self.assertFalse(config.mitm_enabled)
             self.assertEqual(config.mitm_certs_dir, Path("after-certs"))
             self.assertEqual(config.whitelist_entries(), ("after.example",))
-            self.assertFalse(config.should_modify_response_for_request(method="GET", url="https://before.example/edit"))
-            self.assertTrue(config.should_modify_response_for_request(method="POST", url="https://after.example/edit"))
+            self.assertFalse(
+                PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                    method="GET", url="https://before.example/edit"
+                )
+            )
+            self.assertTrue(
+                PolicyEngine(config.policy_repository).should_modify_response_for_request(
+                    method="POST", url="https://after.example/edit"
+                )
+            )
 
     def test_policy_management_enable_disable_remove_and_descriptions(self) -> None:
         config = RuntimeConfig()
@@ -248,10 +296,16 @@ class TestRuntimeConfig(unittest.TestCase):
         self.assertTrue(any("static_response" in item for item in descriptions))
 
         self.assertTrue(config.set_policy_rule_enabled(static_name, enabled=False))
-        self.assertIsNone(config.get_static_response_template_for_request(method="GET", url="https://example.com/mock"))
+        self.assertIsNone(
+            PolicyEngine(config.policy_repository).get_static_response_template_for_request(
+                method="GET", url="https://example.com/mock"
+            )
+        )
         self.assertTrue(config.set_policy_rule_enabled(static_name, enabled=True))
         self.assertIsNotNone(
-            config.get_static_response_template_for_request(method="GET", url="https://example.com/mock")
+            PolicyEngine(config.policy_repository).get_static_response_template_for_request(
+                method="GET", url="https://example.com/mock"
+            )
         )
         rule = config.get_policy_rule(static_name)
         self.assertIsNotNone(rule)
@@ -262,20 +316,19 @@ class TestRuntimeConfig(unittest.TestCase):
                 name=rule.name,
                 enabled=rule.enabled,
                 priority=rule.priority,
-                action=rule.action,
-                match=rule.match,
-                static_response=type(rule.static_response)(
+                action=StaticResponseAction(
                     status_code=201,
                     reason="Created",
                     headers={"Content-Type": "application/json"},
                     body=b"{}",
-                )
-                if rule.static_response is not None
-                else None,
+                ),
+                match=rule.match,
             ),
         )
         self.assertTrue(replaced)
-        updated_template = config.get_static_response_template_for_request(method="GET", url="https://example.com/mock")
+        updated_template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
+            method="GET", url="https://example.com/mock"
+        )
         self.assertIsNotNone(updated_template)
         assert updated_template is not None
         self.assertEqual(updated_template.status_code, 201)

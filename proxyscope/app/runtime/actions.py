@@ -1,12 +1,13 @@
 from contextlib import nullcontext
 
-from proxyscope.app.config.runtime import PolicyRule, RuntimeConfig
+from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.editing.modifier import ResponseModifierService
 from proxyscope.app.editing.policy import edit_policy_rule_with_external_editor
 from proxyscope.app.editing.response import edit_pending_response_with_external_editor
 from proxyscope.app.runtime.journal import LoggedExchange
 from proxyscope.app.runtime.replay import edit_and_resend_logged_request
 from proxyscope.app.runtime.ui_controller import SuspendUI
+from proxyscope.policies.models import OpenEditorAction, PolicyRule
 
 
 class RuntimePolicyActionService:
@@ -71,7 +72,7 @@ class RuntimePolicyActionService:
         for rule in reversed(self._runtime_config.policy_rules()):
             if rule.name in existing_names:
                 continue
-            if rule.action == "open_editor":
+            if isinstance(rule.action, OpenEditorAction):
                 created_rule = rule
                 break
 

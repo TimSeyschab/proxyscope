@@ -4,6 +4,7 @@ from pathlib import Path
 
 from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.runtime.commands import RuntimeCommandService
+from proxyscope.policies.engine import PolicyEngine
 
 
 class TestRuntimeCommandService(unittest.TestCase):
@@ -38,7 +39,7 @@ class TestRuntimeCommandService(unittest.TestCase):
         )
         self.assertTrue(add_result.handled)
         self.assertTrue(
-            config.should_modify_response_for_request(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
                 method="GET",
                 url="https://example.com/api/v1/users",
             )

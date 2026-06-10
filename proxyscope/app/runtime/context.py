@@ -3,6 +3,7 @@ from proxyscope.app.editing.modifier import ResponseModifierService
 from proxyscope.app.logging.observability import RuntimeEventDispatcher
 from proxyscope.app.logging.request_response import RequestResponseRecorder
 from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.runtime import ProxyRuntimeContext
 
 
@@ -13,10 +14,13 @@ def create_proxy_runtime_context(
     response_modifier: ResponseModifierService | None = None,
     runtime_events: RuntimeEventDispatcher | None = None,
 ) -> ProxyRuntimeContext:
-    resolved_modifier = response_modifier or ResponseModifierService(policy_evaluator=runtime_config)
+    policy_engine = PolicyEngine(runtime_config.policy_repository)
+    resolved_modifier = response_modifier or ResponseModifierService(policy_evaluator=policy_engine)
+    if isinstance(resolved_modifier, ResponseModifierService):
+        resolved_modifier.set_policy_evaluator(policy_engine)
     resolved_events = runtime_events or RuntimeEventDispatcher()
     return ProxyRuntimeContext(
-        policy_evaluator=runtime_config,
+        policy_evaluator=policy_engine,
         exchange_recorder=RequestResponseRecorder(
             runtime_config=runtime_config,
             request_journal=request_journal,

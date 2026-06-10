@@ -6,7 +6,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from proxyscope.app.config.runtime import PolicyRule, parse_policy_rule, serialize_policy_rule
+from proxyscope.policies.models import PolicyRule
+from proxyscope.policies.serialization import parse_policy_rule, serialize_policy_rule
 
 
 def edit_policy_rule_with_external_editor(rule: PolicyRule) -> tuple[bool, PolicyRule | None, str]:
@@ -34,7 +35,6 @@ def edit_policy_rule_with_external_editor(rule: PolicyRule) -> tuple[bool, Polic
                     priority=parsed.priority,
                     action=parsed.action,
                     match=parsed.match,
-                    static_response=parsed.static_response,
                 )
             return True, parsed, f"Policy updated: {rule.name}"
     except Exception as exc:  # noqa: BLE001

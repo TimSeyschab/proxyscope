@@ -1,34 +1,29 @@
 import json
 import logging
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 from threading import RLock
 
-from proxyscope.app.config.matching import (
+from proxyscope.app.config.matching import normalize_whitelist_entry
+from proxyscope.policies.matching import (
     first_rule_method,
     normalize_http_method,
-    normalize_modification_url,
-    normalize_whitelist_entry,
+    normalize_policy_url,
     policy_description,
-    policy_rule_matches_request,
     policy_sort_key,
-    request_url_candidates,
     rule_matches_url,
     rule_method_display,
     rule_url_display,
 )
-from proxyscope.app.config.models import PolicyRule, RequestMatchRule, StaticResponseTemplate
-from proxyscope.app.config.serialization import (
-    parse_policy_rule as parse_policy_rule_payload,
-)
-from proxyscope.app.config.serialization import (
-    serialize_policy_rule as serialize_policy_rule_payload,
-)
+from proxyscope.policies.models import OpenEditorAction, PolicyRule, RequestMatchRule, StaticResponseAction
+from proxyscope.policies.repository import InMemoryPolicyRepository, PolicyRepository
+from proxyscope.policies.serialization import parse_policy_rule, serialize_policy_rule
 
 
 class RuntimeConfig:
     """
-    Runtime configuration shared by logging, policy matching, and UI.
+    Runtime settings and transitional config-file persistence for the application.
     """
 
     def __init__(
@@ -41,6 +36,7 @@ class RuntimeConfig:
         mitm_certs_dir: str | Path = "certs",
         config_path: str | Path | None = None,
         policy_rules: Iterable[PolicyRule] | None = None,
+        policy_repository: PolicyRepository | None = None,
     ) -> None:
         self._lock = RLock()
         self._log_level = log_level
@@ -49,7 +45,9 @@ class RuntimeConfig:
         self._mitm_enabled = mitm_enabled
         self._mitm_certs_dir = Path(mitm_certs_dir)
         self._config_path = Path(config_path) if config_path is not None else None
-        self._policy_rules: list[PolicyRule] = list(policy_rules or [])
+        if policy_repository is not None and policy_rules is not None:
+            raise ValueError("Provide either policy_rules or policy_repository, not both.")
+        self._policy_repository = policy_repository or InMemoryPolicyRepository(policy_rules or ())
 
         if log_whitelist is not None:
             for entry in log_whitelist:
@@ -162,27 +160,25 @@ class RuntimeConfig:
         return normalized
 
     def policy_rules(self) -> tuple[PolicyRule, ...]:
-        with self._lock:
-            return tuple(self._policy_rules)
+        return self._policy_repository.list()
+
+    @property
+    def policy_repository(self) -> PolicyRepository:
+        return self._policy_repository
 
     def sorted_policy_rules(self) -> tuple[PolicyRule, ...]:
-        with self._lock:
-            ordered = sorted(self._policy_rules, key=policy_sort_key, reverse=True)
-            return tuple(ordered)
+        return tuple(sorted(self._policy_repository.list(), key=policy_sort_key, reverse=True))
 
     def set_policy_rules(self, rules: Iterable[PolicyRule]) -> None:
-        with self._lock:
-            self._policy_rules = list(rules)
+        self._policy_repository.replace_all(rules)
         self._persist_if_configured()
 
     def add_policy_rule(self, rule: PolicyRule) -> None:
-        with self._lock:
-            self._policy_rules.append(rule)
+        self._policy_repository.add(rule)
         self._persist_if_configured()
 
     def clear_policy_rules(self) -> None:
-        with self._lock:
-            self._policy_rules.clear()
+        self._policy_repository.replace_all(())
         self._persist_if_configured()
 
     def policy_descriptions(self) -> tuple[str, ...]:
@@ -192,15 +188,7 @@ class RuntimeConfig:
         normalized = name.strip()
         if not normalized:
             raise ValueError("Policy name must not be empty.")
-        removed = False
-        with self._lock:
-            kept: list[PolicyRule] = []
-            for rule in self._policy_rules:
-                if rule.name == normalized:
-                    removed = True
-                    continue
-                kept.append(rule)
-            self._policy_rules = kept
+        removed = self._policy_repository.remove(normalized)
         if removed:
             self._persist_if_configured()
         return removed
@@ -209,26 +197,13 @@ class RuntimeConfig:
         normalized = name.strip()
         if not normalized:
             raise ValueError("Policy name must not be empty.")
-        with self._lock:
-            for rule in self._policy_rules:
-                if rule.name == normalized:
-                    return rule
-        return None
+        return self._policy_repository.get(normalized)
 
     def replace_policy_rule(self, name: str, replacement: PolicyRule) -> bool:
         normalized = name.strip()
         if not normalized:
             raise ValueError("Policy name must not be empty.")
-        replaced = False
-        with self._lock:
-            updated: list[PolicyRule] = []
-            for rule in self._policy_rules:
-                if not replaced and rule.name == normalized:
-                    updated.append(replacement)
-                    replaced = True
-                    continue
-                updated.append(rule)
-            self._policy_rules = updated
+        replaced = self._policy_repository.replace(normalized, replacement)
         if replaced:
             self._persist_if_configured()
         return replaced
@@ -237,25 +212,8 @@ class RuntimeConfig:
         normalized = name.strip()
         if not normalized:
             raise ValueError("Policy name must not be empty.")
-        changed = False
-        with self._lock:
-            updated: list[PolicyRule] = []
-            for rule in self._policy_rules:
-                if rule.name != normalized:
-                    updated.append(rule)
-                    continue
-                updated.append(
-                    PolicyRule(
-                        name=rule.name,
-                        enabled=enabled,
-                        priority=rule.priority,
-                        action=rule.action,
-                        match=rule.match,
-                        static_response=rule.static_response,
-                    )
-                )
-                changed = True
-            self._policy_rules = updated
+        rule = self._policy_repository.get(normalized)
+        changed = rule is not None and self._policy_repository.replace(normalized, replace(rule, enabled=enabled))
         if changed:
             self._persist_if_configured()
         return changed
@@ -273,9 +231,9 @@ class RuntimeConfig:
         name: str | None = None,
         priority: int = 0,
     ) -> str:
-        normalized_url = normalize_modification_url(url)
+        normalized_url = normalize_policy_url(url)
         normalized_method = normalize_http_method(method) if method is not None else None
-        rule_name = name or f"static-response-{len(self._policy_rules) + 1}"
+        rule_name = name or f"static-response-{len(self._policy_repository.list()) + 1}"
         match = RequestMatchRule(
             methods=(normalized_method,) if normalized_method is not None else None,
             url_prefix=normalized_url if url_prefix else None,
@@ -286,22 +244,24 @@ class RuntimeConfig:
                 name=rule_name,
                 enabled=True,
                 priority=priority,
-                action="static_response",
-                match=match,
-                static_response=StaticResponseTemplate(
+                action=StaticResponseAction(
                     status_code=status_code,
                     reason=reason,
                     headers=dict(headers or {}),
                     body=body,
                 ),
+                match=match,
             )
         )
         return rule_name
 
     def modification_whitelist_entries(self) -> tuple[str, ...]:
-        with self._lock:
-            entries = [rule for rule in self._policy_rules if rule.action == "open_editor" and rule.enabled]
-            return tuple(f"{rule_method_display(rule)} {rule_url_display(rule)}" for rule in entries)
+        entries = [
+            rule
+            for rule in self._policy_repository.list()
+            if isinstance(rule.action, OpenEditorAction) and rule.enabled
+        ]
+        return tuple(f"{rule_method_display(rule)} {rule_url_display(rule)}" for rule in entries)
 
     def open_editor_policy_entries(self) -> tuple[str, ...]:
         return self.modification_whitelist_entries()
@@ -330,15 +290,15 @@ class RuntimeConfig:
         url_prefix: bool = False,
         priority: int = 0,
     ) -> str:
-        normalized_url = normalize_modification_url(value)
+        normalized_url = normalize_policy_url(value)
         normalized_method = normalize_http_method(method)
-        name = f"open-editor-{len(self._policy_rules) + 1}"
+        name = f"open-editor-{len(self._policy_repository.list()) + 1}"
         self.add_policy_rule(
             PolicyRule(
                 name=name,
                 enabled=True,
                 priority=priority,
-                action="open_editor",
+                action=OpenEditorAction(),
                 match=RequestMatchRule(
                     methods=(normalized_method,),
                     url_exact=None if url_prefix else normalized_url,
@@ -352,85 +312,39 @@ class RuntimeConfig:
         normalized = name.strip()
         if not normalized:
             raise ValueError("Policy name must not be empty.")
-        changed = False
-        with self._lock:
-            updated: list[PolicyRule] = []
-            for rule in self._policy_rules:
-                if rule.name != normalized:
-                    updated.append(rule)
-                    continue
-                updated.append(
-                    PolicyRule(
-                        name=rule.name,
-                        enabled=rule.enabled,
-                        priority=priority,
-                        action=rule.action,
-                        match=rule.match,
-                        static_response=rule.static_response,
-                    )
-                )
-                changed = True
-            self._policy_rules = updated
+        rule = self._policy_repository.get(normalized)
+        changed = rule is not None and self._policy_repository.replace(normalized, replace(rule, priority=priority))
         if changed:
             self._persist_if_configured()
         return changed
 
     def remove_modification_whitelist_entry(self, value: str, *, method: str | None = None) -> bool:
-        normalized_url = normalize_modification_url(value)
+        normalized_url = normalize_policy_url(value)
         normalized_method = normalize_http_method(method) if method is not None else None
         removed = False
-        with self._lock:
-            kept: list[PolicyRule] = []
-            for rule in self._policy_rules:
-                if rule.action != "open_editor":
-                    kept.append(rule)
-                    continue
-                if not rule_matches_url(rule, normalized_url):
-                    kept.append(rule)
-                    continue
-                rule_method = first_rule_method(rule)
-                if normalized_method is not None and rule_method != normalized_method:
-                    kept.append(rule)
-                    continue
-                removed = True
-            self._policy_rules = kept
+        kept: list[PolicyRule] = []
+        for rule in self._policy_repository.list():
+            if not isinstance(rule.action, OpenEditorAction):
+                kept.append(rule)
+                continue
+            if not rule_matches_url(rule, normalized_url):
+                kept.append(rule)
+                continue
+            rule_method = first_rule_method(rule)
+            if normalized_method is not None and rule_method != normalized_method:
+                kept.append(rule)
+                continue
+            removed = True
+        self._policy_repository.replace_all(kept)
         if removed:
             self._persist_if_configured()
         return removed
 
     def clear_modification_whitelist(self) -> None:
-        with self._lock:
-            self._policy_rules = [rule for rule in self._policy_rules if rule.action != "open_editor"]
+        self._policy_repository.replace_all(
+            rule for rule in self._policy_repository.list() if not isinstance(rule.action, OpenEditorAction)
+        )
         self._persist_if_configured()
-
-    def should_modify_response_for_request(self, *, method: str, url: str) -> bool:
-        normalized_method = normalize_http_method(method)
-        candidates = request_url_candidates(url)
-        with self._lock:
-            matching_rules = sorted(self._policy_rules, key=policy_sort_key, reverse=True)
-            for rule in matching_rules:
-                if not rule.enabled or rule.action != "open_editor":
-                    continue
-                if policy_rule_matches_request(rule=rule, method=normalized_method, url_candidates=candidates):
-                    return True
-            return False
-
-    def get_static_response_template_for_request(
-        self,
-        *,
-        method: str,
-        url: str,
-    ) -> StaticResponseTemplate | None:
-        normalized_method = normalize_http_method(method)
-        candidates = request_url_candidates(url)
-        with self._lock:
-            matching_rules = sorted(self._policy_rules, key=policy_sort_key, reverse=True)
-            for rule in matching_rules:
-                if not rule.enabled or rule.action != "static_response":
-                    continue
-                if policy_rule_matches_request(rule=rule, method=normalized_method, url_candidates=candidates):
-                    return rule.static_response
-            return None
 
     def attach_config_path(self, path: str | Path) -> None:
         with self._lock:
@@ -455,7 +369,7 @@ class RuntimeConfig:
             self._cache_invalidation_enabled = reloaded.cache_invalidation_enabled
             self._mitm_enabled = reloaded.mitm_enabled
             self._mitm_certs_dir = reloaded.mitm_certs_dir
-            self._policy_rules = list(reloaded.policy_rules())
+            self._policy_repository.replace_all(reloaded.policy_rules())
         return True
 
     def save(self) -> None:
@@ -480,7 +394,7 @@ class RuntimeConfig:
             "cache_invalidation_enabled": self._cache_invalidation_enabled,
             "mitm_enabled": self._mitm_enabled,
             "mitm_certs_dir": str(self._mitm_certs_dir),
-            "policies": [serialize_policy_rule_payload(rule) for rule in self._policy_rules],
+            "policies": [serialize_policy_rule(rule) for rule in self._policy_repository.list()],
         }
 
     @classmethod
@@ -499,7 +413,7 @@ class RuntimeConfig:
 
         rules: list[PolicyRule] = []
         for item in raw.get("policies", []):
-            parsed = parse_policy_rule_payload(item)
+            parsed = parse_policy_rule(item)
             if parsed is not None:
                 rules.append(parsed)
 
@@ -512,11 +426,3 @@ class RuntimeConfig:
             config_path=resolved_path,
             policy_rules=rules,
         )
-
-
-def serialize_policy_rule(rule: PolicyRule) -> dict:
-    return serialize_policy_rule_payload(rule)
-
-
-def parse_policy_rule(data: object) -> PolicyRule | None:
-    return parse_policy_rule_payload(data)

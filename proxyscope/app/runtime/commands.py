@@ -2,7 +2,8 @@ import json
 from dataclasses import dataclass
 from typing import Callable
 
-from proxyscope.app.config.runtime import RuntimeConfig, normalize_http_method, normalize_modification_url
+from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.policies.matching import normalize_http_method, normalize_policy_url
 
 MIN_HTTP_STATUS_CODE = 100
 MAX_HTTP_STATUS_CODE = 599
@@ -265,7 +266,7 @@ class RuntimeCommandService:
                 )
             try:
                 removed = self._runtime_config.remove_open_editor_policy(value, method=method)
-                normalized = normalize_modification_url(value)
+                normalized = normalize_policy_url(value)
                 method_label = normalize_http_method(method) if method is not None else "*"
             except ValueError as exc:
                 return CommandExecutionResult(handled=True, status_message=str(exc))

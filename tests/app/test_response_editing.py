@@ -5,6 +5,7 @@ from unittest.mock import patch
 from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.editing.modifier import PendingResponseEdit
 from proxyscope.app.editing.response import _maybe_save_static_response_rule
+from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.forwarding import ForwardResponse
 
 
@@ -31,7 +32,7 @@ class TestResponseEditing(unittest.TestCase):
                 runtime_config=config,
             )
         self.assertIsNotNone(policy_name)
-        template = config.get_static_response_template_for_request(
+        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
             method="GET",
             url="https://example.com/edited",
         )
@@ -40,7 +41,7 @@ class TestResponseEditing(unittest.TestCase):
         self.assertEqual(template.body, b"edited-body")
         self.assertEqual(template.status_code, 200)
         self.assertFalse(
-            config.should_modify_response_for_request(
+            PolicyEngine(config.policy_repository).should_modify_response_for_request(
                 method="GET",
                 url="https://example.com/edited",
             )
@@ -67,7 +68,7 @@ class TestResponseEditing(unittest.TestCase):
                 runtime_config=config,
             )
         self.assertIsNone(policy_name)
-        template = config.get_static_response_template_for_request(
+        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
             method="GET",
             url="https://example.com/edited",
         )

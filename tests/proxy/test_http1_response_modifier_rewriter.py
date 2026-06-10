@@ -1,6 +1,7 @@
 import unittest
 
 from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.forwarding import ForwardResponse
 from proxyscope.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
 
@@ -32,7 +33,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=RuntimeConfig(),
+            policy_evaluator=PolicyEngine(RuntimeConfig().policy_repository),
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )
@@ -64,7 +65,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=config,
+            policy_evaluator=PolicyEngine(config.policy_repository),
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )
@@ -97,7 +98,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=config,
+            policy_evaluator=PolicyEngine(config.policy_repository),
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )
@@ -119,7 +120,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=RuntimeConfig(),
+            policy_evaluator=PolicyEngine(RuntimeConfig().policy_repository),
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )

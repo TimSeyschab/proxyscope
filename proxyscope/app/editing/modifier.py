@@ -51,6 +51,9 @@ class ResponseModifierService:
         with self._lock:
             self._interactive_enabled = enabled
 
+    def set_policy_evaluator(self, policy_evaluator: PolicyEvaluator) -> None:
+        self._policy_evaluator = policy_evaluator
+
     def maybe_modify_response(self, *, request_url: str, method: str, response: ForwardResponse) -> ForwardResponse:
         if self._policy_evaluator is None or not self._policy_evaluator.should_modify_response_for_request(
             method=method, url=request_url

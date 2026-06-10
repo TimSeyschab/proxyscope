@@ -9,6 +9,7 @@ from proxyscope.app.editing.modifier import ResponseModifierService
 from proxyscope.app.editing.response import _decode_content_encoded_body
 from proxyscope.app.runtime.cli import RuntimeCLI
 from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.policies.engine import PolicyEngine
 
 
 class TestRuntimeCLI(unittest.TestCase):
@@ -351,7 +352,7 @@ class TestRuntimeCLI(unittest.TestCase):
             response_modifier=ResponseModifierService(),
         )
         cli.execute_command("policy add-static GET https://example.com/mock 418 text/plain hello-policy")
-        template = config.get_static_response_template_for_request(
+        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
             method="GET",
             url="https://example.com/mock",
         )
@@ -376,14 +377,14 @@ class TestRuntimeCLI(unittest.TestCase):
             response_modifier=ResponseModifierService(),
         )
         cli.execute_command(f"policy disable {rule_name}")
-        template = config.get_static_response_template_for_request(
+        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
             method="GET",
             url="https://example.com/mock",
         )
         self.assertIsNone(template)
 
         cli.execute_command(f"policy enable {rule_name}")
-        template = config.get_static_response_template_for_request(
+        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
             method="GET",
             url="https://example.com/mock",
         )
@@ -412,7 +413,9 @@ class TestRuntimeCLI(unittest.TestCase):
 
         self.assertEqual(cli._status_message, "Open Policies tab first (Shift+P).")  # type: ignore[attr-defined]
         self.assertIsNotNone(
-            config.get_static_response_template_for_request(method="GET", url="https://example.com/mock")
+            PolicyEngine(config.policy_repository).get_static_response_template_for_request(
+                method="GET", url="https://example.com/mock"
+            )
         )
         rule = config.get_policy_rule(rule_name)
         self.assertIsNotNone(rule)
@@ -438,7 +441,11 @@ class TestRuntimeCLI(unittest.TestCase):
 
         cli.disable_selected_policy()
 
-        self.assertIsNone(config.get_static_response_template_for_request(method="GET", url="https://example.com/mock"))
+        self.assertIsNone(
+            PolicyEngine(config.policy_repository).get_static_response_template_for_request(
+                method="GET", url="https://example.com/mock"
+            )
+        )
 
     def test_policy_sidebar_order_matches_runtime_matching_precedence(self) -> None:
         config = RuntimeConfig()
@@ -536,7 +543,7 @@ class TestRuntimeCLI(unittest.TestCase):
             cli.execute_command("config reload")
             self.assertEqual(config.log_level_name(), "DEBUG")
             self.assertTrue(
-                config.should_modify_response_for_request(
+                PolicyEngine(config.policy_repository).should_modify_response_for_request(
                     method="POST",
                     url="https://example.com/hot",
                 )

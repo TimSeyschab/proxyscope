@@ -1,15 +1,16 @@
 import base64
 
-from proxyscope.app.config.matching import normalize_http_method, normalize_modification_url
-from proxyscope.app.config.models import PolicyRule, RequestMatchRule, StaticResponseTemplate
+from proxyscope.policies.matching import normalize_http_method, normalize_policy_url
+from proxyscope.policies.models import OpenEditorAction, PolicyRule, RequestMatchRule, StaticResponseAction
 
 
 def serialize_policy_rule(rule: PolicyRule) -> dict:
+    action_type = "open_editor" if isinstance(rule.action, OpenEditorAction) else "static_response"
     payload = {
         "name": rule.name,
         "enabled": rule.enabled,
         "priority": rule.priority,
-        "action": {"type": rule.action},
+        "action": {"type": action_type},
         "match": {},
     }
     if rule.match.methods is not None:
@@ -19,14 +20,14 @@ def serialize_policy_rule(rule: PolicyRule) -> dict:
     if rule.match.url_prefix is not None:
         payload["match"]["url_prefix"] = rule.match.url_prefix
 
-    if rule.action == "static_response" and rule.static_response is not None:
-        payload["action"]["status_code"] = rule.static_response.status_code
-        payload["action"]["reason"] = rule.static_response.reason
-        payload["action"]["headers"] = dict(rule.static_response.headers)
+    if isinstance(rule.action, StaticResponseAction):
+        payload["action"]["status_code"] = rule.action.status_code
+        payload["action"]["reason"] = rule.action.reason
+        payload["action"]["headers"] = dict(rule.action.headers)
         try:
-            payload["action"]["body"] = rule.static_response.body.decode("utf-8")
+            payload["action"]["body"] = rule.action.body.decode("utf-8")
         except UnicodeDecodeError:
-            payload["action"]["body_base64"] = base64.b64encode(rule.static_response.body).decode("ascii")
+            payload["action"]["body_base64"] = base64.b64encode(rule.action.body).decode("ascii")
     return payload
 
 
@@ -57,18 +58,16 @@ def parse_policy_rule(data: object) -> PolicyRule | None:
 
     url_exact = match_data.get("url_exact")
     url_prefix = match_data.get("url_prefix")
-    normalized_exact = normalize_modification_url(url_exact) if isinstance(url_exact, str) else None
-    normalized_prefix = normalize_modification_url(url_prefix) if isinstance(url_prefix, str) else None
+    match = RequestMatchRule(
+        methods=methods,
+        url_exact=normalize_policy_url(url_exact) if isinstance(url_exact, str) else None,
+        url_prefix=normalize_policy_url(url_prefix) if isinstance(url_prefix, str) else None,
+    )
+    action = OpenEditorAction() if action_type == "open_editor" else _parse_static_response_action(action_data)
+    return PolicyRule(name=name, enabled=enabled, priority=priority, action=action, match=match)
 
-    match = RequestMatchRule(methods=methods, url_exact=normalized_exact, url_prefix=normalized_prefix)
 
-    if action_type == "open_editor":
-        return PolicyRule(name=name, enabled=enabled, priority=priority, action=action_type, match=match)
-
-    status_code = int(action_data.get("status_code", 200))
-    reason = str(action_data.get("reason", "OK"))
-    headers_raw = action_data.get("headers", {})
-    headers = dict(headers_raw) if isinstance(headers_raw, dict) else {}
+def _parse_static_response_action(action_data: dict) -> StaticResponseAction:
     body_base64 = action_data.get("body_base64")
     if isinstance(body_base64, str):
         try:
@@ -77,12 +76,10 @@ def parse_policy_rule(data: object) -> PolicyRule | None:
             body = b""
     else:
         body = str(action_data.get("body", "")).encode("utf-8")
-    template = StaticResponseTemplate(status_code=status_code, reason=reason, headers=headers, body=body)
-    return PolicyRule(
-        name=name,
-        enabled=enabled,
-        priority=priority,
-        action=action_type,
-        match=match,
-        static_response=template,
+    headers_raw = action_data.get("headers", {})
+    return StaticResponseAction(
+        status_code=int(action_data.get("status_code", 200)),
+        reason=str(action_data.get("reason", "OK")),
+        headers=dict(headers_raw) if isinstance(headers_raw, dict) else {},
+        body=body,
     )

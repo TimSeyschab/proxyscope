@@ -8,6 +8,7 @@ from proxyscope.app.logging.observability import RuntimeEventDispatcher
 from proxyscope.app.logging.request_response import RequestResponseRecorder
 from proxyscope.app.runtime.context import create_proxy_runtime_context
 from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.runtime import (
     CachePolicy,
     ExchangeRecorder,
@@ -22,11 +23,11 @@ class TestRuntimePortContracts(unittest.TestCase):
     def test_app_adapters_implement_runtime_ports(self) -> None:
         config = RuntimeConfig()
         journal = RequestJournal()
-        modifier = ResponseModifierService(policy_evaluator=config)
+        modifier = ResponseModifierService(policy_evaluator=PolicyEngine(config.policy_repository))
         recorder = RequestResponseRecorder(runtime_config=config, request_journal=journal)
         events = RuntimeEventDispatcher()
 
-        self.assertIsInstance(config, PolicyEvaluator)
+        self.assertIsInstance(PolicyEngine(config.policy_repository), PolicyEvaluator)
         self.assertIsInstance(config, CachePolicy)
         self.assertIsInstance(recorder, ExchangeRecorder)
         self.assertIsInstance(modifier, ResponseTransformer)
