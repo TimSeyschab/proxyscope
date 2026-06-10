@@ -194,8 +194,7 @@ poetry run python -m unittest discover -s tests -p "test_*.py" -v
 ## Architecture And Quality Checks
 
 The current architecture, module boundaries, and refactoring roadmap are
-documented under [`docs/architecture/`](docs/architecture/README.md) and
-[`docs/architecture-refactoring-plan.md`](docs/architecture-refactoring-plan.md).
+documented under [`docs/architecture/`](docs/architecture/README.md).
 
 Run the local quality gates:
 

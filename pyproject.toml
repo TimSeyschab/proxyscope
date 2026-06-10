@@ -24,6 +24,11 @@ dependencies = [
     "textual (>=8.1.1,<9.0.0)"
 ]
 
+[project.urls]
+'Homepage' = 'https://pypi.org/project/proxyscope/'
+'Repository' = 'https://github.com/TimSeyschab/proxyscope'
+'Issue Tracker' = 'https://github.com/TimSeyschab/proxyscope/issues'
+
 [project.scripts]
 proxyscope = "proxyscope.app.main:main"
 
