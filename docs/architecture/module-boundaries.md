@@ -15,8 +15,9 @@ adapters -> ports -> application -> domain
 | `proxyscope.proxy` | Plain HTTP and CONNECT transport adapters | Proxy-local models and injected ports |
 | `proxyscope.mitm` | TLS interception transport adapter | Proxy-local models, certificates, and injected ports |
 | `proxyscope.policies` | Policy models, matching, evaluation, serialization, and repository ports | Policy-local modules only |
+| `proxyscope.config` | Versioned settings, validation, migrations, and config repository | Config-local modules and policy serialization |
 | `proxyscope.app.runtime` | Runtime use cases, commands, and UI coordination | Config, editing, logging, and UI contracts |
-| `proxyscope.app.config` | Current settings and transitional config-file persistence | Config-local modules and policy repository |
+| `proxyscope.app.config` | Mutable runtime facade for settings and policy administration | Config domain and policy repository |
 | `proxyscope.app.editing` | External-editor integration and pending response edits | Injected policy evaluator and proxy response models |
 | `proxyscope.app.logging` | Exchange recording and runtime logging | Injected journal and logging policy |
 

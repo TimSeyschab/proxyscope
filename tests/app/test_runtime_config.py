@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from proxyscope.app.config.runtime import RuntimeConfig, normalize_whitelist_entry
+from proxyscope.app.runtime.configuration import RuntimeConfigService
 from proxyscope.policies.engine import PolicyEngine
 from proxyscope.policies.models import StaticResponseAction
 from proxyscope.policies.repository import InMemoryPolicyRepository
@@ -261,7 +262,7 @@ class TestRuntimeConfig(unittest.TestCase):
             external.add_open_editor_policy("https://after.example/edit", method="POST")
             external.save()
 
-            reloaded = config.reload_from_attached_file()
+            reloaded = RuntimeConfigService(config).reload()
             self.assertTrue(reloaded)
             self.assertEqual(config.log_level_name(), "DEBUG")
             self.assertFalse(config.cache_invalidation_enabled)

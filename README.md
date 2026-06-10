@@ -132,49 +132,47 @@ Example:
 
 ```json
 {
-  "log_level": "INFO",
-  "log_whitelist": [
-    "api.example.com",
-    "service.internal"
-  ],
-  "cache_invalidation_enabled": true,
-  "mitm_enabled": true,
-  "mitm_certs_dir": "certs",
-  "policies": [
+  "schema_version": 1,
+  "settings": {
+    "log_level": "INFO",
+    "log_whitelist": ["api.example.com", "service.internal"],
+    "cache_invalidation_enabled": true,
+    "mitm_enabled": true,
+    "mitm_certs_dir": "certs"
+  },
+  "policy_shortcuts": [
     {
       "name": "health-static",
-      "enabled": true,
+      "match": "GET https://service.internal/health",
       "priority": 20,
-      "action": {
-        "type": "static_response",
-        "status_code": 200,
-        "reason": "OK",
+      "respond": {
+        "status": 200,
         "headers": {
-          "Content-Type": "application/json",
           "Cache-Control": "no-store"
         },
-        "body": "{\"status\":\"ok\",\"source\":\"proxyscope\"}"
-      },
-      "match": {
-        "methods": ["GET"],
-        "url_exact": "https://service.internal/health"
+        "json": {
+          "status": "ok",
+          "source": "proxyscope"
+        }
       }
     },
     {
       "name": "edit-login-response",
-      "enabled": true,
+      "match": "POST https://api.example.com/v1/login*",
       "priority": 10,
-      "action": {
-        "type": "open_editor"
-      },
-      "match": {
-        "methods": ["POST"],
-        "url_prefix": "https://api.example.com/v1/login"
-      }
+      "action": "open_editor"
     }
   ]
 }
 ```
+
+`policy_shortcuts` is intended for demos and replay setups. A trailing `*`
+creates a prefix match. Static responses support `respond.body` or
+`respond.json`. When the config is saved, shortcuts are converted to the
+canonical typed `policies` format.
+
+Files without `schema_version` use the previous format and are migrated
+automatically when next saved.
 
 Start with file:
 

@@ -3,8 +3,9 @@
 ## Current Flow
 
 Runtime policies are stored behind a `PolicyRepository` and evaluated by the
-transport-independent `PolicyEngine`. `RuntimeConfig` still coordinates policy
-mutation and config-file persistence until Phase 4, but it does not evaluate
+transport-independent `PolicyEngine`. `RuntimeConfig` coordinates mutable
+runtime policy administration, while the versioned config repository owns
+config-file persistence and migration. `RuntimeConfig` does not evaluate
 requests.
 
 ```text

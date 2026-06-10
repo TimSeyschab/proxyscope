@@ -11,6 +11,10 @@ Runtime services are instance-local. Multiple proxy servers can run in one
 process with isolated policies, journals, response transformers, and event
 sinks.
 
+Runtime settings are represented by `RuntimeSettings`. Config-file loading and
+atomic saving are delegated to `ConfigRepository`; interactive reload is
+coordinated by `RuntimeConfigService`.
+
 ## Target Lifecycle
 
 The composition root will create an explicit application runtime:

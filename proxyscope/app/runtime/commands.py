@@ -1,8 +1,8 @@
-import json
 from dataclasses import dataclass
 from typing import Callable
 
 from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.app.runtime.configuration import RuntimeConfigService
 from proxyscope.policies.matching import normalize_http_method, normalize_policy_url
 
 MIN_HTTP_STATUS_CODE = 100
@@ -59,8 +59,14 @@ class RuntimeCommandService:
     Parse and execute runtime commands that mutate shared runtime configuration.
     """
 
-    def __init__(self, *, runtime_config: RuntimeConfig) -> None:
+    def __init__(
+        self,
+        *,
+        runtime_config: RuntimeConfig,
+        config_service: RuntimeConfigService | None = None,
+    ) -> None:
         self._runtime_config = runtime_config
+        self._config_service = config_service or RuntimeConfigService(runtime_config)
 
     def execute(
         self,
@@ -424,7 +430,7 @@ class RuntimeCommandService:
             target = " ".join(parts[2:]).strip()
             try:
                 if target:
-                    saved_path = self._runtime_config.save_to_path(target)
+                    saved_path = self._config_service.save(target)
                 else:
                     current = self._runtime_config.config_path
                     if current is None:
@@ -432,8 +438,7 @@ class RuntimeCommandService:
                             handled=True,
                             status_message="Usage: config save <path> (or attach --config at startup)",
                         )
-                    self._runtime_config.save()
-                    saved_path = current
+                    saved_path = self._config_service.save()
             except (OSError, ValueError) as exc:
                 return CommandExecutionResult(handled=True, status_message=f"Config save failed: {exc}")
             return CommandExecutionResult(handled=True, status_message=f"Config saved: {saved_path}")
@@ -441,8 +446,8 @@ class RuntimeCommandService:
         if action == "reload":
             before_cache = self._runtime_config.cache_invalidation_enabled
             try:
-                reloaded = self._runtime_config.reload_from_attached_file()
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                reloaded = self._config_service.reload()
+            except (OSError, ValueError) as exc:
                 return CommandExecutionResult(handled=True, status_message=f"Config reload failed: {exc}")
             if not reloaded:
                 return CommandExecutionResult(

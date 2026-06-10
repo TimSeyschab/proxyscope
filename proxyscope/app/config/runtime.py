@@ -1,11 +1,11 @@
-import json
 import logging
 from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from threading import RLock
 
-from proxyscope.app.config.matching import normalize_whitelist_entry
+from proxyscope.config.repository import ConfigRepository, JsonConfigRepository
+from proxyscope.config.settings import ConfigDocument, RuntimeSettings, normalize_whitelist_entry
 from proxyscope.policies.matching import (
     first_rule_method,
     normalize_http_method,
@@ -18,7 +18,6 @@ from proxyscope.policies.matching import (
 )
 from proxyscope.policies.models import OpenEditorAction, PolicyRule, RequestMatchRule, StaticResponseAction
 from proxyscope.policies.repository import InMemoryPolicyRepository, PolicyRepository
-from proxyscope.policies.serialization import parse_policy_rule, serialize_policy_rule
 
 
 class RuntimeConfig:
@@ -37,21 +36,28 @@ class RuntimeConfig:
         config_path: str | Path | None = None,
         policy_rules: Iterable[PolicyRule] | None = None,
         policy_repository: PolicyRepository | None = None,
+        config_repository: ConfigRepository | None = None,
+        settings: RuntimeSettings | None = None,
     ) -> None:
         self._lock = RLock()
-        self._log_level = log_level
-        self._log_whitelist: set[str] = set()
-        self._cache_invalidation_enabled = cache_invalidation_enabled
-        self._mitm_enabled = mitm_enabled
-        self._mitm_certs_dir = Path(mitm_certs_dir)
+        if settings is not None:
+            log_level = settings.log_level
+            log_whitelist = settings.log_whitelist
+            cache_invalidation_enabled = settings.cache_invalidation_enabled
+            mitm_enabled = settings.mitm_enabled
+            mitm_certs_dir = settings.mitm_certs_dir
+        self._settings = RuntimeSettings.create(
+            log_level=log_level,
+            log_whitelist=(normalize_whitelist_entry(entry) for entry in (log_whitelist or ())),
+            cache_invalidation_enabled=cache_invalidation_enabled,
+            mitm_enabled=mitm_enabled,
+            mitm_certs_dir=mitm_certs_dir,
+        )
         self._config_path = Path(config_path) if config_path is not None else None
+        self._config_repository = config_repository or JsonConfigRepository()
         if policy_repository is not None and policy_rules is not None:
             raise ValueError("Provide either policy_rules or policy_repository, not both.")
         self._policy_repository = policy_repository or InMemoryPolicyRepository(policy_rules or ())
-
-        if log_whitelist is not None:
-            for entry in log_whitelist:
-                self._log_whitelist.add(normalize_whitelist_entry(entry))
 
     @property
     def config_path(self) -> Path | None:
@@ -59,13 +65,18 @@ class RuntimeConfig:
             return self._config_path
 
     @property
+    def settings(self) -> RuntimeSettings:
+        with self._lock:
+            return self._settings
+
+    @property
     def log_level(self) -> int:
         with self._lock:
-            return self._log_level
+            return self._settings.log_level
 
     def log_level_name(self) -> str:
         with self._lock:
-            return logging.getLevelName(self._log_level)
+            return logging.getLevelName(self._settings.log_level)
 
     def set_log_level(self, value: str | int) -> int:
         with self._lock:
@@ -78,18 +89,21 @@ class RuntimeConfig:
                 new_level = getattr(logging, normalized, None)
                 if not isinstance(new_level, int):
                     raise ValueError(f"Unsupported log level: {value}")
-            self._log_level = new_level
+            self._settings = replace(self._settings, log_level=new_level)
         self._persist_if_configured()
         return new_level
 
     def whitelist_entries(self) -> tuple[str, ...]:
         with self._lock:
-            return tuple(sorted(self._log_whitelist))
+            return tuple(sorted(self._settings.log_whitelist))
 
     def add_whitelist_entry(self, value: str) -> str:
         normalized_host = normalize_whitelist_entry(value)
         with self._lock:
-            self._log_whitelist.add(normalized_host)
+            self._settings = replace(
+                self._settings,
+                log_whitelist=tuple(sorted(set(self._settings.log_whitelist) | {normalized_host})),
+            )
         self._persist_if_configured()
         return normalized_host
 
@@ -97,8 +111,10 @@ class RuntimeConfig:
         normalized_host = normalize_whitelist_entry(value)
         removed = False
         with self._lock:
-            if normalized_host in self._log_whitelist:
-                self._log_whitelist.remove(normalized_host)
+            entries = set(self._settings.log_whitelist)
+            if normalized_host in entries:
+                entries.remove(normalized_host)
+                self._settings = replace(self._settings, log_whitelist=tuple(sorted(entries)))
                 removed = True
         if removed:
             self._persist_if_configured()
@@ -106,56 +122,56 @@ class RuntimeConfig:
 
     def clear_whitelist(self) -> None:
         with self._lock:
-            self._log_whitelist.clear()
+            self._settings = replace(self._settings, log_whitelist=())
         self._persist_if_configured()
 
     def should_log_for_host(self, host: str | None) -> bool:
         with self._lock:
-            if not self._log_whitelist:
+            if not self._settings.log_whitelist:
                 return True
             if host is None:
                 return False
             normalized_host = normalize_whitelist_entry(host)
-            return normalized_host in self._log_whitelist
+            return normalized_host in self._settings.log_whitelist
 
     @property
     def cache_invalidation_enabled(self) -> bool:
         with self._lock:
-            return self._cache_invalidation_enabled
+            return self._settings.cache_invalidation_enabled
 
     @property
     def mitm_enabled(self) -> bool:
         with self._lock:
-            return self._mitm_enabled
+            return self._settings.mitm_enabled
 
     @property
     def mitm_certs_dir(self) -> Path:
         with self._lock:
-            return self._mitm_certs_dir
+            return self._settings.mitm_certs_dir
 
     def set_cache_invalidation_enabled(self, enabled: bool) -> bool:
         with self._lock:
-            self._cache_invalidation_enabled = enabled
+            self._settings = replace(self._settings, cache_invalidation_enabled=enabled)
         self._persist_if_configured()
         return enabled
 
     def toggle_cache_invalidation(self) -> bool:
         with self._lock:
-            self._cache_invalidation_enabled = not self._cache_invalidation_enabled
-            enabled = self._cache_invalidation_enabled
+            enabled = not self._settings.cache_invalidation_enabled
+            self._settings = replace(self._settings, cache_invalidation_enabled=enabled)
         self._persist_if_configured()
         return enabled
 
     def set_mitm_enabled(self, enabled: bool) -> bool:
         with self._lock:
-            self._mitm_enabled = enabled
+            self._settings = replace(self._settings, mitm_enabled=enabled)
         self._persist_if_configured()
         return enabled
 
     def set_mitm_certs_dir(self, value: str | Path) -> Path:
         normalized = Path(value)
         with self._lock:
-            self._mitm_certs_dir = normalized
+            self._settings = replace(self._settings, mitm_certs_dir=normalized)
         self._persist_if_configured()
         return normalized
 
@@ -350,6 +366,26 @@ class RuntimeConfig:
         with self._lock:
             self._config_path = Path(path)
 
+    @property
+    def config_repository(self) -> ConfigRepository:
+        return self._config_repository
+
+    def to_config_document(self) -> ConfigDocument:
+        with self._lock:
+            settings = self._settings
+        return ConfigDocument(settings=settings, policies=self._policy_repository.list())
+
+    def apply_config_document(self, document: ConfigDocument) -> None:
+        with self._lock:
+            self._settings = RuntimeSettings.create(
+                log_level=document.settings.log_level,
+                log_whitelist=(normalize_whitelist_entry(entry) for entry in document.settings.log_whitelist),
+                cache_invalidation_enabled=document.settings.cache_invalidation_enabled,
+                mitm_enabled=document.settings.mitm_enabled,
+                mitm_certs_dir=document.settings.mitm_certs_dir,
+            )
+        self._policy_repository.replace_all(document.policies)
+
     def save_to_path(self, path: str | Path) -> Path:
         resolved = Path(path)
         with self._lock:
@@ -357,29 +393,12 @@ class RuntimeConfig:
         self.save()
         return resolved
 
-    def reload_from_attached_file(self) -> bool:
-        with self._lock:
-            path = self._config_path
-        if path is None:
-            return False
-        reloaded = RuntimeConfig.load_from_file(path)
-        with self._lock:
-            self._log_level = reloaded.log_level
-            self._log_whitelist = set(reloaded.whitelist_entries())
-            self._cache_invalidation_enabled = reloaded.cache_invalidation_enabled
-            self._mitm_enabled = reloaded.mitm_enabled
-            self._mitm_certs_dir = reloaded.mitm_certs_dir
-            self._policy_repository.replace_all(reloaded.policy_rules())
-        return True
-
     def save(self) -> None:
         with self._lock:
             path = self._config_path
-            payload = self._to_dict_locked()
         if path is None:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+        self._config_repository.save(path, self.to_config_document())
 
     def _persist_if_configured(self) -> None:
         with self._lock:
@@ -387,42 +406,19 @@ class RuntimeConfig:
         if has_path:
             self.save()
 
-    def _to_dict_locked(self) -> dict:
-        return {
-            "log_level": logging.getLevelName(self._log_level),
-            "log_whitelist": sorted(self._log_whitelist),
-            "cache_invalidation_enabled": self._cache_invalidation_enabled,
-            "mitm_enabled": self._mitm_enabled,
-            "mitm_certs_dir": str(self._mitm_certs_dir),
-            "policies": [serialize_policy_rule(rule) for rule in self._policy_repository.list()],
-        }
-
     @classmethod
-    def load_from_file(cls, path: str | Path) -> "RuntimeConfig":
+    def load_from_file(
+        cls,
+        path: str | Path,
+        *,
+        config_repository: ConfigRepository | None = None,
+    ) -> "RuntimeConfig":
         resolved_path = Path(path)
-        if not resolved_path.exists():
-            return cls(config_path=resolved_path)
-
-        raw = json.loads(resolved_path.read_text(encoding="utf-8"))
-        level_raw = str(raw.get("log_level", "INFO")).strip().upper()
-        level_value = getattr(logging, level_raw, logging.INFO)
-        whitelist_raw = raw.get("log_whitelist", [])
-        cache_enabled = bool(raw.get("cache_invalidation_enabled", False))
-        mitm_enabled = bool(raw.get("mitm_enabled", True))
-        mitm_certs_dir = raw.get("mitm_certs_dir", "certs")
-
-        rules: list[PolicyRule] = []
-        for item in raw.get("policies", []):
-            parsed = parse_policy_rule(item)
-            if parsed is not None:
-                rules.append(parsed)
-
+        repository = config_repository or JsonConfigRepository()
+        document = repository.load(resolved_path)
         return cls(
-            log_level=level_value,
-            log_whitelist=whitelist_raw,
-            cache_invalidation_enabled=cache_enabled,
-            mitm_enabled=mitm_enabled,
-            mitm_certs_dir=mitm_certs_dir,
             config_path=resolved_path,
-            policy_rules=rules,
+            config_repository=repository,
+            settings=document.settings,
+            policy_rules=document.policies,
         )
