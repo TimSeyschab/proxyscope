@@ -7,11 +7,10 @@ from proxyscope.app.runtime.journal import RequestJournal
 from proxyscope.app.runtime.runtime_controller import RuntimeController
 from proxyscope.app.runtime.ui_controller import SuspendUI
 from proxyscope.app.runtime.ui_models import ActivePane, DetailTab, RuntimeScreenModel
+from proxyscope.application.services import RuntimeApplicationServices
 
 
 class RuntimeCLI(logging.Handler):
-    HELP_SUMMARY = RuntimeController.HELP_SUMMARY
-
     def __init__(
         self,
         *,
@@ -19,6 +18,7 @@ class RuntimeCLI(logging.Handler):
         request_journal: RequestJournal,
         response_modifier: ResponseModifierService,
         proxy_base_url: str | None = None,
+        application_services: RuntimeApplicationServices | None = None,
     ) -> None:
         super().__init__(level=logging.INFO)
         self._shutdown_server: Callable[[], None] | None = None
@@ -31,11 +31,16 @@ class RuntimeCLI(logging.Handler):
             request_shutdown=self._request_shutdown,
             on_cache_toggle=self._trigger_cache_toggle_hook,
             on_log_level_change=self._set_log_level,
+            application_services=application_services,
         )
 
     @property
     def _status_message(self) -> str:
         return self._controller.status_message
+
+    @property
+    def HELP_SUMMARY(self) -> str:  # noqa: N802
+        return self._controller.help_summary
 
     @property
     def _pending_policy_edit_name(self) -> str | None:

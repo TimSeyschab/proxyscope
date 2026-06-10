@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 
 from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.runtime.configuration import RuntimeConfigService
+from proxyscope.application.configuration import RuntimeConfigService
 from proxyscope.config.settings import ConfigDocument, RuntimeSettings
 
 

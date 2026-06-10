@@ -506,7 +506,7 @@ class TestRuntimeCLI(unittest.TestCase):
         )
 
         with patch(
-            "proxyscope.app.runtime.actions.edit_policy_rule_with_external_editor",
+            "proxyscope.application.actions.edit_policy_rule_with_external_editor",
             return_value=(False, None, "cancelled"),
         ) as edit_mock:
             cli.add_selected_request_to_editor_policy()

@@ -13,11 +13,12 @@ adapters -> ports -> application -> domain
 | Module | Responsibility | May depend on |
 | --- | --- | --- |
 | `proxyscope.processing` | Transport-independent exchange models, middleware ports, and shared pipeline | Processing-local modules only |
+| `proxyscope.application` | Surface-independent request, policy, session/export, settings, and command use cases | Domain modules and injected adapter contracts |
 | `proxyscope.proxy` | Plain HTTP, CONNECT, and HTTP/1 framing adapters | Processing models and injected ports |
 | `proxyscope.mitm` | TLS interception transport adapter | Processing models, proxy framing adapters, certificates, and injected ports |
 | `proxyscope.policies` | Policy models, matching, evaluation, serialization, and repository ports | Policy-local modules only |
 | `proxyscope.config` | Versioned settings, validation, migrations, and config repository | Config-local modules and policy serialization |
-| `proxyscope.app.runtime` | Runtime use cases, commands, and UI coordination | Config, editing, logging, and UI contracts |
+| `proxyscope.app.runtime` | Textual controller, presenters, navigation, and compatibility adapters | Application services and UI-local modules |
 | `proxyscope.app.config` | Mutable runtime facade for settings and policy administration | Config domain and policy repository |
 | `proxyscope.app.editing` | External-editor integration and pending response edits | Processing response models |
 | `proxyscope.app.logging` | Exchange recording and runtime logging | Injected journal and logging policy |

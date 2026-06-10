@@ -1,9 +1,7 @@
-from contextlib import AbstractContextManager
-from typing import Callable, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from proxyscope.app.runtime.ui_models import ActivePane, DetailTab, RuntimeScreenModel
-
-SuspendUI = Callable[[], AbstractContextManager[None]]
+from proxyscope.application.contracts import SuspendUI
 
 
 @runtime_checkable

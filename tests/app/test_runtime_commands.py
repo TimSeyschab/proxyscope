@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.runtime.commands import RuntimeCommandService
+from proxyscope.application.runtime_commands import RuntimeCommandService
 from proxyscope.policies.engine import PolicyEngine
 
 

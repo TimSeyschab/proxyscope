@@ -10,6 +10,7 @@ from proxyscope.app.logging.setup import configure_logging
 from proxyscope.app.runtime.cli import RuntimeCLI
 from proxyscope.app.runtime.context import create_proxy_runtime_context
 from proxyscope.app.runtime.journal import RequestJournal
+from proxyscope.application.services import create_runtime_application_services
 from proxyscope.proxy.server import ProxyHTTPServer, create_server
 
 LOGGER = logging.getLogger("tproxy.app")
@@ -66,11 +67,18 @@ def main() -> None:
         return
 
     response_modifier.set_interactive_enabled(True)
+    application_services = create_runtime_application_services(
+        runtime_config=runtime_config,
+        request_journal=request_journal,
+        response_modifier=response_modifier,
+        proxy_base_url=f"http://{args.host}:{args.port}",
+    )
     runtime_ui = RuntimeCLI(
         runtime_config=runtime_config,
         request_journal=request_journal,
         response_modifier=response_modifier,
         proxy_base_url=f"http://{args.host}:{args.port}",
+        application_services=application_services,
     )
     runtime_ui.setFormatter(
         logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%H:%M:%S")

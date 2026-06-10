@@ -2,12 +2,12 @@ import unittest
 from unittest.mock import Mock, patch
 
 from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.app.runtime.actions import (
+from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
+from proxyscope.application.actions import (
     RuntimePolicyActionService,
     RuntimeReplayActionService,
     RuntimeResponseEditActionService,
 )
-from proxyscope.app.runtime.journal import LoggedExchange, RequestJournal
 
 
 class TestRuntimePolicyActionService(unittest.TestCase):
@@ -32,7 +32,7 @@ class TestRuntimePolicyActionService(unittest.TestCase):
         actions.schedule_edit(rule_name)
 
         with patch(
-            "proxyscope.app.runtime.actions.edit_policy_rule_with_external_editor",
+            "proxyscope.application.actions.edit_policy_rule_with_external_editor",
             return_value=(False, None, "cancelled"),
         ):
             message = actions.process_pending_edit()
@@ -47,7 +47,7 @@ class TestRuntimeReplayActionService(unittest.TestCase):
         actions = RuntimeReplayActionService(proxy_base_url="http://127.0.0.1:8080")
 
         with patch(
-            "proxyscope.app.runtime.actions.edit_and_resend_logged_request",
+            "proxyscope.application.actions.edit_and_resend_logged_request",
             return_value=(True, "replayed"),
         ) as replay:
             message = actions.replay(entry)
@@ -68,7 +68,7 @@ class TestRuntimeResponseEditActionService(unittest.TestCase):
         actions = RuntimeResponseEditActionService(modifier, RuntimeConfig())
 
         with patch(
-            "proxyscope.app.runtime.actions.edit_pending_response_with_external_editor",
+            "proxyscope.application.actions.edit_pending_response_with_external_editor",
             return_value=(False, "cancelled"),
         ):
             message = actions.process_pending_edit()

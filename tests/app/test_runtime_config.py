@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from proxyscope.app.config.runtime import RuntimeConfig, normalize_whitelist_entry
-from proxyscope.app.runtime.configuration import RuntimeConfigService
+from proxyscope.application.configuration import RuntimeConfigService
 from proxyscope.policies.engine import PolicyEngine
 from proxyscope.policies.models import StaticResponseAction
 from proxyscope.policies.repository import InMemoryPolicyRepository
