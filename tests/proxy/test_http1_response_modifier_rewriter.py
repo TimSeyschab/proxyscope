@@ -1,136 +1,74 @@
 import unittest
 
-from proxyscope.app.config.runtime import RuntimeConfig
-from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.forwarding import ForwardResponse
 from proxyscope.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
 
 
-class _FakeModifier:
-    def __init__(self) -> None:
-        self.seen_urls: list[str] = []
+class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
+    def test_delegates_complete_response_to_processor(self) -> None:
+        seen: list[ForwardResponse] = []
 
-    def maybe_modify_response(self, *, request_url: str, method: str, response: ForwardResponse) -> ForwardResponse:
-        self.seen_urls.append(request_url)
-        if request_url == "https://example.com/edit":
+        def process_response(response: ForwardResponse) -> ForwardResponse:
+            seen.append(response)
             return ForwardResponse(
                 status_code=response.status_code,
                 reason=response.reason,
                 headers={"Content-Type": "text/plain"},
                 body=b"edited",
             )
-        return response
-
-
-class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
-    def test_rewrites_matching_response(self) -> None:
-        modifier = _FakeModifier()
-        requests = [("GET", "https://example.com/edit")]
-
-        def acquire_request_meta() -> tuple[str, str] | None:
-            if not requests:
-                return None
-            return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=PolicyEngine(RuntimeConfig().policy_repository),
-            response_modifier=modifier,  # type: ignore[arg-type]
-            acquire_request_meta=acquire_request_meta,
+            process_response=process_response,
+            acquire_request_method=lambda: "GET",
         )
 
         raw_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
         out = rewriter.feed(raw_response)
         text = out.decode("iso-8859-1")
-        self.assertIn("HTTP/1.1 200 OK", text)
+
+        self.assertEqual(seen[0].body, b"original")
         self.assertIn("Content-Length: 6", text)
         self.assertTrue(text.endswith("\r\n\r\nedited"))
-        self.assertEqual(modifier.seen_urls, ["https://example.com/edit"])
 
-    def test_can_replace_response_with_static_policy_template(self) -> None:
-        config = RuntimeConfig()
-        config.add_static_response_rule(
-            url="https://example.com/mock",
-            status_code=202,
-            reason="Accepted",
-            headers={"Content-Type": "text/plain"},
-            body=b"from-policy",
-            method="GET",
+    def test_preserves_original_framing_when_processor_returns_same_response(self) -> None:
+        raw_response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\ntest\r\n0\r\nX-Trailer: yes\r\n\r\n"
+        rewriter = HTTP1ResponseModifierRewriter(
+            process_response=lambda response: response,
+            acquire_request_method=lambda: "GET",
         )
-        modifier = _FakeModifier()
-        requests = [("GET", "https://example.com/mock")]
 
-        def acquire_request_meta() -> tuple[str, str] | None:
-            if not requests:
-                return None
-            return requests.pop(0)
+        self.assertEqual(rewriter.feed(raw_response), raw_response)
+
+    def test_keeps_request_method_for_103_then_final_response(self) -> None:
+        acquired_methods = 0
+
+        def acquire_request_method() -> str:
+            nonlocal acquired_methods
+            acquired_methods += 1
+            return "HEAD"
 
         rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=PolicyEngine(config.policy_repository),
-            response_modifier=modifier,  # type: ignore[arg-type]
-            acquire_request_meta=acquire_request_meta,
+            process_response=lambda response: response,
+            acquire_request_method=acquire_request_method,
         )
-
-        raw_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
-        out = rewriter.feed(raw_response)
-        text = out.decode("iso-8859-1")
-        self.assertIn("HTTP/1.1 202 Accepted", text)
-        self.assertIn("Content-Length: 11", text)
-        self.assertTrue(text.endswith("\r\n\r\nfrom-policy"))
-        self.assertEqual(modifier.seen_urls, [])
-
-    def test_static_policy_takes_precedence_over_editor_modifier(self) -> None:
-        config = RuntimeConfig()
-        config.add_modification_whitelist_entry("https://example.com/edit")
-        config.add_static_response_rule(
-            url="https://example.com/edit",
-            status_code=203,
-            reason="Non-Authoritative Information",
-            headers={"Content-Type": "text/plain"},
-            body=b"from-static-policy",
-            method="GET",
-        )
-        modifier = _FakeModifier()
-        requests = [("GET", "https://example.com/edit")]
-
-        def acquire_request_meta() -> tuple[str, str] | None:
-            if not requests:
-                return None
-            return requests.pop(0)
-
-        rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=PolicyEngine(config.policy_repository),
-            response_modifier=modifier,  # type: ignore[arg-type]
-            acquire_request_meta=acquire_request_meta,
-        )
-
-        raw_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
-        out = rewriter.feed(raw_response)
-        text = out.decode("iso-8859-1")
-        self.assertIn("HTTP/1.1 203 Non-Authoritative Information", text)
-        self.assertTrue(text.endswith("\r\n\r\nfrom-static-policy"))
-        self.assertEqual(modifier.seen_urls, [])
-
-    def test_keeps_request_meta_for_103_then_final_response(self) -> None:
-        modifier = _FakeModifier()
-        requests = [("GET", "https://example.com/edit")]
-
-        def acquire_request_meta() -> tuple[str, str] | None:
-            if not requests:
-                return None
-            return requests.pop(0)
-
-        rewriter = HTTP1ResponseModifierRewriter(
-            policy_evaluator=PolicyEngine(RuntimeConfig().policy_repository),
-            response_modifier=modifier,  # type: ignore[arg-type]
-            acquire_request_meta=acquire_request_meta,
-        )
-
         early_hints = b"HTTP/1.1 103 Early Hints\r\nLink: </style.css>; rel=preload; as=style\r\n\r\n"
-        final_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\noriginal"
+        final_response = b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n"
 
-        out = rewriter.feed(early_hints + final_response)
-        text = out.decode("iso-8859-1")
-        self.assertIn("HTTP/1.1 103 Early Hints", text)
-        self.assertIn("HTTP/1.1 200 OK", text)
-        self.assertTrue(text.endswith("\r\n\r\nedited"))
-        self.assertEqual(modifier.seen_urls, ["https://example.com/edit"])
+        self.assertEqual(rewriter.feed(early_hints + final_response), early_hints + final_response)
+        self.assertEqual(acquired_methods, 1)
+
+    def test_processes_close_delimited_response_when_stream_closes(self) -> None:
+        seen: list[ForwardResponse] = []
+        rewriter = HTTP1ResponseModifierRewriter(
+            process_response=lambda response: seen.append(response) or response,
+            acquire_request_method=lambda: "GET",
+        )
+        raw_response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nclose-delimited"
+
+        self.assertEqual(rewriter.feed(raw_response), b"")
+        self.assertEqual(rewriter.flush(), raw_response)
+        self.assertEqual(seen[0].body, b"close-delimited")
+
+
+if __name__ == "__main__":
+    unittest.main()

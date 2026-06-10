@@ -2,7 +2,6 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.proxy.forwarding import ForwardRequest, UpstreamForwarder, capture_body_preview
 
 
@@ -32,7 +31,7 @@ class TestForwardingStubs(unittest.TestCase):
         thread.start()
 
         host, port = upstream.server_address
-        forwarder = UpstreamForwarder(cache_policy=RuntimeConfig())
+        forwarder = UpstreamForwarder()
         request = ForwardRequest(
             method="POST",
             path="/users",
@@ -55,7 +54,7 @@ class TestForwardingStubs(unittest.TestCase):
             thread.join(timeout=2)
 
     def test_forwarder_requires_host_for_origin_form_paths(self) -> None:
-        forwarder = UpstreamForwarder(cache_policy=RuntimeConfig())
+        forwarder = UpstreamForwarder()
         request = ForwardRequest(
             method="GET",
             path="/health",
@@ -65,7 +64,7 @@ class TestForwardingStubs(unittest.TestCase):
         with self.assertRaises(ValueError):
             forwarder.forward(request)
 
-    def test_forwarder_applies_cache_invalidation_headers(self) -> None:
+    def test_forwarder_preserves_prepared_headers(self) -> None:
         class UpstreamHandler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 self.server.last_path = self.path  # type: ignore[attr-defined]
@@ -82,15 +81,13 @@ class TestForwardingStubs(unittest.TestCase):
         thread.start()
 
         host, port = upstream.server_address
-        config = RuntimeConfig(cache_invalidation_enabled=True)
-        forwarder = UpstreamForwarder(cache_policy=config)
+        forwarder = UpstreamForwarder()
         request = ForwardRequest(
             method="GET",
             path="/cache",
             headers={
                 "Host": f"{host}:{port}",
-                "If-None-Match": '"etag-123"',
-                "If-Modified-Since": "Mon, 01 Jan 2024 00:00:00 GMT",
+                "Cache-Control": "no-cache",
             },
             body=b"",
         )
@@ -100,11 +97,7 @@ class TestForwardingStubs(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(upstream.last_path, "/cache")  # type: ignore[attr-defined]
             upstream_headers = {key.lower(): value for key, value in upstream.last_headers.items()}  # type: ignore[attr-defined]
-            self.assertNotIn("if-none-match", upstream_headers)
-            self.assertNotIn("if-modified-since", upstream_headers)
-            self.assertEqual(upstream_headers.get("cache-control"), "no-cache, no-store, max-age=0, must-revalidate")
-            self.assertEqual(upstream_headers.get("pragma"), "no-cache")
-            self.assertEqual(upstream_headers.get("expires"), "0")
+            self.assertEqual(upstream_headers.get("cache-control"), "no-cache")
         finally:
             upstream.shutdown()
             upstream.server_close()

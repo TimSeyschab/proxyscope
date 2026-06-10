@@ -3,7 +3,7 @@ from typing import Final
 
 from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.runtime.journal import RequestJournal
-from proxyscope.proxy.forwarding import ForwardResponse
+from proxyscope.processing.models import ExchangeResponse
 
 REQUEST_LOGGER: Final = logging.getLogger("tproxy.request")
 RESPONSE_LOGGER: Final = logging.getLogger("tproxy.response")
@@ -51,7 +51,7 @@ class RequestResponseRecorder:
 
     def record_response(
         self,
-        response: ForwardResponse,
+        response: ExchangeResponse,
         *,
         request_id: int | None,
         duration_ms: float,

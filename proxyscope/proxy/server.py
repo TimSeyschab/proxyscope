@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from proxyscope.mitm.certificates import MitmCertificateError, certificate_authority_for_root, default_ca
 from proxyscope.mitm.tunnel import MitmTLSInterceptor
+from proxyscope.processing.models import ExchangeRequest
 from proxyscope.proxy.connect_tunnel import (
     ConnectUpstreamConnectionError,
     ConnectUpstreamTimeoutError,
@@ -20,7 +21,6 @@ from proxyscope.proxy.forwarding import (
     ForwardResponse,
     UpstreamForwarder,
     capture_body_preview,
-    prepare_forward_headers,
     prepare_forward_request,
     resolve_target_url,
 )
@@ -174,34 +174,19 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
 
         forward_request = map_incoming_request(self)
         forward_request = prepare_forward_request(forward_request)
-        effective_headers = prepare_forward_headers(
-            forward_request.headers,
-            cache_invalidation_enabled=server.runtime_context.cache_policy.cache_invalidation_enabled,
-        )
-        forward_request = ForwardRequest(
-            method=forward_request.method,
-            path=forward_request.path,
-            headers=effective_headers,
-            body=forward_request.body,
-        )
         target_host, target_port = _resolve_forward_request_target(forward_request)
-        request_id = server.runtime_context.exchange_recorder.record_request(
-            method=self.command,
-            path=forward_request.path,
-            client_ip=self.client_address[0],
-            headers=effective_headers,
-            body=forward_request.body,
-            target_host=target_host,
-            target_port=target_port,
-        )
-        try:
-            if target_host:
-                server.runtime_context.runtime_events.on_site_visit(target_host)
-        except ValueError:
-            pass
         try:
             target_url = resolve_target_url(forward_request)
         except ValueError as exc:
+            request_id = server.runtime_context.exchange_recorder.record_request(
+                method=self.command,
+                path=forward_request.path,
+                client_ip=self.client_address[0],
+                headers=forward_request.headers,
+                body=forward_request.body,
+                target_host=target_host,
+                target_port=target_port,
+            )
             error_body = f"{exc}\n".encode("utf-8")
             self.send_response(400, "Bad Request")
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -227,53 +212,44 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             )
             return
 
-        static_template = server.runtime_context.policy_evaluator.get_static_response_template_for_request(
-            method=self.command, url=target_url
-        )
-        should_modify = server.runtime_context.policy_evaluator.should_modify_response_for_request(
-            method=self.command, url=target_url
-        )
-        if static_template is not None:
-            forward_response = ForwardResponse(
-                status_code=static_template.status_code,
-                reason=static_template.reason,
-                headers=dict(static_template.headers),
-                body=static_template.body,
-                body_size=len(static_template.body),
+        exchange = server.runtime_context.exchange_pipeline.prepare_request(
+            ExchangeRequest(
+                method=self.command,
+                url=target_url,
+                path=forward_request.path,
+                headers=forward_request.headers,
+                body=forward_request.body,
+                client_ip=self.client_address[0],
+                target_host=target_host,
+                target_port=target_port,
             )
-        elif isinstance(server.forwarder, UpstreamForwarder) and not should_modify:
+        )
+        forward_request = ForwardRequest(
+            method=exchange.request.method,
+            path=exchange.request.path,
+            headers=exchange.request.headers,
+            body=exchange.request.body,
+        )
+        if exchange.static_response is not None:
+            forward_response = server.runtime_context.exchange_pipeline.process_response(
+                exchange,
+                exchange.static_response,
+            )
+        elif isinstance(server.forwarder, UpstreamForwarder) and not exchange.requires_buffered_response:
             forward_response = self._forward_upstream_streaming(
                 server.forwarder,
                 forward_request,
                 send_body=send_body,
             )
-            duration_ms = (time.perf_counter() - started) * 1000
-            server.runtime_context.exchange_recorder.record_response(
+            server.runtime_context.exchange_pipeline.process_response(
+                exchange,
                 forward_response,
-                request_id=request_id,
-                duration_ms=duration_ms,
-                client_ip=self.client_address[0],
-                target_host=target_host,
             )
             return
         else:
             forward_response = server.forwarder.forward(forward_request)
-        if static_template is None:
-            forward_response = server.runtime_context.response_transformer.maybe_modify_response(
-                request_url=target_url,
-                method=self.command,
-                response=forward_response,
-            )
+            forward_response = server.runtime_context.exchange_pipeline.process_response(exchange, forward_response)
         write_forward_response(self, forward_response, send_body=send_body)
-
-        duration_ms = (time.perf_counter() - started) * 1000
-        server.runtime_context.exchange_recorder.record_response(
-            forward_response,
-            request_id=request_id,
-            duration_ms=duration_ms,
-            client_ip=self.client_address[0],
-            target_host=target_host,
-        )
 
     def do_GET(self) -> None:
         self._handle(send_body=True)
@@ -422,7 +398,7 @@ def create_server(
     auto_enable_mitm: bool = True,
     ca_root: str | Path | None = None,
 ) -> ThreadingHTTPServer:
-    resolved_forwarder = forwarder or UpstreamForwarder(cache_policy=runtime_context.cache_policy)
+    resolved_forwarder = forwarder or UpstreamForwarder()
     resolved_mitm_interceptor = mitm_interceptor
     if resolved_mitm_interceptor is None and auto_enable_mitm:
         ca = default_ca() if ca_root is None else certificate_authority_for_root(ca_root)

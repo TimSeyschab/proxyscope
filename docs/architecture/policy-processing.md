@@ -9,26 +9,32 @@ config-file persistence and migration. `RuntimeConfig` does not evaluate
 requests.
 
 ```text
-Plain HTTP: RequestLoggingHandler -> PolicyEngine -> forward/static/edit
-MITM HTTP: MitmTLSInterceptor -> response rewriter -> PolicyEngine -> edit/static
+Plain HTTP: RequestLoggingHandler -> ExchangePipeline -> forward/static/edit
+MITM HTTP: MitmTLSInterceptor -> ExchangePipeline -> upstream response/static/edit
 ```
 
 Policy actions are represented by `OpenEditorAction` and
 `StaticResponseAction`. The action type owns all required state, so invalid
 action/template combinations cannot be represented.
 
-## Target Flow
+## Processing Flow
 
-A transport-independent policy engine evaluates a request and returns a typed
-`PolicyEvaluation`:
+`ExchangePipeline` owns the shared request and response processing. It evaluates
+policies through the injected policy port without exposing policy types to the
+transport adapters:
 
 ```text
-RequestContext -> PolicyEngine -> Forward | StaticResponse | EditResponse
+ExchangeRequest
+  -> request middleware
+  -> policy evaluation
+  -> static response or transport forwarding
+  -> response transformation and middleware
+  -> exchange recording
 ```
 
-Transport adapters must not know concrete policy types. Adding a policy type
-should require a domain model, serialization support, and a handler, but no
-changes to HTTP or MITM adapters.
+Plain HTTP and MITM construct the same transport-independent exchange models.
+HTTP/1 stream rewriters only parse and rebuild framing; they delegate cache
+header rewriting and response processing to the pipeline.
 
 ## Invariants
 

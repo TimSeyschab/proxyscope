@@ -1,10 +1,19 @@
+from collections.abc import Callable
+
+from proxyscope.processing.middleware import rewrite_cache_invalidation_headers
+
+
 class HTTP1RequestHeaderRewriter:
     """
     Stream rewriter for HTTP/1.x requests.
     Rewrites request headers while preserving message framing and body bytes.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        rewrite_headers: Callable[[dict[str, str]], dict[str, str]] = rewrite_cache_invalidation_headers,
+    ) -> None:
+        self._rewrite_headers = rewrite_headers
         self._buffer = bytearray()
         self._mode = "headers"
         self._body_remaining = 0
@@ -22,7 +31,7 @@ class HTTP1RequestHeaderRewriter:
                 raw_header_block = bytes(self._buffer[:header_end])
                 del self._buffer[: header_end + 4]
 
-                rewritten_headers_block, headers = _rewrite_header_block(raw_header_block)
+                rewritten_headers_block, headers = _rewrite_header_block(raw_header_block, self._rewrite_headers)
                 out.extend(rewritten_headers_block)
 
                 transfer_encoding = _header_value(headers, "transfer-encoding").lower()
@@ -111,30 +120,10 @@ class HTTP1RequestHeaderRewriter:
         return True
 
 
-def rewrite_cache_invalidation_headers(headers: dict[str, str]) -> dict[str, str]:
-    rewritten: dict[str, str] = {}
-    blocked = {
-        "if-none-match",
-        "if-modified-since",
-        "cache-control",
-        "pragma",
-        "expires",
-        "accept-encoding",
-    }
-    for key, value in headers.items():
-        if key.lower() in blocked:
-            continue
-        rewritten[key] = value
-
-    rewritten["Cache-Control"] = "no-cache, no-store, max-age=0, must-revalidate"
-    rewritten["Pragma"] = "no-cache"
-    rewritten["Expires"] = "0"
-    # Keep upstream payloads uncompressed so TUI preview/editor can work with text bodies.
-    rewritten["Accept-Encoding"] = "identity"
-    return rewritten
-
-
-def _rewrite_header_block(raw_header_block: bytes) -> tuple[bytes, dict[str, str]]:
+def _rewrite_header_block(
+    raw_header_block: bytes,
+    rewrite_headers: Callable[[dict[str, str]], dict[str, str]],
+) -> tuple[bytes, dict[str, str]]:
     lines = raw_header_block.decode("iso-8859-1", errors="replace").split("\r\n")
     if not lines:
         return raw_header_block + b"\r\n\r\n", {}
@@ -151,7 +140,7 @@ def _rewrite_header_block(raw_header_block: bytes) -> tuple[bytes, dict[str, str
         ordered.append((name_stripped, value_stripped))
         parsed_headers[name_stripped] = value_stripped
 
-    rewritten_headers = rewrite_cache_invalidation_headers(dict(ordered))
+    rewritten_headers = rewrite_headers(dict(ordered))
     rebuilt_lines = [start_line]
     for name, value in rewritten_headers.items():
         rebuilt_lines.append(f"{name}: {value}")

@@ -18,10 +18,9 @@ Ports
 HTTP, MITM, Textual, filesystem, and network adapters
 ```
 
-The current architecture still contains transitional dependencies from
-`proxyscope.proxy` and `proxyscope.mitm` into `proxyscope.app`. These are
-documented and guarded by an architecture test so they can be removed
-incrementally without allowing new dependencies.
+The transport-independent `proxyscope.processing` package owns shared exchange
+processing. Architecture tests keep policy, config, and processing domains
+independent from app, proxy, and MITM adapters.
 
 ## Documents
 

@@ -10,7 +10,6 @@ from proxyscope.app.logging.setup import configure_logging
 from proxyscope.app.runtime.cli import RuntimeCLI
 from proxyscope.app.runtime.context import create_proxy_runtime_context
 from proxyscope.app.runtime.journal import RequestJournal
-from proxyscope.policies.engine import PolicyEngine
 from proxyscope.proxy.server import ProxyHTTPServer, create_server
 
 LOGGER = logging.getLogger("tproxy.app")
@@ -35,7 +34,7 @@ def main() -> None:
     if args.certs_dir is not None:
         runtime_config.set_mitm_certs_dir(args.certs_dir)
     request_journal = RequestJournal()
-    response_modifier = ResponseModifierService(policy_evaluator=PolicyEngine(runtime_config.policy_repository))
+    response_modifier = ResponseModifierService()
     runtime_events = RuntimeEventDispatcher()
     runtime_context = create_proxy_runtime_context(
         runtime_config=runtime_config,

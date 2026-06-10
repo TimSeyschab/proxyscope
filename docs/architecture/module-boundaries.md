@@ -12,23 +12,22 @@ adapters -> ports -> application -> domain
 
 | Module | Responsibility | May depend on |
 | --- | --- | --- |
-| `proxyscope.proxy` | Plain HTTP and CONNECT transport adapters | Proxy-local models and injected ports |
-| `proxyscope.mitm` | TLS interception transport adapter | Proxy-local models, certificates, and injected ports |
+| `proxyscope.processing` | Transport-independent exchange models, middleware ports, and shared pipeline | Processing-local modules only |
+| `proxyscope.proxy` | Plain HTTP, CONNECT, and HTTP/1 framing adapters | Processing models and injected ports |
+| `proxyscope.mitm` | TLS interception transport adapter | Processing models, proxy framing adapters, certificates, and injected ports |
 | `proxyscope.policies` | Policy models, matching, evaluation, serialization, and repository ports | Policy-local modules only |
 | `proxyscope.config` | Versioned settings, validation, migrations, and config repository | Config-local modules and policy serialization |
 | `proxyscope.app.runtime` | Runtime use cases, commands, and UI coordination | Config, editing, logging, and UI contracts |
 | `proxyscope.app.config` | Mutable runtime facade for settings and policy administration | Config domain and policy repository |
-| `proxyscope.app.editing` | External-editor integration and pending response edits | Injected policy evaluator and proxy response models |
+| `proxyscope.app.editing` | External-editor integration and pending response edits | Processing response models |
 | `proxyscope.app.logging` | Exchange recording and runtime logging | Injected journal and logging policy |
 
-## Enforced Transitional Rule
+## Enforced Dependency Rules
 
-New imports from `proxyscope.proxy` or `proxyscope.mitm` into
-`proxyscope.app` are forbidden. Existing imports are recorded as temporary
-exceptions in `tests/architecture/test_import_boundaries.py`.
-
-Phase 2 removes these exceptions by introducing an explicit runtime context and
-small Protocol-based ports.
+Imports from `proxyscope.proxy` or `proxyscope.mitm` into `proxyscope.app` are
+forbidden. The policy, config, and processing domains may not depend on app,
+proxy, or MITM adapters. These rules are enforced by
+`tests/architecture/test_import_boundaries.py`.
 
 ## Composition Root
 

@@ -42,6 +42,16 @@ class TestImportBoundaries(unittest.TestCase):
 
         self.assertEqual(violations, set(), f"Forbidden config-domain imports: {sorted(violations)}")
 
+    def test_processing_domain_does_not_depend_on_app_proxy_or_mitm(self) -> None:
+        violations: set[tuple[str, str]] = set()
+        for path in (PACKAGE_ROOT / "processing").rglob("*.py"):
+            source_module = _module_name(path)
+            for imported_module in _absolute_imports(path):
+                if imported_module.startswith(("proxyscope.app", "proxyscope.proxy", "proxyscope.mitm")):
+                    violations.add((source_module, imported_module))
+
+        self.assertEqual(violations, set(), f"Forbidden processing-domain imports: {sorted(violations)}")
+
 
 def _absolute_imports(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

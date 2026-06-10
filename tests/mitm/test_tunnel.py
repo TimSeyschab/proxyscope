@@ -97,7 +97,7 @@ class TestMitmRelay(unittest.TestCase):
                 request_sniffer=request_sniffer,
                 response_sniffer=response_sniffer,
                 response_rewriter=response_rewriter,  # type: ignore[arg-type]
-                rewrite_client_requests=True,
+                rewrite_request_headers=lambda headers: headers,
             )
 
         self.assertEqual(upstream_tls.sent, [b"GET / HTTP/1.1\r\n\r\n"])
@@ -120,7 +120,7 @@ class TestMitmRelay(unittest.TestCase):
                 request_sniffer=request_sniffer,
                 response_sniffer=response_sniffer,
                 response_rewriter=response_rewriter,  # type: ignore[arg-type]
-                rewrite_client_requests=False,
+                rewrite_request_headers=None,
             )
 
     def test_relay_ignores_transport_errors(self) -> None:
@@ -137,7 +137,7 @@ class TestMitmRelay(unittest.TestCase):
             request_sniffer=request_sniffer,
             response_sniffer=response_sniffer,
             response_rewriter=response_rewriter,  # type: ignore[arg-type]
-            rewrite_client_requests=False,
+            rewrite_request_headers=None,
         )
 
     def test_relay_re_raises_connect_timeout_errors(self) -> None:
@@ -155,7 +155,7 @@ class TestMitmRelay(unittest.TestCase):
                 request_sniffer=request_sniffer,
                 response_sniffer=response_sniffer,
                 response_rewriter=response_rewriter,  # type: ignore[arg-type]
-                rewrite_client_requests=False,
+                rewrite_request_headers=None,
             )
 
     def test_relay_ignores_ssl_errors(self) -> None:
@@ -172,7 +172,7 @@ class TestMitmRelay(unittest.TestCase):
             request_sniffer=request_sniffer,
             response_sniffer=response_sniffer,
             response_rewriter=response_rewriter,  # type: ignore[arg-type]
-            rewrite_client_requests=False,
+            rewrite_request_headers=None,
         )
 
 

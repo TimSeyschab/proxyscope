@@ -40,7 +40,7 @@ class TestRequestLoggingServer(unittest.TestCase):
     def setUp(self) -> None:
         self.config = RuntimeConfig()
         self.journal = RequestJournal()
-        self.modifier = ResponseModifierService(policy_evaluator=self.config)
+        self.modifier = ResponseModifierService()
         self.runtime_context = create_proxy_runtime_context(
             runtime_config=self.config,
             request_journal=self.journal,

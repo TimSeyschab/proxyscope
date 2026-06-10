@@ -23,7 +23,7 @@ class TestRuntimePortContracts(unittest.TestCase):
     def test_app_adapters_implement_runtime_ports(self) -> None:
         config = RuntimeConfig()
         journal = RequestJournal()
-        modifier = ResponseModifierService(policy_evaluator=PolicyEngine(config.policy_repository))
+        modifier = ResponseModifierService()
         recorder = RequestResponseRecorder(runtime_config=config, request_journal=journal)
         events = RuntimeEventDispatcher()
 

@@ -1,7 +1,6 @@
 from collections.abc import Callable
 
-from proxyscope.proxy.forwarding import ForwardResponse
-from proxyscope.proxy.runtime import PolicyEvaluator, ResponseTransformer
+from proxyscope.processing.models import ExchangeResponse
 
 
 class HTTP1ResponseModifierRewriter:
@@ -13,22 +12,23 @@ class HTTP1ResponseModifierRewriter:
     def __init__(
         self,
         *,
-        policy_evaluator: PolicyEvaluator,
-        response_modifier: ResponseTransformer,
-        acquire_request_meta: Callable[[], tuple[str, str] | None],
+        process_response: Callable[[ExchangeResponse], ExchangeResponse],
+        acquire_request_method: Callable[[], str | None],
     ) -> None:
-        self._policy_evaluator = policy_evaluator
-        self._response_modifier = response_modifier
-        self._acquire_request_meta = acquire_request_meta
+        self._process_response = process_response
+        self._acquire_request_method = acquire_request_method
         self._buffer = bytearray()
         self._passthrough = False
-        self._active_request_meta: tuple[str, str] | None = None
+        self._active_request_method: str | None = None
+        self._close_delimited_response: tuple[str, int, str, dict[str, str], int] | None = None
 
     def feed(self, data: bytes) -> bytes:
         if self._passthrough:
             return data
 
         self._buffer.extend(data)
+        if self._close_delimited_response is not None:
+            return b""
         out = bytearray()
 
         while True:
@@ -51,11 +51,10 @@ class HTTP1ResponseModifierRewriter:
                 name, value = line.split(":", 1)
                 headers[name.strip()] = value.strip()
 
-            if self._active_request_meta is None:
-                self._active_request_meta = self._acquire_request_meta()
-            request_meta = self._active_request_meta
-            method = request_meta[0] if request_meta is not None else "GET"
-            request_url = request_meta[1] if request_meta is not None else "https://unknown/"
+            if self._active_request_method is None:
+                self._active_request_method = self._acquire_request_method()
+            method = self._active_request_method or "GET"
+            status_code, reason, version = _parse_response_start_line(start_line)
 
             consumed = header_end + 4
             transfer_encoding = _header_value(headers, "transfer-encoding").lower()
@@ -88,56 +87,55 @@ class HTTP1ResponseModifierRewriter:
                 decoded_body = raw_body
                 consumed += content_length
             else:
-                # Unknown body framing (usually close-delimited). Do not rewrite.
-                self._passthrough = True
-                out.extend(self._flush_buffer())
+                self._close_delimited_response = (version, status_code, reason, headers, consumed)
                 break
 
             del self._buffer[:consumed]
 
-            status_code, reason, version = _parse_response_start_line(start_line)
             if _is_interim_response(status_code):
                 out.extend(raw_header_block)
                 out.extend(b"\r\n\r\n")
                 out.extend(raw_body)
                 continue
 
-            original_response = ForwardResponse(
+            original_response = ExchangeResponse(
                 status_code=status_code,
                 reason=reason,
                 headers=headers,
                 body=decoded_body,
+                body_size=len(decoded_body),
             )
-            static_template = self._policy_evaluator.get_static_response_template_for_request(
-                method=method, url=request_url
-            )
-            if static_template is not None:
-                final_response = ForwardResponse(
-                    status_code=static_template.status_code,
-                    reason=static_template.reason,
-                    headers=dict(static_template.headers),
-                    body=static_template.body,
-                )
-            else:
-                edited_response = self._response_modifier.maybe_modify_response(
-                    request_url=request_url,
-                    method=method,
-                    response=original_response,
-                )
-                if edited_response is original_response:
-                    out.extend(raw_header_block)
-                    out.extend(b"\r\n\r\n")
-                    out.extend(raw_body)
-                    self._active_request_meta = None
-                    continue
-                final_response = edited_response
+            final_response = self._process_response(original_response)
+            if final_response is original_response:
+                out.extend(raw_header_block)
+                out.extend(b"\r\n\r\n")
+                out.extend(raw_body)
+                self._active_request_method = None
+                continue
 
             out.extend(_build_response_bytes(version=version, response=final_response))
-            self._active_request_meta = None
+            self._active_request_method = None
 
         return bytes(out)
 
     def flush(self) -> bytes:
+        if self._close_delimited_response is not None:
+            version, status_code, reason, headers, body_start = self._close_delimited_response
+            original_payload = bytes(self._buffer)
+            original_response = ExchangeResponse(
+                status_code=status_code,
+                reason=reason,
+                headers=headers,
+                body=original_payload[body_start:],
+                body_size=len(original_payload) - body_start,
+            )
+            final_response = self._process_response(original_response)
+            self._buffer.clear()
+            self._close_delimited_response = None
+            self._active_request_method = None
+            if final_response is original_response:
+                return original_payload
+            return _build_response_bytes(version=version, response=final_response)
         return self._flush_buffer()
 
     def _flush_buffer(self) -> bytes:
@@ -175,7 +173,7 @@ def _is_interim_response(status_code: int) -> bool:
     return 100 <= status_code < 200 and status_code != 101
 
 
-def _build_response_bytes(*, version: str, response: ForwardResponse) -> bytes:
+def _build_response_bytes(*, version: str, response: ExchangeResponse) -> bytes:
     headers = dict(response.headers)
     _remove_header_case_insensitive(headers, "Transfer-Encoding")
     headers["Content-Length"] = str(len(response.body))

@@ -3,8 +3,7 @@ from dataclasses import dataclass
 from queue import Empty, Queue
 from threading import Event, Lock
 
-from proxyscope.proxy.forwarding import ForwardResponse
-from proxyscope.proxy.runtime import PolicyEvaluator
+from proxyscope.processing.models import ExchangeResponse
 
 LOGGER = logging.getLogger("tproxy.response_modifier")
 
@@ -13,15 +12,15 @@ LOGGER = logging.getLogger("tproxy.response_modifier")
 class PendingResponseEdit:
     request_url: str
     method: str
-    response: ForwardResponse
+    response: ExchangeResponse
     _done: Event
-    _result: ForwardResponse | None = None
+    _result: ExchangeResponse | None = None
 
     def apply(self, *, headers: dict[str, str], body: bytes) -> None:
         updated_headers = dict(headers)
         _remove_header_case_insensitive(updated_headers, "Transfer-Encoding")
         updated_headers["Content-Length"] = str(len(body))
-        self._result = ForwardResponse(
+        self._result = ExchangeResponse(
             status_code=self.response.status_code,
             reason=self.response.reason,
             headers=updated_headers,
@@ -33,7 +32,7 @@ class PendingResponseEdit:
         self._result = self.response
         self._done.set()
 
-    def wait(self, *, timeout_s: float | None = None) -> ForwardResponse:
+    def wait(self, *, timeout_s: float | None = None) -> ExchangeResponse:
         finished = self._done.wait(timeout=timeout_s)
         if not finished or self._result is None:
             return self.response
@@ -41,8 +40,7 @@ class PendingResponseEdit:
 
 
 class ResponseModifierService:
-    def __init__(self, *, policy_evaluator: PolicyEvaluator | None = None, interactive_enabled: bool = False) -> None:
-        self._policy_evaluator = policy_evaluator
+    def __init__(self, *, interactive_enabled: bool = False) -> None:
         self._interactive_enabled = interactive_enabled
         self._queue: Queue[PendingResponseEdit] = Queue()
         self._lock = Lock()
@@ -51,15 +49,7 @@ class ResponseModifierService:
         with self._lock:
             self._interactive_enabled = enabled
 
-    def set_policy_evaluator(self, policy_evaluator: PolicyEvaluator) -> None:
-        self._policy_evaluator = policy_evaluator
-
-    def maybe_modify_response(self, *, request_url: str, method: str, response: ForwardResponse) -> ForwardResponse:
-        if self._policy_evaluator is None or not self._policy_evaluator.should_modify_response_for_request(
-            method=method, url=request_url
-        ):
-            return response
-
+    def maybe_modify_response(self, *, request_url: str, method: str, response: ExchangeResponse) -> ExchangeResponse:
         with self._lock:
             interactive_enabled = self._interactive_enabled
         if not interactive_enabled:

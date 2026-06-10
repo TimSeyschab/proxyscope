@@ -3,9 +3,11 @@ import ssl
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from proxyscope.mitm.certificates import MitmCertificateAuthority
+from proxyscope.processing.models import ExchangeRequest, ExchangeResponse, PreparedExchange
 from proxyscope.proxy.connect_tunnel import ConnectTarget, ConnectUpstreamConnectionError, ConnectUpstreamTimeoutError
 from proxyscope.proxy.http1_request_rewriter import HTTP1RequestHeaderRewriter
 from proxyscope.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
@@ -75,50 +77,46 @@ class MitmTLSInterceptor:
                     except OSError:
                         client_ip = "unknown"
 
-                    pending_request_ids: deque[int | None] = deque()
-                    pending_request_meta: deque[tuple[str, str]] = deque()
+                    pending_exchanges: deque[PreparedExchange] = deque()
                     pending_lock = threading.Lock()
 
                     def on_request(start_line: str, headers: dict[str, str], body: bytes) -> None:
-                        request_id = self.runtime_context.exchange_recorder.record_mitm_request(
-                            client_ip=client_ip,
-                            target_host=target.host,
-                            target_port=target.port,
-                            start_line=start_line,
-                            headers=headers,
-                            body=body,
-                        )
                         method, path = _parse_request_start_line(start_line)
                         request_url = _build_https_request_url(host=target.host, port=target.port, path=path)
-                        with pending_lock:
-                            pending_request_ids.append(request_id)
-                            pending_request_meta.append((method, request_url))
-
-                    def on_response(start_line: str, headers: dict[str, str], body: bytes) -> None:
-                        with pending_lock:
-                            request_id = pending_request_ids.popleft() if pending_request_ids else None
-                        self.runtime_context.exchange_recorder.record_mitm_response(
-                            client_ip=client_ip,
-                            target_host=target.host,
-                            target_port=target.port,
-                            start_line=start_line,
-                            headers=headers,
-                            body=body,
-                            request_id=request_id,
+                        exchange = self.runtime_context.exchange_pipeline.prepare_request(
+                            ExchangeRequest(
+                                method=method,
+                                url=request_url,
+                                path=path,
+                                headers=headers,
+                                body=body,
+                                client_ip=client_ip,
+                                target_host=target.host,
+                                target_port=target.port,
+                                protocol="https-mitm",
+                            )
                         )
-
-                    def acquire_request_meta() -> tuple[str, str] | None:
                         with pending_lock:
-                            if not pending_request_meta:
+                            pending_exchanges.append(exchange)
+
+                    def process_response(response: ExchangeResponse) -> ExchangeResponse:
+                        with pending_lock:
+                            exchange = pending_exchanges.popleft() if pending_exchanges else None
+                        if exchange is None:
+                            return response
+                        return self.runtime_context.exchange_pipeline.process_response(exchange, response)
+
+                    def acquire_request_method() -> str | None:
+                        with pending_lock:
+                            if not pending_exchanges:
                                 return None
-                            return pending_request_meta.popleft()
+                            return pending_exchanges[0].request.method
 
                     request_sniffer = HTTP1MessageSniffer(on_request)
-                    response_sniffer = HTTP1MessageSniffer(on_response)
+                    response_sniffer = HTTP1MessageSniffer(lambda _start_line, _headers, _body: None)
                     response_rewriter = HTTP1ResponseModifierRewriter(
-                        policy_evaluator=self.runtime_context.policy_evaluator,
-                        response_modifier=self.runtime_context.response_transformer,
-                        acquire_request_meta=acquire_request_meta,
+                        process_response=process_response,
+                        acquire_request_method=acquire_request_method,
                     )
                     _relay_tls_bidirectional(
                         client_tls,
@@ -127,7 +125,7 @@ class MitmTLSInterceptor:
                         request_sniffer=request_sniffer,
                         response_sniffer=response_sniffer,
                         response_rewriter=response_rewriter,
-                        rewrite_client_requests=self.runtime_context.cache_policy.cache_invalidation_enabled,
+                        rewrite_request_headers=self.runtime_context.exchange_pipeline.rewrite_request_headers,
                     )
                 return True
 
@@ -140,7 +138,7 @@ def _relay_tls_bidirectional(
     request_sniffer: HTTP1MessageSniffer,
     response_sniffer: HTTP1MessageSniffer,
     response_rewriter: HTTP1ResponseModifierRewriter,
-    rewrite_client_requests: bool,
+    rewrite_request_headers: Callable[[dict[str, str]], dict[str, str]] | None,
 ) -> None:
     """
     Relay bytes in both directions using two threads.
@@ -207,7 +205,7 @@ def _relay_tls_bidirectional(
             except OSError:
                 pass
 
-    request_rewriter = HTTP1RequestHeaderRewriter() if rewrite_client_requests else None
+    request_rewriter = HTTP1RequestHeaderRewriter(rewrite_request_headers) if rewrite_request_headers else None
     t1 = threading.Thread(
         target=pump,
         args=(client_tls, upstream_tls, request_sniffer),
