@@ -10,7 +10,6 @@ DetailTab = Literal["request", "response"]
 class RuntimeUIViewState:
     status_message: str = "Type 'help' for commands."
     should_exit: bool = False
-    pending_policy_edit_name: str | None = None
 
     site_cursor: int = 0
     policy_cursor: int = 0

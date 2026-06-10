@@ -2,7 +2,16 @@ from collections import Counter
 
 from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.runtime.journal import LoggedExchange
-from proxyscope.app.runtime.ui_models import AuxPanelTabModel, RuntimeScreenModel
+from proxyscope.app.runtime.ui_models import (
+    AuxPanelModel,
+    AuxPanelTabModel,
+    DetailTab,
+    RequestDetailModel,
+    RequestListModel,
+    RequestRowModel,
+    RuntimeScreenModel,
+    StatusBarModel,
+)
 from proxyscope.app.runtime.ui_state import RuntimeUIViewState
 
 
@@ -38,24 +47,100 @@ def build_runtime_screen_model(
         f"config={config_path_text}"
     )
     request_title = f"MAIN {len(entries)}/{all_entry_count}"
+    selected_entry = entries[state.request_cursor] if entries else None
 
     return RuntimeScreenModel(
-        request_title=request_title,
-        request_entries=entries,
-        request_cursor=state.request_cursor,
+        request_list=RequestListModel(
+            title=request_title,
+            rows=_build_request_rows(entries),
+            selected_request_id=None if selected_entry is None else selected_entry.request_id,
+            cursor=state.request_cursor,
+        ),
+        detail=RequestDetailModel(
+            tab=state.detail_tab,
+            text=_format_detail(selected_entry, state.detail_tab),
+            has_response=selected_entry is not None and selected_entry.response is not None,
+        ),
+        aux=AuxPanelModel(
+            visible=state.aux_visible,
+            aux_tabs=_build_aux_tabs(
+                site_items=site_items,
+                policy_items=policy_items,
+                site_cursor=state.site_cursor,
+                policy_cursor=state.policy_cursor,
+            ),
+            active_key=state.aux_tab_key,
+        ),
+        status_bar=StatusBarModel(
+            message=state.status_message,
+            config_text=config_text,
+        ),
         main_mode=state.main_mode,
         active_pane=state.active_pane,
-        detail_tab=state.detail_tab,
-        aux_visible=state.aux_visible,
-        aux_tabs=_build_aux_tabs(
-            site_items=site_items,
-            policy_items=policy_items,
-            site_cursor=state.site_cursor,
-            policy_cursor=state.policy_cursor,
+    )
+
+
+def _build_request_rows(entries: list[LoggedExchange]) -> list[RequestRowModel]:
+    return [_build_request_row(entry) for entry in entries]
+
+
+def _build_request_row(entry: LoggedExchange) -> RequestRowModel:
+    status = "---" if entry.response is None else str(entry.response.status_code)
+    host = entry.target_host or "-"
+    duration = "-" if entry.duration_ms is None else f"{entry.duration_ms:.1f}ms"
+    return RequestRowModel(
+        request_id=entry.request_id,
+        cells=(
+            str(entry.request_id),
+            status,
+            entry.request.method,
+            host,
+            entry.request.path,
+            duration,
         ),
-        aux_active_key=state.aux_tab_key,
-        status_message=state.status_message,
-        config_text=config_text,
+    )
+
+
+def _format_detail(entry: LoggedExchange | None, detail_tab: DetailTab) -> str:
+    if entry is None:
+        return "No request selected."
+    if detail_tab == "response":
+        return _format_response_detail(entry)
+    return _format_request_detail(entry)
+
+
+def _format_request_detail(entry: LoggedExchange) -> str:
+    header_lines = "\n".join(f"{name}: {value}" for name, value in entry.request.headers) or "<none>"
+    body = entry.request.body_preview or "<empty>"
+    return (
+        f"{entry.request.start_line}\n"
+        f"host: {entry.target_host or '-'}\n"
+        f"port: {entry.target_port if entry.target_port is not None else '-'}\n"
+        f"protocol: {entry.protocol}\n"
+        f"client: {entry.client_ip}\n\n"
+        f"headers\n"
+        f"{header_lines}\n\n"
+        f"body\n"
+        f"{body}"
+    )
+
+
+def _format_response_detail(entry: LoggedExchange) -> str:
+    if entry.response is None:
+        return "No response captured."
+    header_lines = "\n".join(f"{name}: {value}" for name, value in entry.response.headers) or "<none>"
+    body = entry.response.body_preview or "<empty>"
+    size = "-" if entry.response.body_size is None else str(entry.response.body_size)
+    duration = "-" if entry.duration_ms is None else f"{entry.duration_ms:.1f}ms"
+    return (
+        f"{entry.response.start_line}\n"
+        f"status: {entry.response.status_code} {entry.response.reason}\n"
+        f"duration: {duration}\n"
+        f"size: {size}\n\n"
+        f"headers\n"
+        f"{header_lines}\n\n"
+        f"body\n"
+        f"{body}"
     )
 
 

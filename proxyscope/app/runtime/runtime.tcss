@@ -1,0 +1,114 @@
+Screen {
+    background: #11161c;
+    color: #e6edf3;
+}
+
+#root {
+    layout: vertical;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+#content {
+    layout: horizontal;
+    height: 1fr;
+    padding: 0;
+    margin: 0;
+}
+
+.pane {
+    border: round #4b647a;
+    background: #16202a;
+    padding: 0;
+    margin: 0;
+}
+
+.pane-title {
+    color: #8fd3ff;
+    text-style: bold;
+    padding: 0 1;
+    margin: 0;
+}
+
+.pane-title.-active {
+    color: #ffd280;
+}
+
+#detail-tabs {
+    color: #91a7bb;
+    padding: 0 1;
+    margin: 0;
+    border-bottom: solid #31424f;
+}
+
+#main-pane {
+    width: 2fr;
+    min-width: 36;
+}
+
+#detail-pane {
+    width: 1fr;
+    min-width: 30;
+}
+
+#sidebar-pane {
+    width: 32;
+    min-width: 24;
+}
+
+#requests {
+    height: 1fr;
+}
+
+#detail-scroll {
+    height: 1fr;
+    background: #10171e;
+    border: solid #31424f;
+}
+
+#detail-body {
+    padding: 0;
+    margin: 0;
+}
+
+#sidebar-list {
+    height: 1fr;
+    background: #10171e;
+    border: solid #31424f;
+}
+
+#sidebar-tabs {
+    color: #91a7bb;
+    padding: 0 1;
+    margin: 0;
+    border-bottom: solid #31424f;
+}
+
+#command-pane {
+    height: 4;
+    border-top: solid #31424f;
+    padding: 0;
+    margin: 0;
+    background: #0d1318;
+}
+
+#command-input {
+    margin: 0;
+    padding: 0 1;
+    border: none;
+    background: #0d1318;
+}
+
+#status-line {
+    color: #ffd280;
+    text-style: bold;
+    padding: 0 1;
+    margin: 0;
+}
+
+#config-line {
+    color: #91a7bb;
+    padding: 0 1;
+    margin: 0;
+}

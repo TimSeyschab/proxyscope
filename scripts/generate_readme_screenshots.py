@@ -101,23 +101,23 @@ async def _capture_screenshots() -> None:
         proxy_base_url="http://127.0.0.1:8080",
     )
     _seed_runtime_data(runtime_cli, journal, config)
-    runtime_cli._view_state.status_message = "Demo session loaded."
+    runtime_cli.set_status_message("Demo session loaded.")
 
     app = RuntimeTextualApp(runtime_cli)
     async with app.run_test(size=(160, 42)) as pilot:
         await pilot.pause(0.3)
         app.save_screenshot(str(OVERVIEW_SCREENSHOT))
 
-        runtime_cli._view_state.request_cursor = 1
-        runtime_cli._view_state.open_selected_request_detail()
-        runtime_cli._view_state.detail_tab = "response"
-        runtime_cli._view_state.status_message = "Detail view for request #2"
+        runtime_cli.select_request(1)
+        runtime_cli.open_selected_request_detail()
+        runtime_cli.select_detail_tab("response")
+        runtime_cli.set_status_message("Detail view for request #2")
         app._refresh_screen()
         await pilot.pause(0.1)
         app.save_screenshot(str(DETAIL_SCREENSHOT))
 
-        runtime_cli._view_state.focus_aux_tab("policies")
-        runtime_cli._view_state.status_message = "Policies sidebar"
+        runtime_cli.select_aux_tab("policies")
+        runtime_cli.set_status_message("Policies sidebar")
         app._refresh_screen()
         await pilot.pause(0.1)
         app.save_screenshot(str(POLICIES_SCREENSHOT))

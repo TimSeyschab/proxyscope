@@ -1,11 +1,30 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from proxyscope.app.runtime.journal import LoggedExchange
-
 MainMode = Literal["requests", "request_detail"]
 ActivePane = Literal["requests", "detail", "aux"]
 DetailTab = Literal["request", "response"]
+
+
+@dataclass(frozen=True)
+class RequestRowModel:
+    request_id: int
+    cells: tuple[str, str, str, str, str, str]
+
+
+@dataclass(frozen=True)
+class RequestListModel:
+    title: str
+    rows: list[RequestRowModel]
+    cursor: int
+    selected_request_id: int | None
+
+
+@dataclass(frozen=True)
+class RequestDetailModel:
+    tab: DetailTab
+    text: str
+    has_response: bool
 
 
 @dataclass(frozen=True)
@@ -18,15 +37,23 @@ class AuxPanelTabModel:
 
 
 @dataclass(frozen=True)
+class AuxPanelModel:
+    visible: bool
+    aux_tabs: list[AuxPanelTabModel]
+    active_key: str
+
+
+@dataclass(frozen=True)
+class StatusBarModel:
+    message: str
+    config_text: str
+
+
+@dataclass(frozen=True)
 class RuntimeScreenModel:
-    request_title: str
-    request_entries: list[LoggedExchange]
-    request_cursor: int
+    request_list: RequestListModel
+    detail: RequestDetailModel
+    aux: AuxPanelModel
+    status_bar: StatusBarModel
     main_mode: MainMode
     active_pane: ActivePane
-    detail_tab: DetailTab
-    aux_visible: bool
-    aux_tabs: list[AuxPanelTabModel]
-    aux_active_key: str
-    status_message: str
-    config_text: str

@@ -6,38 +6,51 @@ from textual.widgets._option_list import Option
 from proxyscope.app.runtime.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
 from proxyscope.app.runtime.textual_ui import (
     RuntimeTextualApp,
-    _detail_signature,
-    _format_detail,
     _format_detail_tabs,
     _focus_step_order,
     _plain_text,
-    _request_rows_signature,
     _shortcut_token_from_key_event,
     determine_runtime_layout,
 )
-from proxyscope.app.runtime.ui_models import AuxPanelTabModel, RuntimeScreenModel
+from proxyscope.app.runtime.ui_presenter import _build_request_rows, _format_detail
+from proxyscope.app.runtime.ui_models import (
+    AuxPanelModel,
+    AuxPanelTabModel,
+    RequestDetailModel,
+    RequestListModel,
+    RuntimeScreenModel,
+    StatusBarModel,
+)
 
 
 def _screen_model(*, width_mode: str = "detail", active_pane: str = "requests", aux_visible: bool = True) -> RuntimeScreenModel:
     return RuntimeScreenModel(
-        request_title="MAIN 1/1",
-        request_entries=[],
-        request_cursor=0,
+        request_list=RequestListModel(
+            title="MAIN 1/1",
+            rows=[],
+            selected_request_id=None,
+            cursor=0,
+        ),
+        detail=RequestDetailModel(
+            tab="request",
+            text="No request selected.",
+            has_response=False,
+        ),
+        aux=AuxPanelModel(
+            visible=aux_visible,
+            aux_tabs=[
+                AuxPanelTabModel(
+                    key="sites",
+                    title="SIDEBAR:SITES",
+                    items=["example.com"],
+                    cursor=0,
+                )
+            ],
+            active_key="sites",
+        ),
+        status_bar=StatusBarModel(message="ok", config_text="cfg"),
         main_mode="request_detail" if width_mode == "detail" else "requests",
         active_pane=active_pane,  # type: ignore[arg-type]
-        detail_tab="request",
-        aux_visible=aux_visible,
-        aux_tabs=[
-            AuxPanelTabModel(
-                key="sites",
-                title="SIDEBAR:SITES",
-                items=["example.com"],
-                cursor=0,
-            )
-        ],
-        aux_active_key="sites",
-        status_message="ok",
-        config_text="cfg",
     )
 
 
@@ -152,8 +165,8 @@ class TestTextualUIDetailFormatting(unittest.TestCase):
         )
 
         self.assertNotEqual(
-            _request_rows_signature([pending_entry]),
-            _request_rows_signature([complete_entry]),
+            _build_request_rows([pending_entry]),
+            _build_request_rows([complete_entry]),
         )
 
     def test_detail_signature_changes_when_response_preview_changes(self) -> None:
@@ -204,8 +217,8 @@ class TestTextualUIDetailFormatting(unittest.TestCase):
         )
 
         self.assertNotEqual(
-            _detail_signature(base_entry, "response"),
-            _detail_signature(updated_entry, "response"),
+            _format_detail(base_entry, "response"),
+            _format_detail(updated_entry, "response"),
         )
 
 

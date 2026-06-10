@@ -86,12 +86,13 @@ class TestRuntimeCLI(unittest.TestCase):
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
-        cli._focus_aux_tab("sites")  # type: ignore[attr-defined]
+        cli.select_aux_tab("sites")
 
-        cli._go_back()  # type: ignore[attr-defined]
+        cli.go_back()
 
-        self.assertFalse(cli._view_state.aux_visible)  # type: ignore[attr-defined]
-        self.assertEqual(cli._view_state.active_pane, "requests")  # type: ignore[attr-defined]
+        model = cli.build_screen_model()
+        self.assertFalse(model.aux.visible)
+        self.assertEqual(model.active_pane, "requests")
 
     def test_go_back_closes_detail_view(self) -> None:
         journal = RequestJournal()
@@ -111,13 +112,14 @@ class TestRuntimeCLI(unittest.TestCase):
             request_journal=journal,
             response_modifier=ResponseModifierService(),
         )
-        cli._open_selected_request_detail()  # type: ignore[attr-defined]
-        cli._view_state.aux_visible = False  # type: ignore[attr-defined]
+        cli.open_selected_request_detail()
+        cli.toggle_aux_visibility()
 
-        cli._go_back()  # type: ignore[attr-defined]
+        cli.go_back()
 
-        self.assertEqual(cli._view_state.main_mode, "requests")  # type: ignore[attr-defined]
-        self.assertEqual(cli._view_state.active_pane, "requests")  # type: ignore[attr-defined]
+        model = cli.build_screen_model()
+        self.assertEqual(model.main_mode, "requests")
+        self.assertEqual(model.active_pane, "requests")
 
     def test_go_back_hides_sidebar_before_leaving_detail_view(self) -> None:
         journal = RequestJournal()
@@ -137,13 +139,14 @@ class TestRuntimeCLI(unittest.TestCase):
             request_journal=journal,
             response_modifier=ResponseModifierService(),
         )
-        cli._open_selected_request_detail()  # type: ignore[attr-defined]
+        cli.open_selected_request_detail()
 
-        cli._go_back()  # type: ignore[attr-defined]
+        cli.go_back()
 
-        self.assertFalse(cli._view_state.aux_visible)  # type: ignore[attr-defined]
-        self.assertEqual(cli._view_state.main_mode, "request_detail")  # type: ignore[attr-defined]
-        self.assertEqual(cli._view_state.active_pane, "detail")  # type: ignore[attr-defined]
+        model = cli.build_screen_model()
+        self.assertFalse(model.aux.visible)
+        self.assertEqual(model.main_mode, "request_detail")
+        self.assertEqual(model.active_pane, "detail")
 
     def test_selected_detail_request_stays_stable_when_new_entry_arrives(self) -> None:
         journal = RequestJournal()
@@ -174,8 +177,8 @@ class TestRuntimeCLI(unittest.TestCase):
             request_journal=journal,
             response_modifier=ResponseModifierService(),
         )
-        cli._set_request_cursor(1)  # type: ignore[attr-defined]
-        cli._open_selected_request_detail()  # type: ignore[attr-defined]
+        cli.select_request(1)
+        cli.open_selected_request_detail()
 
         journal.start_request(
             method="GET",
@@ -190,8 +193,8 @@ class TestRuntimeCLI(unittest.TestCase):
         )
         model = cli.build_screen_model()
 
-        self.assertEqual(model.request_entries[model.request_cursor].request_id, alpha_request_id)
-        self.assertEqual(model.request_cursor, 2)
+        self.assertEqual(model.request_list.selected_request_id, alpha_request_id)
+        self.assertEqual(model.request_list.cursor, 2)
 
     def test_execute_clear_command_clears_requests(self) -> None:
         journal = RequestJournal()
@@ -271,7 +274,7 @@ class TestRuntimeCLI(unittest.TestCase):
             response_modifier=ResponseModifierService(),
         )
         cli.on_site_visit("example.com")
-        cli._add_selected_site_to_whitelist()  # type: ignore[attr-defined]
+        cli.add_selected_site_to_whitelist()
         self.assertEqual(config.whitelist_entries(), ("example.com",))
 
     def test_execute_cache_command_updates_config(self) -> None:
@@ -405,7 +408,7 @@ class TestRuntimeCLI(unittest.TestCase):
             response_modifier=ResponseModifierService(),
         )
 
-        cli._disable_selected_policy()  # type: ignore[attr-defined]
+        cli.disable_selected_policy()
 
         self.assertEqual(cli._status_message, "Open Policies tab first (Shift+P).")  # type: ignore[attr-defined]
         self.assertIsNotNone(
@@ -431,9 +434,9 @@ class TestRuntimeCLI(unittest.TestCase):
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
-        cli._focus_aux_tab("policies")  # type: ignore[attr-defined]
+        cli.select_aux_tab("policies")
 
-        cli._disable_selected_policy()  # type: ignore[attr-defined]
+        cli.disable_selected_policy()
 
         self.assertIsNone(config.get_static_response_template_for_request(method="GET", url="https://example.com/mock"))
 
@@ -464,11 +467,10 @@ class TestRuntimeCLI(unittest.TestCase):
             response_modifier=ResponseModifierService(),
         )
 
-        ordered_names = [name for name, _desc in cli._ordered_policy_items()]  # type: ignore[attr-defined]
-        self.assertEqual(
-            ordered_names,
-            ["high-priority-exact", "mid-priority-prefix", "low-priority"],
-        )
+        policies_tab = cli.build_screen_model().aux.aux_tabs[1]
+        self.assertIn("high-priority-exact", policies_tab.items[0])
+        self.assertIn("mid-priority-prefix", policies_tab.items[1])
+        self.assertIn("low-priority", policies_tab.items[2])
 
     def test_execute_policy_edit_command_schedules_editor(self) -> None:
         config = RuntimeConfig()
@@ -497,10 +499,10 @@ class TestRuntimeCLI(unittest.TestCase):
         )
 
         with patch(
-            "proxyscope.app.runtime.cli.edit_policy_rule_with_external_editor",
+            "proxyscope.app.runtime.actions.edit_policy_rule_with_external_editor",
             return_value=(False, None, "cancelled"),
         ) as edit_mock:
-            cli._add_selected_request_to_editor_policy()  # type: ignore[attr-defined]
+            cli.add_selected_request_to_editor_policy()
 
         self.assertTrue(config.open_editor_policy_entries())
         edit_mock.assert_called_once()
@@ -548,16 +550,19 @@ class TestRuntimeCLI(unittest.TestCase):
         )
 
         cli.execute_command("filter host api.example.com")
-        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
-        self.assertEqual(cli._ordered_entries()[0].target_host, "api.example.com")  # type: ignore[attr-defined]
+        rows = cli.build_screen_model().request_list.rows
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].cells[3], "api.example.com")
 
         cli.execute_command("filter method POST")
-        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
-        self.assertEqual(cli._ordered_entries()[0].request.method, "POST")  # type: ignore[attr-defined]
+        rows = cli.build_screen_model().request_list.rows
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].cells[2], "POST")
 
         cli.execute_command("filter status 404")
-        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
-        self.assertEqual(cli._ordered_entries()[0].response.status_code, 404)  # type: ignore[union-attr,attr-defined]
+        rows = cli.build_screen_model().request_list.rows
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].cells[1], "404")
 
     def test_find_command_filters_by_text_and_clear_restores_entries(self) -> None:
         cli = RuntimeCLI(
@@ -567,11 +572,12 @@ class TestRuntimeCLI(unittest.TestCase):
         )
 
         cli.execute_command("find missing")
-        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
-        self.assertEqual(cli._ordered_entries()[0].target_host, "api.example.com")  # type: ignore[attr-defined]
+        rows = cli.build_screen_model().request_list.rows
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].cells[3], "api.example.com")
 
         cli.execute_command("find clear")
-        self.assertEqual(len(cli._ordered_entries()), 2)  # type: ignore[attr-defined]
+        self.assertEqual(len(cli.build_screen_model().request_list.rows), 2)
 
     def test_filter_clear_resets_all_request_filters(self) -> None:
         cli = RuntimeCLI(
@@ -583,10 +589,10 @@ class TestRuntimeCLI(unittest.TestCase):
         cli.execute_command("filter host example.com")
         cli.execute_command("filter method GET")
         cli.execute_command("filter text alpha")
-        self.assertEqual(len(cli._ordered_entries()), 1)  # type: ignore[attr-defined]
+        self.assertEqual(len(cli.build_screen_model().request_list.rows), 1)
 
         cli.execute_command("filter clear")
-        self.assertEqual(len(cli._ordered_entries()), 2)  # type: ignore[attr-defined]
+        self.assertEqual(len(cli.build_screen_model().request_list.rows), 2)
 
     def test_export_command_writes_json_snapshot(self) -> None:
         cli = RuntimeCLI(
