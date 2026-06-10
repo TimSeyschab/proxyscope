@@ -128,8 +128,9 @@ class RuntimeReplayActionService:
 
 
 class RuntimeResponseEditActionService:
-    def __init__(self, response_modifier: ResponseModifierService) -> None:
+    def __init__(self, response_modifier: ResponseModifierService, runtime_config: RuntimeConfig) -> None:
         self._response_modifier = response_modifier
+        self._runtime_config = runtime_config
 
     def process_pending_edit(self, *, suspend_ui: SuspendUI | None = None) -> str | None:
         pending = self._response_modifier.poll_pending_edit()
@@ -137,7 +138,10 @@ class RuntimeResponseEditActionService:
             return None
         try:
             with _suspend_runtime_ui(suspend_ui):
-                success, message = edit_pending_response_with_external_editor(pending)
+                success, message = edit_pending_response_with_external_editor(
+                    pending,
+                    runtime_config=self._runtime_config,
+                )
             if not success:
                 pending.keep_original()
             return message

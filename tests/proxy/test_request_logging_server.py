@@ -4,10 +4,11 @@ import socketserver
 import threading
 import time
 import unittest
-from unittest.mock import patch
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.runtime.journal import get_request_journal
+from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.app.editing.modifier import ResponseModifierService
+from proxyscope.app.runtime.context import create_proxy_runtime_context
+from proxyscope.app.runtime.journal import RequestJournal
 from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse
 from proxyscope.proxy.server import create_server
 
@@ -37,10 +38,18 @@ class _CountingModifier:
 
 class TestRequestLoggingServer(unittest.TestCase):
     def setUp(self) -> None:
-        set_runtime_config(RuntimeConfig())
+        self.config = RuntimeConfig()
+        self.journal = RequestJournal()
+        self.modifier = ResponseModifierService(policy_evaluator=self.config)
+        self.runtime_context = create_proxy_runtime_context(
+            runtime_config=self.config,
+            request_journal=self.journal,
+            response_modifier=self.modifier,
+        )
         self.server = create_server(
             "127.0.0.1",
             0,
+            runtime_context=self.runtime_context,
             forwarder=StaticForwarder(),
             auto_enable_mitm=False,
         )
@@ -52,7 +61,6 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)
-        set_runtime_config(RuntimeConfig())
 
     def _request(
         self, method: str, path: str, *, headers: dict[str, str] | None = None, body: bytes | None = None
@@ -143,6 +151,7 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.server = create_server(
             "127.0.0.1",
             0,
+            runtime_context=self.runtime_context,
             forwarder=DummyForwarder(),
             auto_enable_mitm=False,
         )
@@ -180,6 +189,7 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.server = create_server(
             "127.0.0.1",
             0,
+            runtime_context=self.runtime_context,
             forwarder=forwarder,
             auto_enable_mitm=False,
         )
@@ -229,12 +239,16 @@ class TestRequestLoggingServer(unittest.TestCase):
             body=b'{"source":"policy"}',
             method="GET",
         )
-        set_runtime_config(config)
+        self.runtime_context = create_proxy_runtime_context(
+            runtime_config=config,
+            request_journal=self.journal,
+        )
 
         forwarder = CountingForwarder()
         self.server = create_server(
             "127.0.0.1",
             0,
+            runtime_context=self.runtime_context,
             forwarder=forwarder,
             auto_enable_mitm=False,
         )
@@ -266,12 +280,16 @@ class TestRequestLoggingServer(unittest.TestCase):
             body=b'{"source":"policy"}',
             method="GET",
         )
-        set_runtime_config(config)
-
         modifier = _CountingModifier()
+        self.runtime_context = create_proxy_runtime_context(
+            runtime_config=config,
+            request_journal=self.journal,
+            response_modifier=modifier,  # type: ignore[arg-type]
+        )
         self.server = create_server(
             "127.0.0.1",
             0,
+            runtime_context=self.runtime_context,
             forwarder=StaticForwarder(),
             auto_enable_mitm=False,
         )
@@ -279,12 +297,11 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.thread.start()
         self.host, self.port = self.server.server_address
 
-        with patch("proxyscope.proxy.server.get_response_modifier", return_value=modifier):
-            status, data = self._request(
-                "GET",
-                "http://example.com/mock",
-                headers={"Host": "example.com"},
-            )
+        status, data = self._request(
+            "GET",
+            "http://example.com/mock",
+            headers={"Host": "example.com"},
+        )
         self.assertEqual(status, 200)
         self.assertEqual(data, b'{"source":"policy"}')
         self.assertEqual(modifier.calls, 0)
@@ -313,7 +330,12 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
-        self.server = create_server("127.0.0.1", 0, auto_enable_mitm=False)
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            runtime_context=self.runtime_context,
+            auto_enable_mitm=False,
+        )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.host, self.port = self.server.server_address
@@ -331,7 +353,7 @@ class TestRequestLoggingServer(unittest.TestCase):
 
             entry = None
             for _ in range(10):
-                entries = get_request_journal().list_entries()
+                entries = self.journal.list_entries()
                 if entries and entries[-1].response is not None:
                     entry = entries[-1]
                     break

@@ -3,12 +3,13 @@ import sys
 import threading
 from argparse import ArgumentParser
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.editing.modifier import ResponseModifierService, set_response_modifier
-from proxyscope.app.logging.observability import set_runtime_observer
+from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.app.editing.modifier import ResponseModifierService
+from proxyscope.app.logging.observability import RuntimeEventDispatcher
 from proxyscope.app.logging.setup import configure_logging
 from proxyscope.app.runtime.cli import RuntimeCLI
-from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
+from proxyscope.app.runtime.context import create_proxy_runtime_context
+from proxyscope.app.runtime.journal import RequestJournal
 from proxyscope.proxy.server import ProxyHTTPServer, create_server
 
 LOGGER = logging.getLogger("tproxy.app")
@@ -33,15 +34,20 @@ def main() -> None:
     if args.certs_dir is not None:
         runtime_config.set_mitm_certs_dir(args.certs_dir)
     request_journal = RequestJournal()
-    response_modifier = ResponseModifierService()
-    set_runtime_config(runtime_config)
-    set_request_journal(request_journal)
-    set_response_modifier(response_modifier)
+    response_modifier = ResponseModifierService(policy_evaluator=runtime_config)
+    runtime_events = RuntimeEventDispatcher()
+    runtime_context = create_proxy_runtime_context(
+        runtime_config=runtime_config,
+        request_journal=request_journal,
+        response_modifier=response_modifier,
+        runtime_events=runtime_events,
+    )
     configure_logging(level=runtime_config.log_level)
 
     server = create_server(
         args.host,
         args.port,
+        runtime_context=runtime_context,
         auto_enable_mitm=runtime_config.mitm_enabled,
         ca_root=runtime_config.mitm_certs_dir,
     )
@@ -75,7 +81,7 @@ def main() -> None:
         root_logger.removeHandler(handler)
     root_logger.addHandler(runtime_ui)
     root_logger.setLevel(runtime_config.log_level)
-    set_runtime_observer(runtime_ui)
+    runtime_events.set_observer(runtime_ui)
 
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
@@ -94,7 +100,7 @@ def main() -> None:
         server.shutdown()
         server.server_close()
         server_thread.join(timeout=2)
-        set_runtime_observer(None)
+        runtime_events.set_observer(None)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,9 @@ import ssl
 import unittest
 from unittest.mock import Mock, patch
 
+from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.app.runtime.context import create_proxy_runtime_context
+from proxyscope.app.runtime.journal import RequestJournal
 from proxyscope.mitm.tunnel import (
     MitmTLSInterceptor,
     _build_https_request_url,
@@ -174,8 +177,14 @@ class TestMitmRelay(unittest.TestCase):
 
 
 class TestMitmTLSInterceptor(unittest.TestCase):
+    def setUp(self) -> None:
+        self.runtime_context = create_proxy_runtime_context(
+            runtime_config=RuntimeConfig(),
+            request_journal=RequestJournal(),
+        )
+
     def test_intercept_raises_timeout_for_upstream_connect_timeout(self) -> None:
-        interceptor = MitmTLSInterceptor(certificate_authority=Mock())
+        interceptor = MitmTLSInterceptor(certificate_authority=Mock(), runtime_context=self.runtime_context)
         client = _FakeSocket([])
 
         with patch("proxyscope.mitm.tunnel.socket.create_connection", side_effect=socket.timeout):
@@ -187,7 +196,7 @@ class TestMitmTLSInterceptor(unittest.TestCase):
                 )
 
     def test_intercept_raises_connection_error_for_upstream_connect_failure(self) -> None:
-        interceptor = MitmTLSInterceptor(certificate_authority=Mock())
+        interceptor = MitmTLSInterceptor(certificate_authority=Mock(), runtime_context=self.runtime_context)
         client = _FakeSocket([])
 
         with patch("proxyscope.mitm.tunnel.socket.create_connection", side_effect=OSError("no route")):
@@ -199,7 +208,7 @@ class TestMitmTLSInterceptor(unittest.TestCase):
                 )
 
     def test_intercept_raises_connection_error_for_upstream_tls_failure(self) -> None:
-        interceptor = MitmTLSInterceptor(certificate_authority=Mock())
+        interceptor = MitmTLSInterceptor(certificate_authority=Mock(), runtime_context=self.runtime_context)
         client = _FakeSocket([])
         upstream_tcp = _FakeSocket([])
         upstream_ctx = Mock()
@@ -219,7 +228,10 @@ class TestMitmTLSInterceptor(unittest.TestCase):
     def test_intercept_returns_false_when_client_rejects_forged_certificate(self) -> None:
         certificate_authority = Mock()
         certificate_authority.issue_host_certificate.return_value = ("cert.pem", "key.pem")
-        interceptor = MitmTLSInterceptor(certificate_authority=certificate_authority)
+        interceptor = MitmTLSInterceptor(
+            certificate_authority=certificate_authority,
+            runtime_context=self.runtime_context,
+        )
         client = _FakeSocket([])
         upstream_tcp = _FakeSocket([])
         upstream_tls = _FakeSocket([])
@@ -247,7 +259,10 @@ class TestMitmTLSInterceptor(unittest.TestCase):
     def test_intercept_runs_relay_and_returns_true(self) -> None:
         certificate_authority = Mock()
         certificate_authority.issue_host_certificate.return_value = ("cert.pem", "key.pem")
-        interceptor = MitmTLSInterceptor(certificate_authority=certificate_authority)
+        interceptor = MitmTLSInterceptor(
+            certificate_authority=certificate_authority,
+            runtime_context=self.runtime_context,
+        )
         client = _FakeSocket([])
         upstream_tcp = _FakeSocket([])
         upstream_tls = _FakeSocket([])

@@ -2,17 +2,14 @@
 
 ## Current Lifecycle
 
-`proxyscope.app.main` currently:
+`proxyscope.app.main` is the composition root. It creates runtime config,
+journal, response modifier, exchange recorder, and runtime event dispatcher,
+assembles them in a `ProxyRuntimeContext`, and injects that context into the
+proxy server and MITM interceptor.
 
-1. parses startup options;
-2. creates runtime config, journal, and response modifier services;
-3. installs global service locators;
-4. creates and starts the proxy server;
-5. optionally creates the Textual UI;
-6. coordinates shutdown.
-
-This works for one process-wide proxy instance, but global state limits test
-isolation, parallel instances, and additional frontends.
+Runtime services are instance-local. Multiple proxy servers can run in one
+process with isolated policies, journals, response transformers, and event
+sinks.
 
 ## Target Lifecycle
 

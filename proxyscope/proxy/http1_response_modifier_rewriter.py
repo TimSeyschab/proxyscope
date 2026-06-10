@@ -1,8 +1,7 @@
 from collections.abc import Callable
 
-from proxyscope.app.config.runtime import get_static_response_template_for_request
-from proxyscope.app.editing.modifier import ResponseModifierService
 from proxyscope.proxy.forwarding import ForwardResponse
+from proxyscope.proxy.runtime import PolicyEvaluator, ResponseTransformer
 
 
 class HTTP1ResponseModifierRewriter:
@@ -14,9 +13,11 @@ class HTTP1ResponseModifierRewriter:
     def __init__(
         self,
         *,
-        response_modifier: ResponseModifierService,
+        policy_evaluator: PolicyEvaluator,
+        response_modifier: ResponseTransformer,
         acquire_request_meta: Callable[[], tuple[str, str] | None],
     ) -> None:
+        self._policy_evaluator = policy_evaluator
         self._response_modifier = response_modifier
         self._acquire_request_meta = acquire_request_meta
         self._buffer = bytearray()
@@ -107,7 +108,9 @@ class HTTP1ResponseModifierRewriter:
                 headers=headers,
                 body=decoded_body,
             )
-            static_template = get_static_response_template_for_request(method=method, url=request_url)
+            static_template = self._policy_evaluator.get_static_response_template_for_request(
+                method=method, url=request_url
+            )
             if static_template is not None:
                 final_response = ForwardResponse(
                     status_code=static_template.status_code,

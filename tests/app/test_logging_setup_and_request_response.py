@@ -2,15 +2,10 @@ import logging
 import unittest
 from unittest.mock import patch
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.logging.request_response import (
-    log_incoming_request,
-    log_mitm_http_request,
-    log_mitm_http_response,
-    log_outgoing_response,
-)
+from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.app.logging.request_response import RequestResponseRecorder
 from proxyscope.app.logging.setup import configure_logging
-from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
+from proxyscope.app.runtime.journal import RequestJournal
 from proxyscope.proxy.forwarding import ForwardResponse
 
 
@@ -27,15 +22,11 @@ class TestLoggingSetup(unittest.TestCase):
 class TestRequestResponseLogging(unittest.TestCase):
     def setUp(self) -> None:
         self.journal = RequestJournal()
-        set_request_journal(self.journal)
-        set_runtime_config(RuntimeConfig())
-
-    def tearDown(self) -> None:
-        set_request_journal(RequestJournal())
-        set_runtime_config(RuntimeConfig())
+        self.config = RuntimeConfig()
+        self.recorder = RequestResponseRecorder(runtime_config=self.config, request_journal=self.journal)
 
     def test_log_incoming_and_outgoing_persists_exchange(self) -> None:
-        request_id = log_incoming_request(
+        request_id = self.recorder.record_request(
             method="GET",
             path="/health",
             client_ip="127.0.0.1",
@@ -46,7 +37,7 @@ class TestRequestResponseLogging(unittest.TestCase):
         )
         self.assertIsNotNone(request_id)
 
-        log_outgoing_response(
+        self.recorder.record_response(
             ForwardResponse(status_code=200, reason="OK", headers={"Content-Type": "text/plain"}, body=b"ok"),
             request_id=request_id,
             duration_ms=2.3,
@@ -63,8 +54,11 @@ class TestRequestResponseLogging(unittest.TestCase):
         self.assertEqual(entry.response.status_code, 200)
 
     def test_log_incoming_skips_non_whitelisted_host(self) -> None:
-        set_runtime_config(RuntimeConfig(log_whitelist=("allowed.example",)))
-        request_id = log_incoming_request(
+        recorder = RequestResponseRecorder(
+            runtime_config=RuntimeConfig(log_whitelist=("allowed.example",)),
+            request_journal=self.journal,
+        )
+        request_id = recorder.record_request(
             method="GET",
             path="/hidden",
             client_ip="127.0.0.1",
@@ -75,7 +69,7 @@ class TestRequestResponseLogging(unittest.TestCase):
         self.assertEqual(self.journal.list_entries(), ())
 
     def test_log_mitm_request_response_with_invalid_start_line_uses_fallbacks(self) -> None:
-        request_id = log_mitm_http_request(
+        request_id = self.recorder.record_mitm_request(
             client_ip="127.0.0.1",
             target_host="example.com",
             target_port=443,
@@ -85,7 +79,7 @@ class TestRequestResponseLogging(unittest.TestCase):
         )
         self.assertIsNotNone(request_id)
 
-        log_mitm_http_response(
+        self.recorder.record_mitm_response(
             client_ip="127.0.0.1",
             target_host="example.com",
             target_port=443,
@@ -105,7 +99,7 @@ class TestRequestResponseLogging(unittest.TestCase):
         self.assertEqual(entry.response.status_code, 0)
 
     def test_log_mitm_response_ignores_missing_request_id(self) -> None:
-        log_mitm_http_response(
+        self.recorder.record_mitm_response(
             client_ip="127.0.0.1",
             target_host="example.com",
             target_port=443,

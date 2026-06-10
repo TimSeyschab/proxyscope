@@ -142,21 +142,6 @@ class RequestJournal:
             self._next_id = max_request_id + 1
 
 
-_request_journal = RequestJournal()
-_request_journal_lock = RLock()
-
-
-def set_request_journal(journal: RequestJournal) -> None:
-    global _request_journal
-    with _request_journal_lock:
-        _request_journal = journal
-
-
-def get_request_journal() -> RequestJournal:
-    with _request_journal_lock:
-        return _request_journal
-
-
 def _body_preview(body: bytes | None, *, max_bytes: int = 4096, total_bytes: int | None = None) -> str:
     if body is None:
         return "<not captured>"

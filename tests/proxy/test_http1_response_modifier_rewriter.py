@@ -1,6 +1,6 @@
 import unittest
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
+from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.proxy.forwarding import ForwardResponse
 from proxyscope.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
 
@@ -22,9 +22,6 @@ class _FakeModifier:
 
 
 class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
-    def tearDown(self) -> None:
-        set_runtime_config(RuntimeConfig())
-
     def test_rewrites_matching_response(self) -> None:
         modifier = _FakeModifier()
         requests = [("GET", "https://example.com/edit")]
@@ -35,6 +32,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
+            policy_evaluator=RuntimeConfig(),
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )
@@ -57,8 +55,6 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             body=b"from-policy",
             method="GET",
         )
-        set_runtime_config(config)
-
         modifier = _FakeModifier()
         requests = [("GET", "https://example.com/mock")]
 
@@ -68,6 +64,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
+            policy_evaluator=config,
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )
@@ -91,8 +88,6 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             body=b"from-static-policy",
             method="GET",
         )
-        set_runtime_config(config)
-
         modifier = _FakeModifier()
         requests = [("GET", "https://example.com/edit")]
 
@@ -102,6 +97,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
+            policy_evaluator=config,
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )
@@ -123,6 +119,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
             return requests.pop(0)
 
         rewriter = HTTP1ResponseModifierRewriter(
+            policy_evaluator=RuntimeConfig(),
             response_modifier=modifier,  # type: ignore[arg-type]
             acquire_request_meta=acquire_request_meta,
         )

@@ -3,10 +3,7 @@ import unittest
 from argparse import Namespace
 from unittest.mock import Mock, patch
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.editing.modifier import ResponseModifierService, set_response_modifier
 from proxyscope.app.main import main
-from proxyscope.app.runtime.journal import RequestJournal, set_request_journal
 
 
 class _FakeThread:
@@ -29,9 +26,6 @@ class TestAppMain(unittest.TestCase):
 
     def tearDown(self) -> None:
         logging.getLogger().handlers.clear()
-        set_runtime_config(RuntimeConfig())
-        set_request_journal(RequestJournal())
-        set_response_modifier(ResponseModifierService())
 
     def test_main_runs_without_ui_when_disabled(self) -> None:
         args = Namespace(
@@ -76,16 +70,17 @@ class TestAppMain(unittest.TestCase):
         server.close_all_active_tunnels.return_value = 2
         response_modifier = Mock()
         runtime_ui = Mock(level=logging.NOTSET)
+        runtime_events = Mock()
 
         with (
             patch("proxyscope.app.main._build_parser", return_value=parser),
             patch("proxyscope.app.main.create_server", return_value=server),
             patch("proxyscope.app.main.ResponseModifierService", return_value=response_modifier),
             patch("proxyscope.app.main.RuntimeCLI", return_value=runtime_ui),
+            patch("proxyscope.app.main.RuntimeEventDispatcher", return_value=runtime_events),
             patch("proxyscope.app.main.configure_logging"),
             patch("proxyscope.app.main.sys.stdin.isatty", return_value=True),
             patch("proxyscope.app.main.sys.stdout.isatty", return_value=True),
-            patch("proxyscope.app.main.set_runtime_observer") as observer_mock,
             patch(
                 "proxyscope.app.main.threading.Thread",
                 side_effect=lambda target, daemon: _FakeThread(target=target, daemon=daemon),
@@ -97,8 +92,8 @@ class TestAppMain(unittest.TestCase):
         runtime_ui.run.assert_called_once()
         server.shutdown.assert_called_once_with()
         server.server_close.assert_called_once_with()
-        observer_mock.assert_any_call(runtime_ui)
-        observer_mock.assert_called_with(None)
+        runtime_events.set_observer.assert_any_call(runtime_ui)
+        runtime_events.set_observer.assert_called_with(None)
 
     def test_main_applies_mitm_cli_overrides(self) -> None:
         args = Namespace(

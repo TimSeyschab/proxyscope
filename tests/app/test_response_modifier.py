@@ -2,17 +2,14 @@ import threading
 import unittest
 from threading import Event
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
+from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.editing.modifier import PendingResponseEdit, ResponseModifierService
 from proxyscope.proxy.forwarding import ForwardResponse
 
 
 class TestResponseModifierService(unittest.TestCase):
-    def tearDown(self) -> None:
-        set_runtime_config(RuntimeConfig())
-
     def test_returns_original_when_not_whitelisted(self) -> None:
-        service = ResponseModifierService(interactive_enabled=True)
+        service = ResponseModifierService(policy_evaluator=RuntimeConfig(), interactive_enabled=True)
         response = ForwardResponse(200, "OK", {"X-Test": "a"}, b"hello")
         out = service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
         self.assertEqual(out.body, b"hello")
@@ -21,9 +18,7 @@ class TestResponseModifierService(unittest.TestCase):
     def test_blocks_and_applies_edit_when_whitelisted(self) -> None:
         config = RuntimeConfig()
         config.add_modification_whitelist_entry("https://example.com/a")
-        set_runtime_config(config)
-
-        service = ResponseModifierService(interactive_enabled=True)
+        service = ResponseModifierService(policy_evaluator=config, interactive_enabled=True)
         response = ForwardResponse(200, "OK", {"Content-Type": "text/plain"}, b"original")
 
         result_holder: dict[str, ForwardResponse] = {}

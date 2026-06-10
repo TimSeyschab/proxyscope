@@ -5,10 +5,6 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import urlsplit
 
-from proxyscope.app.config.runtime import get_static_response_template_for_request, should_modify_response_for_request
-from proxyscope.app.editing.modifier import get_response_modifier
-from proxyscope.app.logging.observability import emit_site_visit
-from proxyscope.app.logging.request_response import REQUEST_LOGGER, log_incoming_request, log_outgoing_response
 from proxyscope.mitm.certificates import MitmCertificateError, certificate_authority_for_root, default_ca
 from proxyscope.mitm.tunnel import MitmTLSInterceptor
 from proxyscope.proxy.connect_tunnel import (
@@ -29,6 +25,7 @@ from proxyscope.proxy.forwarding import (
     resolve_target_url,
 )
 from proxyscope.proxy.http_bridge import map_incoming_request, write_forward_response
+from proxyscope.proxy.runtime import ProxyRuntimeContext
 from proxyscope.proxy.tunnel_registry import TunnelConnectionRegistry
 from proxyscope.proxy.types import Forwarder
 
@@ -42,10 +39,12 @@ class ProxyHTTPServer(ThreadingHTTPServer):
         request_handler_class: type[BaseHTTPRequestHandler],
         *,
         forwarder: Forwarder,
+        runtime_context: ProxyRuntimeContext,
         mitm_interceptor: MitmTLSInterceptor | None = None,
     ) -> None:
         super().__init__(server_address, request_handler_class)
         self.forwarder = forwarder
+        self.runtime_context = runtime_context
         self.mitm_interceptor = mitm_interceptor
         self._tunnel_registry = TunnelConnectionRegistry()
 
@@ -89,7 +88,10 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
     ) -> None:
         duration_ms = (time.perf_counter() - started) * 1000
         response_headers = dict(headers or {})
-        log_outgoing_response(
+        server = self.server
+        if not isinstance(server, ProxyHTTPServer):
+            return
+        server.runtime_context.exchange_recorder.record_response(
             ForwardResponse(
                 status_code=status_code,
                 reason=reason,
@@ -172,7 +174,10 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
 
         forward_request = map_incoming_request(self)
         forward_request = prepare_forward_request(forward_request)
-        effective_headers = prepare_forward_headers(forward_request.headers)
+        effective_headers = prepare_forward_headers(
+            forward_request.headers,
+            cache_invalidation_enabled=server.runtime_context.cache_policy.cache_invalidation_enabled,
+        )
         forward_request = ForwardRequest(
             method=forward_request.method,
             path=forward_request.path,
@@ -180,7 +185,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             body=forward_request.body,
         )
         target_host, target_port = _resolve_forward_request_target(forward_request)
-        request_id = log_incoming_request(
+        request_id = server.runtime_context.exchange_recorder.record_request(
             method=self.command,
             path=forward_request.path,
             client_ip=self.client_address[0],
@@ -191,7 +196,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
         )
         try:
             if target_host:
-                emit_site_visit(target_host)
+                server.runtime_context.runtime_events.on_site_visit(target_host)
         except ValueError:
             pass
         try:
@@ -205,7 +210,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             if send_body:
                 self.wfile.write(error_body)
             duration_ms = (time.perf_counter() - started) * 1000
-            log_outgoing_response(
+            server.runtime_context.exchange_recorder.record_response(
                 ForwardResponse(
                     status_code=400,
                     reason="Bad Request",
@@ -222,8 +227,12 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             )
             return
 
-        static_template = get_static_response_template_for_request(method=self.command, url=target_url)
-        should_modify = should_modify_response_for_request(method=self.command, url=target_url)
+        static_template = server.runtime_context.policy_evaluator.get_static_response_template_for_request(
+            method=self.command, url=target_url
+        )
+        should_modify = server.runtime_context.policy_evaluator.should_modify_response_for_request(
+            method=self.command, url=target_url
+        )
         if static_template is not None:
             forward_response = ForwardResponse(
                 status_code=static_template.status_code,
@@ -239,7 +248,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
                 send_body=send_body,
             )
             duration_ms = (time.perf_counter() - started) * 1000
-            log_outgoing_response(
+            server.runtime_context.exchange_recorder.record_response(
                 forward_response,
                 request_id=request_id,
                 duration_ms=duration_ms,
@@ -250,8 +259,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
         else:
             forward_response = server.forwarder.forward(forward_request)
         if static_template is None:
-            modifier = get_response_modifier()
-            forward_response = modifier.maybe_modify_response(
+            forward_response = server.runtime_context.response_transformer.maybe_modify_response(
                 request_url=target_url,
                 method=self.command,
                 response=forward_response,
@@ -259,7 +267,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
         write_forward_response(self, forward_response, send_body=send_body)
 
         duration_ms = (time.perf_counter() - started) * 1000
-        log_outgoing_response(
+        server.runtime_context.exchange_recorder.record_response(
             forward_response,
             request_id=request_id,
             duration_ms=duration_ms,
@@ -297,7 +305,11 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             target = parse_connect_target(self.path)
             target_host = target.host
             target_port = target.port
-            request_id = log_incoming_request(
+            server = self.server
+            if not isinstance(server, ProxyHTTPServer):
+                self.send_error(500, "Server misconfiguration")
+                return
+            request_id = server.runtime_context.exchange_recorder.record_request(
                 method=self.command,
                 path=self.path,
                 client_ip=self.client_address[0],
@@ -306,11 +318,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
                 target_host=target_host,
                 target_port=target_port,
             )
-            emit_site_visit(target.host)
-            server = self.server
-            if not isinstance(server, ProxyHTTPServer):
-                self.send_error(500, "Server misconfiguration")
-                return
+            server.runtime_context.runtime_events.on_site_visit(target.host)
             server.register_tunnel_socket(self.connection)
 
             if server.mitm_interceptor is not None:
@@ -320,7 +328,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
                     timeout_s=30.0,
                 )
                 if not tunnel_established:
-                    REQUEST_LOGGER.warning(
+                    SERVER_LOGGER.warning(
                         "MITM client TLS handshake failed target=%s:%d client=%s",
                         target.host,
                         target.port,
@@ -350,7 +358,10 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             return
         except ValueError as exc:
             if request_id is None:
-                request_id = log_incoming_request(
+                server = self.server
+                if not isinstance(server, ProxyHTTPServer):
+                    return
+                request_id = server.runtime_context.exchange_recorder.record_request(
                     method=self.command,
                     path=self.path,
                     client_ip=self.client_address[0],
@@ -405,12 +416,13 @@ def create_server(
     host: str,
     port: int,
     *,
+    runtime_context: ProxyRuntimeContext,
     forwarder: Forwarder | None = None,
     mitm_interceptor: MitmTLSInterceptor | None = None,
     auto_enable_mitm: bool = True,
     ca_root: str | Path | None = None,
 ) -> ThreadingHTTPServer:
-    resolved_forwarder = forwarder or UpstreamForwarder()
+    resolved_forwarder = forwarder or UpstreamForwarder(cache_policy=runtime_context.cache_policy)
     resolved_mitm_interceptor = mitm_interceptor
     if resolved_mitm_interceptor is None and auto_enable_mitm:
         ca = default_ca() if ca_root is None else certificate_authority_for_root(ca_root)
@@ -422,7 +434,7 @@ def create_server(
                     ca.ca_cert_path,
                     ca.ca_key_path,
                 )
-            resolved_mitm_interceptor = MitmTLSInterceptor(certificate_authority=ca)
+            resolved_mitm_interceptor = MitmTLSInterceptor(certificate_authority=ca, runtime_context=runtime_context)
         except MitmCertificateError as exc:
             SERVER_LOGGER.warning("MITM disabled: failed to initialize local CA: %s", exc)
 
@@ -430,6 +442,7 @@ def create_server(
         (host, port),
         RequestLoggingHandler,
         forwarder=resolved_forwarder,
+        runtime_context=runtime_context,
         mitm_interceptor=resolved_mitm_interceptor,
     )
 

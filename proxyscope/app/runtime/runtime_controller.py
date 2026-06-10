@@ -102,7 +102,7 @@ class RuntimeController:
         self._ui_navigation = RuntimeUINavigationService(self._view_state)
         self._policy_actions = RuntimePolicyActionService(self._runtime_config)
         self._replay_actions = RuntimeReplayActionService(proxy_base_url=self._proxy_base_url)
-        self._response_edit_actions = RuntimeResponseEditActionService(response_modifier)
+        self._response_edit_actions = RuntimeResponseEditActionService(response_modifier, self._runtime_config)
         self._command_service = RuntimeCommandService(runtime_config=self._runtime_config)
 
     @property

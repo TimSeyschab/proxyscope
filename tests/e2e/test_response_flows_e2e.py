@@ -7,9 +7,10 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
-from proxyscope.app.editing.modifier import ResponseModifierService, set_response_modifier
-from proxyscope.app.runtime.journal import RequestJournal, get_request_journal, set_request_journal
+from proxyscope.app.config.runtime import RuntimeConfig
+from proxyscope.app.editing.modifier import ResponseModifierService
+from proxyscope.app.runtime.context import create_proxy_runtime_context
+from proxyscope.app.runtime.journal import RequestJournal
 from proxyscope.proxy.server import create_server
 
 
@@ -38,16 +39,6 @@ class _UpstreamHandler(socketserver.BaseRequestHandler):
 
 
 class TestResponseFlowsE2E(unittest.TestCase):
-    def setUp(self) -> None:
-        set_runtime_config(RuntimeConfig())
-        set_request_journal(RequestJournal())
-        set_response_modifier(ResponseModifierService(interactive_enabled=False))
-
-    def tearDown(self) -> None:
-        set_runtime_config(RuntimeConfig())
-        set_request_journal(RequestJournal())
-        set_response_modifier(ResponseModifierService(interactive_enabled=False))
-
     def _proxy_request(
         self,
         *,
@@ -72,22 +63,23 @@ class TestResponseFlowsE2E(unittest.TestCase):
         upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
         upstream_thread.start()
 
-        proxy = create_server("127.0.0.1", 0, auto_enable_mitm=False)
+        upstream_host, upstream_port = upstream.server_address
+        target_url = f"http://{upstream_host}:{upstream_port}/manual-edit"
+        config = RuntimeConfig()
+        config.add_open_editor_policy(target_url, method="GET")
+        journal = RequestJournal()
+        response_modifier = ResponseModifierService(policy_evaluator=config, interactive_enabled=True)
+        runtime_context = create_proxy_runtime_context(
+            runtime_config=config,
+            request_journal=journal,
+            response_modifier=response_modifier,
+        )
+        proxy = create_server("127.0.0.1", 0, runtime_context=runtime_context, auto_enable_mitm=False)
         proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
         proxy_thread.start()
         proxy_host, proxy_port = proxy.server_address
 
         try:
-            upstream_host, upstream_port = upstream.server_address
-            target_url = f"http://{upstream_host}:{upstream_port}/manual-edit"
-
-            config = RuntimeConfig()
-            config.add_open_editor_policy(target_url, method="GET")
-            set_runtime_config(config)
-
-            response_modifier = ResponseModifierService(interactive_enabled=True)
-            set_response_modifier(response_modifier)
-
             result_queue: queue.Queue[tuple[int, dict[str, str], bytes] | Exception] = queue.Queue()
 
             def perform_request() -> None:
@@ -132,7 +124,7 @@ class TestResponseFlowsE2E(unittest.TestCase):
             self.assertEqual(headers_map.get("x-edited"), "yes")
             self.assertEqual(headers_map.get("content-length"), str(len(b"edited-body")))
 
-            entry = get_request_journal().list_entries()[-1]
+            entry = journal.list_entries()[-1]
             self.assertIsNotNone(entry.response)
             assert entry.response is not None
             self.assertEqual(entry.response.status_code, 200)
@@ -151,31 +143,31 @@ class TestResponseFlowsE2E(unittest.TestCase):
         upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
         upstream_thread.start()
 
-        proxy = create_server("127.0.0.1", 0, auto_enable_mitm=False)
+        upstream_host, upstream_port = upstream.server_address
+        target_url = f"http://{upstream_host}:{upstream_port}/cfg-edit"
+
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "runtime.json"
+            config = RuntimeConfig()
+            config.add_static_response_rule(
+                url=target_url,
+                status_code=299,
+                reason="Config Override",
+                headers={"Content-Type": "text/plain; charset=utf-8"},
+                body=b"config-edited-response",
+                method="GET",
+            )
+            config.save_to_path(config_path)
+            loaded = RuntimeConfig.load_from_file(config_path)
+
+        journal = RequestJournal()
+        runtime_context = create_proxy_runtime_context(runtime_config=loaded, request_journal=journal)
+        proxy = create_server("127.0.0.1", 0, runtime_context=runtime_context, auto_enable_mitm=False)
         proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
         proxy_thread.start()
         proxy_host, proxy_port = proxy.server_address
 
         try:
-            upstream_host, upstream_port = upstream.server_address
-            target_url = f"http://{upstream_host}:{upstream_port}/cfg-edit"
-
-            with TemporaryDirectory() as tmp_dir:
-                config_path = Path(tmp_dir) / "runtime.json"
-                config = RuntimeConfig()
-                config.add_static_response_rule(
-                    url=target_url,
-                    status_code=299,
-                    reason="Config Override",
-                    headers={"Content-Type": "text/plain; charset=utf-8"},
-                    body=b"config-edited-response",
-                    method="GET",
-                )
-                config.save_to_path(config_path)
-
-                loaded = RuntimeConfig.load_from_file(config_path)
-                set_runtime_config(loaded)
-
             status, _headers, body = self._proxy_request(
                 host=proxy_host,
                 port=proxy_port,
@@ -188,7 +180,7 @@ class TestResponseFlowsE2E(unittest.TestCase):
             self.assertEqual(body, b"config-edited-response")
             self.assertEqual(_UpstreamHandler.call_count, 0)
 
-            entry = get_request_journal().list_entries()[-1]
+            entry = journal.list_entries()[-1]
             self.assertIsNotNone(entry.response)
             assert entry.response is not None
             self.assertEqual(entry.response.status_code, 299)

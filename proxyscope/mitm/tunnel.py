@@ -5,19 +5,18 @@ import time
 from collections import deque
 from dataclasses import dataclass
 
-from proxyscope.app.config.runtime import is_cache_invalidation_enabled
-from proxyscope.app.editing.modifier import get_response_modifier
-from proxyscope.app.logging.request_response import log_mitm_http_request, log_mitm_http_response
 from proxyscope.mitm.certificates import MitmCertificateAuthority
 from proxyscope.proxy.connect_tunnel import ConnectTarget, ConnectUpstreamConnectionError, ConnectUpstreamTimeoutError
 from proxyscope.proxy.http1_request_rewriter import HTTP1RequestHeaderRewriter
 from proxyscope.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
 from proxyscope.proxy.http1_sniffer import HTTP1MessageSniffer
+from proxyscope.proxy.runtime import ProxyRuntimeContext
 
 
 @dataclass(frozen=True)
 class MitmTLSInterceptor:
     certificate_authority: MitmCertificateAuthority
+    runtime_context: ProxyRuntimeContext
 
     def intercept(self, *, client_socket: socket.socket, target: ConnectTarget, timeout_s: float = 30.0) -> bool:
         """
@@ -81,7 +80,7 @@ class MitmTLSInterceptor:
                     pending_lock = threading.Lock()
 
                     def on_request(start_line: str, headers: dict[str, str], body: bytes) -> None:
-                        request_id = log_mitm_http_request(
+                        request_id = self.runtime_context.exchange_recorder.record_mitm_request(
                             client_ip=client_ip,
                             target_host=target.host,
                             target_port=target.port,
@@ -98,7 +97,7 @@ class MitmTLSInterceptor:
                     def on_response(start_line: str, headers: dict[str, str], body: bytes) -> None:
                         with pending_lock:
                             request_id = pending_request_ids.popleft() if pending_request_ids else None
-                        log_mitm_http_response(
+                        self.runtime_context.exchange_recorder.record_mitm_response(
                             client_ip=client_ip,
                             target_host=target.host,
                             target_port=target.port,
@@ -117,7 +116,8 @@ class MitmTLSInterceptor:
                     request_sniffer = HTTP1MessageSniffer(on_request)
                     response_sniffer = HTTP1MessageSniffer(on_response)
                     response_rewriter = HTTP1ResponseModifierRewriter(
-                        response_modifier=get_response_modifier(),
+                        policy_evaluator=self.runtime_context.policy_evaluator,
+                        response_modifier=self.runtime_context.response_transformer,
                         acquire_request_meta=acquire_request_meta,
                     )
                     _relay_tls_bidirectional(
@@ -127,7 +127,7 @@ class MitmTLSInterceptor:
                         request_sniffer=request_sniffer,
                         response_sniffer=response_sniffer,
                         response_rewriter=response_rewriter,
-                        rewrite_client_requests=is_cache_invalidation_enabled(),
+                        rewrite_client_requests=self.runtime_context.cache_policy.cache_invalidation_enabled,
                     )
                 return True
 

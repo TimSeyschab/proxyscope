@@ -8,7 +8,7 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from proxyscope.app.config.runtime import get_runtime_config
+from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.app.editing.modifier import PendingResponseEdit
 
 
@@ -20,7 +20,11 @@ class _BodyEditPlan:
     remove_content_encoding_header: bool
 
 
-def edit_pending_response_with_external_editor(pending: PendingResponseEdit) -> tuple[bool, str]:
+def edit_pending_response_with_external_editor(
+    pending: PendingResponseEdit,
+    *,
+    runtime_config: RuntimeConfig,
+) -> tuple[bool, str]:
     editor = _resolve_editor_command()
     if editor is None:
         pending.keep_original()
@@ -62,6 +66,7 @@ def edit_pending_response_with_external_editor(pending: PendingResponseEdit) -> 
                 pending=pending,
                 headers=edited_headers,
                 body=edited_body,
+                runtime_config=runtime_config,
             )
             if saved_policy_name is not None:
                 return True, f"Applied response edits and saved static policy {saved_policy_name}."
@@ -242,6 +247,7 @@ def _maybe_save_static_response_rule(
     pending: PendingResponseEdit,
     headers: dict[str, str],
     body: bytes,
+    runtime_config: RuntimeConfig,
 ) -> str | None:
     try:
         answer = (
@@ -258,7 +264,6 @@ def _maybe_save_static_response_rule(
     _remove_header_case_insensitive(static_headers, "Transfer-Encoding")
     static_headers["Content-Length"] = str(len(body))
 
-    runtime_config = get_runtime_config()
     try:
         policy_name = runtime_config.add_static_response_rule(
             url=pending.request_url,

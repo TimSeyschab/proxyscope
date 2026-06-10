@@ -5,29 +5,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = PROJECT_ROOT / "proxyscope"
 
-# Transitional exceptions to remove during Phase 2. New dependencies are blocked.
-ALLOWED_APP_IMPORTS = {
-    ("proxyscope.mitm.tunnel", "proxyscope.app.config.runtime.is_cache_invalidation_enabled"),
-    ("proxyscope.mitm.tunnel", "proxyscope.app.editing.modifier.get_response_modifier"),
-    ("proxyscope.mitm.tunnel", "proxyscope.app.logging.request_response.log_mitm_http_request"),
-    ("proxyscope.mitm.tunnel", "proxyscope.app.logging.request_response.log_mitm_http_response"),
-    ("proxyscope.proxy.forwarding", "proxyscope.app.config.runtime.is_cache_invalidation_enabled"),
-    (
-        "proxyscope.proxy.http1_response_modifier_rewriter",
-        "proxyscope.app.config.runtime.get_static_response_template_for_request",
-    ),
-    (
-        "proxyscope.proxy.http1_response_modifier_rewriter",
-        "proxyscope.app.editing.modifier.ResponseModifierService",
-    ),
-    ("proxyscope.proxy.server", "proxyscope.app.config.runtime.get_static_response_template_for_request"),
-    ("proxyscope.proxy.server", "proxyscope.app.config.runtime.should_modify_response_for_request"),
-    ("proxyscope.proxy.server", "proxyscope.app.editing.modifier.get_response_modifier"),
-    ("proxyscope.proxy.server", "proxyscope.app.logging.observability.emit_site_visit"),
-    ("proxyscope.proxy.server", "proxyscope.app.logging.request_response.REQUEST_LOGGER"),
-    ("proxyscope.proxy.server", "proxyscope.app.logging.request_response.log_incoming_request"),
-    ("proxyscope.proxy.server", "proxyscope.app.logging.request_response.log_outgoing_response"),
-}
+ALLOWED_APP_IMPORTS: set[tuple[str, str]] = set()
 
 
 class TestImportBoundaries(unittest.TestCase):

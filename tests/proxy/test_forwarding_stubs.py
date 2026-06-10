@@ -2,14 +2,11 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from proxyscope.app.config.runtime import RuntimeConfig, set_runtime_config
+from proxyscope.app.config.runtime import RuntimeConfig
 from proxyscope.proxy.forwarding import ForwardRequest, UpstreamForwarder, capture_body_preview
 
 
 class TestForwardingStubs(unittest.TestCase):
-    def tearDown(self) -> None:
-        set_runtime_config(RuntimeConfig())
-
     def test_capture_body_preview_keeps_prefix_and_counts_total_bytes(self) -> None:
         preview, total_bytes = capture_body_preview([b"abcd", b"efgh", b"ijkl"], max_bytes=6)
 
@@ -35,7 +32,7 @@ class TestForwardingStubs(unittest.TestCase):
         thread.start()
 
         host, port = upstream.server_address
-        forwarder = UpstreamForwarder()
+        forwarder = UpstreamForwarder(cache_policy=RuntimeConfig())
         request = ForwardRequest(
             method="POST",
             path="/users",
@@ -58,7 +55,7 @@ class TestForwardingStubs(unittest.TestCase):
             thread.join(timeout=2)
 
     def test_forwarder_requires_host_for_origin_form_paths(self) -> None:
-        forwarder = UpstreamForwarder()
+        forwarder = UpstreamForwarder(cache_policy=RuntimeConfig())
         request = ForwardRequest(
             method="GET",
             path="/health",
@@ -86,9 +83,7 @@ class TestForwardingStubs(unittest.TestCase):
 
         host, port = upstream.server_address
         config = RuntimeConfig(cache_invalidation_enabled=True)
-        set_runtime_config(config)
-
-        forwarder = UpstreamForwarder()
+        forwarder = UpstreamForwarder(cache_policy=config)
         request = ForwardRequest(
             method="GET",
             path="/cache",

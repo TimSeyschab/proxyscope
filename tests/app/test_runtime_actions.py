@@ -65,7 +65,7 @@ class TestRuntimeResponseEditActionService(unittest.TestCase):
         pending = Mock()
         modifier = Mock()
         modifier.poll_pending_edit.return_value = pending
-        actions = RuntimeResponseEditActionService(modifier)
+        actions = RuntimeResponseEditActionService(modifier, RuntimeConfig())
 
         with patch(
             "proxyscope.app.runtime.actions.edit_pending_response_with_external_editor",

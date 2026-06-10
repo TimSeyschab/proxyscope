@@ -514,37 +514,6 @@ class RuntimeConfig:
         )
 
 
-_runtime_config = RuntimeConfig()
-_runtime_config_lock = RLock()
-
-
-def set_runtime_config(config: RuntimeConfig) -> None:
-    global _runtime_config
-    with _runtime_config_lock:
-        _runtime_config = config
-
-
-def get_runtime_config() -> RuntimeConfig:
-    with _runtime_config_lock:
-        return _runtime_config
-
-
-def should_log_for_host(host: str | None) -> bool:
-    return get_runtime_config().should_log_for_host(host)
-
-
-def is_cache_invalidation_enabled() -> bool:
-    return get_runtime_config().cache_invalidation_enabled
-
-
-def should_modify_response_for_request(*, method: str, url: str) -> bool:
-    return get_runtime_config().should_modify_response_for_request(method=method, url=url)
-
-
-def get_static_response_template_for_request(*, method: str, url: str) -> StaticResponseTemplate | None:
-    return get_runtime_config().get_static_response_template_for_request(method=method, url=url)
-
-
 def serialize_policy_rule(rule: PolicyRule) -> dict:
     return serialize_policy_rule_payload(rule)
 

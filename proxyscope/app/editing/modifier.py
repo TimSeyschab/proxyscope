@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from queue import Empty, Queue
 from threading import Event, Lock
 
-from proxyscope.app.config.runtime import should_modify_response_for_request
 from proxyscope.proxy.forwarding import ForwardResponse
+from proxyscope.proxy.runtime import PolicyEvaluator
 
 LOGGER = logging.getLogger("tproxy.response_modifier")
 
@@ -41,7 +41,8 @@ class PendingResponseEdit:
 
 
 class ResponseModifierService:
-    def __init__(self, *, interactive_enabled: bool = False) -> None:
+    def __init__(self, *, policy_evaluator: PolicyEvaluator | None = None, interactive_enabled: bool = False) -> None:
+        self._policy_evaluator = policy_evaluator
         self._interactive_enabled = interactive_enabled
         self._queue: Queue[PendingResponseEdit] = Queue()
         self._lock = Lock()
@@ -51,7 +52,9 @@ class ResponseModifierService:
             self._interactive_enabled = enabled
 
     def maybe_modify_response(self, *, request_url: str, method: str, response: ForwardResponse) -> ForwardResponse:
-        if not should_modify_response_for_request(method=method, url=request_url):
+        if self._policy_evaluator is None or not self._policy_evaluator.should_modify_response_for_request(
+            method=method, url=request_url
+        ):
             return response
 
         with self._lock:
@@ -74,21 +77,6 @@ class ResponseModifierService:
             return self._queue.get_nowait()
         except Empty:
             return None
-
-
-_response_modifier = ResponseModifierService()
-_response_modifier_lock = Lock()
-
-
-def set_response_modifier(service: ResponseModifierService) -> None:
-    global _response_modifier
-    with _response_modifier_lock:
-        _response_modifier = service
-
-
-def get_response_modifier() -> ResponseModifierService:
-    with _response_modifier_lock:
-        return _response_modifier
 
 
 def _remove_header_case_insensitive(headers: dict[str, str], header_name: str) -> None:
