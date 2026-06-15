@@ -10,7 +10,7 @@ Screen {
     margin: 0;
 }
 
-#content {
+#traffic-view {
     layout: horizontal;
     height: 1fr;
     padding: 0;
@@ -52,8 +52,9 @@ Screen {
     min-width: 30;
 }
 
-#sidebar-pane {
-    width: 32;
+#admin-pane {
+    width: 1fr;
+    height: 1fr;
     min-width: 24;
 }
 
@@ -72,13 +73,13 @@ Screen {
     margin: 0;
 }
 
-#sidebar-list {
+#admin-list {
     height: 1fr;
     background: #10171e;
     border: solid #31424f;
 }
 
-#sidebar-tabs {
+#admin-tabs {
     color: #91a7bb;
     padding: 0 1;
     margin: 0;

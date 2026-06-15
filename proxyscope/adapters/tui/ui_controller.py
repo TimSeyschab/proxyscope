@@ -1,6 +1,6 @@
 from typing import Protocol, runtime_checkable
 
-from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel
+from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.application.contracts import SuspendUI
 
 
@@ -20,6 +20,8 @@ class RuntimeUIController(Protocol):
     def set_status_message(self, message: str) -> None: ...
 
     def set_active_pane(self, pane: ActivePane) -> None: ...
+
+    def switch_view(self, view: RuntimeView) -> None: ...
 
     def select_request(self, cursor: int) -> None: ...
 

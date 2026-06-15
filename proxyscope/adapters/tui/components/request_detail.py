@@ -3,7 +3,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static
 
 from proxyscope.adapters.tui.components.rendering import format_detail_tabs, plain_text
-from proxyscope.adapters.tui.models import MainMode, RequestDetailModel
+from proxyscope.adapters.tui.models import RequestDetailModel
 
 
 class RequestDetailPane(Vertical):
@@ -17,8 +17,8 @@ class RequestDetailPane(Vertical):
         with VerticalScroll(id="detail-scroll", can_focus=True):
             yield Static(id="detail-body")
 
-    def render_model(self, model: RequestDetailModel, *, main_mode: MainMode, active: bool) -> None:
-        title_text = "DETAIL" if main_mode != "request_detail" else f"DETAIL [{model.tab}]"
+    def render_model(self, model: RequestDetailModel, *, active: bool) -> None:
+        title_text = f"DETAIL [{model.tab}]"
         title = self.query_one("#detail-title", Static)
         title.update(plain_text(title_text))
         title.set_class(active, "-active")

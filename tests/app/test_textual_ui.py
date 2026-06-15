@@ -7,13 +7,13 @@ from textual.widgets._option_list import Option
 from proxyscope.adapters.tui.components import RequestList
 from proxyscope.adapters.tui.components.rendering import format_detail_tabs, plain_text
 from proxyscope.adapters.tui.models import (
-    AuxPanelModel,
-    AuxPanelTabModel,
     RequestDetailModel,
     RequestListModel,
     RequestRowModel,
     RuntimeScreenModel,
     StatusBarModel,
+    TabbedListModel,
+    TabbedListTabModel,
 )
 from proxyscope.adapters.tui.presenter import _build_request_rows, _format_detail
 from proxyscope.adapters.tui.textual import (
@@ -30,9 +30,7 @@ class RequestListTestApp(App[None]):
         yield RequestList()
 
 
-def _screen_model(
-    *, width_mode: str = "detail", active_pane: str = "requests", aux_visible: bool = True
-) -> RuntimeScreenModel:
+def _screen_model(*, active_view: str = "traffic", active_pane: str = "requests") -> RuntimeScreenModel:
     return RuntimeScreenModel(
         request_list=RequestListModel(
             title="MAIN 1/1",
@@ -47,12 +45,11 @@ def _screen_model(
             text="No request selected.",
             has_response=False,
         ),
-        aux=AuxPanelModel(
-            visible=aux_visible,
-            aux_tabs=[
-                AuxPanelTabModel(
+        admin=TabbedListModel(
+            tabs=[
+                TabbedListTabModel(
                     key="sites",
-                    title="SIDEBAR:SITES",
+                    title="Sites",
                     items=["example.com"],
                     cursor=0,
                 )
@@ -60,29 +57,23 @@ def _screen_model(
             active_key="sites",
         ),
         status_bar=StatusBarModel(message="ok", config_text="cfg"),
-        main_mode="request_detail" if width_mode == "detail" else "requests",
+        active_view=active_view,  # type: ignore[arg-type]
         active_pane=active_pane,  # type: ignore[arg-type]
     )
 
 
 class TestTextualUILayout(unittest.TestCase):
-    def test_large_layout_shows_detail_and_sidebar(self) -> None:
+    def test_large_layout_uses_horizontal_traffic_layout(self) -> None:
         plan = determine_runtime_layout(width=160, model=_screen_model(active_pane="requests"))
         self.assertEqual(plan.content_layout, "horizontal")
-        self.assertTrue(plan.show_detail)
-        self.assertTrue(plan.show_sidebar)
 
-    def test_medium_layout_prefers_active_sidebar_over_detail(self) -> None:
-        plan = determine_runtime_layout(width=120, model=_screen_model(active_pane="aux"))
+    def test_medium_layout_keeps_horizontal_traffic_layout(self) -> None:
+        plan = determine_runtime_layout(width=120, model=_screen_model(active_pane="detail"))
         self.assertEqual(plan.content_layout, "horizontal")
-        self.assertFalse(plan.show_detail)
-        self.assertTrue(plan.show_sidebar)
 
     def test_small_layout_stacks_content_vertically(self) -> None:
         plan = determine_runtime_layout(width=80, model=_screen_model(active_pane="detail"))
         self.assertEqual(plan.content_layout, "vertical")
-        self.assertTrue(plan.show_detail)
-        self.assertFalse(plan.show_sidebar)
 
 
 class TestTextualUIRequestList(unittest.TestCase):
@@ -324,28 +315,26 @@ class TestTextualUIDetailFormatting(unittest.TestCase):
 
 
 class TestTextualUIFocusOrder(unittest.TestCase):
-    def test_focus_order_includes_sidebar_tabs_separately(self) -> None:
+    def test_focus_order_uses_admin_tabs_on_admin_view(self) -> None:
         steps = _focus_step_order(
-            main_mode="request_detail",
-            aux_visible=True,
-            aux_tabs=[
-                AuxPanelTabModel(key="sites", title="SIDEBAR:SITES", items=["example.com"], cursor=0),
-                AuxPanelTabModel(key="policies", title="SIDEBAR:POLICIES", items=["policy-1"], cursor=0),
+            active_view="admin",
+            admin_tabs=[
+                TabbedListTabModel(key="sites", title="Sites", items=["example.com"], cursor=0),
+                TabbedListTabModel(key="policies", title="Policies", items=["policy-1"], cursor=0),
             ],
         )
 
         self.assertEqual(
             steps,
-            ["requests", "detail-request", "detail-response", "aux-sites", "aux-policies", "command"],
+            ["admin-sites", "admin-policies", "command"],
         )
 
-    def test_focus_order_omits_sidebar_tabs_when_hidden(self) -> None:
+    def test_focus_order_uses_request_and_detail_on_traffic_view(self) -> None:
         steps = _focus_step_order(
-            main_mode="request_detail",
-            aux_visible=False,
-            aux_tabs=[
-                AuxPanelTabModel(key="sites", title="SIDEBAR:SITES", items=["example.com"], cursor=0),
-                AuxPanelTabModel(key="policies", title="SIDEBAR:POLICIES", items=["policy-1"], cursor=0),
+            active_view="traffic",
+            admin_tabs=[
+                TabbedListTabModel(key="sites", title="Sites", items=["example.com"], cursor=0),
+                TabbedListTabModel(key="policies", title="Policies", items=["policy-1"], cursor=0),
             ],
         )
 

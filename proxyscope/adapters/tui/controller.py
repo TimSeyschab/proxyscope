@@ -1,7 +1,7 @@
 from typing import Callable
 
 from proxyscope.adapters.factory import create_default_runtime_application_services
-from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel
+from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.adapters.tui.navigation import RuntimeUINavigationService
 from proxyscope.adapters.tui.presenter import build_runtime_screen_model
 from proxyscope.adapters.tui.state import RuntimeUIViewState
@@ -78,6 +78,9 @@ class RuntimeController:
     def set_active_pane(self, pane: ActivePane) -> None:
         self._ui_navigation.set_active_pane(pane)
 
+    def switch_view(self, view: RuntimeView) -> None:
+        self._ui_navigation.switch_view(view)
+
     def select_request(self, cursor: int) -> None:
         if self._view_state.request_follow_top and cursor != 0:
             self._view_state.request_follow_top = False
@@ -105,7 +108,7 @@ class RuntimeController:
         self._ui_navigation.select_aux_item(cursor)
 
     def toggle_aux_visibility(self) -> None:
-        self._ui_navigation.toggle_aux_visibility()
+        self._ui_navigation.switch_view("admin")
 
     def go_back(self) -> None:
         if not self._ui_navigation.go_back():
@@ -208,9 +211,11 @@ class RuntimeController:
             "  Enter on a request          Open request detail.\n"
             "  Enter on a policy           Open policy editor (Policies tab).\n"
             "  Tab / Shift+Tab             Move forward or backward through panes.\n"
-            "  Shift+S                     Toggle the sidebar; reselect Sites when visible.\n"
-            "  Shift+P                     Show the sidebar and switch to Policies.\n"
-            "  Shift+B                     Close sidebar/detail view (step back).\n"
+            "  Ctrl+1                      Show Requests view.\n"
+            "  Ctrl+2                      Show Sites/Policies view.\n"
+            "  Shift+S                     Show Sites tab.\n"
+            "  Shift+P                     Show Policies tab.\n"
+            "  Shift+B                     Move focus from detail back to requests.\n"
             "  Shift+A                     Add the selected site to the whitelist.\n"
             "  Shift+U                     Remove the selected site from the whitelist.\n"
             "  Shift+D                     Disable the selected policy (Policies tab).\n"
@@ -241,7 +246,7 @@ class RuntimeController:
     def _ensure_policy_tab_active(self) -> bool:
         if self._ui_navigation.is_policy_tab_active():
             return True
-        self._view_state.status_message = "Open Policies tab first (Shift+P)."
+        self._view_state.status_message = "Open Policies tab first (Ctrl+2, Shift+P)."
         return False
 
     def _schedule_policy_edit(self, name: str) -> None:

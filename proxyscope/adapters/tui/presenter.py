@@ -1,14 +1,14 @@
 from collections import Counter
 
 from proxyscope.adapters.tui.models import (
-    AuxPanelModel,
-    AuxPanelTabModel,
     DetailTab,
     RequestDetailModel,
     RequestListModel,
     RequestRowModel,
     RuntimeScreenModel,
     StatusBarModel,
+    TabbedListModel,
+    TabbedListTabModel,
 )
 from proxyscope.adapters.tui.state import RuntimeUIViewState
 from proxyscope.application.configuration import RuntimeConfigurationService
@@ -68,21 +68,20 @@ def build_runtime_screen_model(
             text=_format_detail(selected_entry, state.detail_tab),
             has_response=selected_entry is not None and selected_entry.response is not None,
         ),
-        aux=AuxPanelModel(
-            visible=state.aux_visible,
-            aux_tabs=_build_aux_tabs(
+        admin=TabbedListModel(
+            tabs=_build_admin_tabs(
                 site_items=site_items,
                 policy_items=policy_items,
                 site_cursor=state.site_cursor,
                 policy_cursor=state.policy_cursor,
             ),
-            active_key=state.aux_tab_key,
+            active_key=state.admin_tab_key,
         ),
         status_bar=StatusBarModel(
             message=state.status_message,
             config_text=config_text,
         ),
-        main_mode=state.main_mode,
+        active_view=state.active_view,
         active_pane=state.active_pane,
     )
 
@@ -151,25 +150,25 @@ def _format_response_detail(entry: LoggedExchange) -> str:
     )
 
 
-def _build_aux_tabs(
+def _build_admin_tabs(
     *,
     site_items: list[tuple[str, int]],
     policy_items: list[str],
     site_cursor: int,
     policy_cursor: int,
-) -> list[AuxPanelTabModel]:
+) -> list[TabbedListTabModel]:
     site_rows = [f"{count:5d}  {host}" for host, count in site_items]
     return [
-        AuxPanelTabModel(
+        TabbedListTabModel(
             key="sites",
-            title="SIDEBAR:SITES",
+            title="Sites",
             items=site_rows,
             cursor=site_cursor,
             empty_label="No sites recorded.",
         ),
-        AuxPanelTabModel(
+        TabbedListTabModel(
             key="policies",
-            title="SIDEBAR:POLICIES",
+            title="Policies",
             items=policy_items,
             cursor=policy_cursor,
             empty_label="No policies configured.",

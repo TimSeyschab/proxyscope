@@ -81,48 +81,19 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertFalse(should_exit)
         self.assertEqual(cli._status_message, cli.HELP_SUMMARY)  # type: ignore[attr-defined]
 
-    def test_go_back_closes_active_sidebar_first(self) -> None:
+    def test_default_view_is_admin_sites(self) -> None:
         cli = RuntimeCLI(
             **runtime_dependencies(RuntimeTestContext()),
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
-        cli.select_aux_tab("sites")
-
-        cli.go_back()
 
         model = cli.build_screen_model()
-        self.assertFalse(model.aux.visible)
-        self.assertEqual(model.active_pane, "requests")
+        self.assertEqual(model.active_view, "admin")
+        self.assertEqual(model.admin.active_key, "sites")
+        self.assertEqual(model.active_pane, "sites")
 
-    def test_go_back_closes_detail_view(self) -> None:
-        journal = RequestJournal()
-        journal.start_request(
-            method="GET",
-            path="/hello",
-            start_line="GET /hello HTTP/1.1",
-            headers={},
-            body=b"",
-            client_ip="127.0.0.1",
-            target_host="example.com",
-            target_port=80,
-            protocol="http",
-        )
-        cli = RuntimeCLI(
-            **runtime_dependencies(RuntimeTestContext()),
-            request_journal=journal,
-            response_modifier=ResponseModifierService(),
-        )
-        cli.open_selected_request_detail()
-        cli.toggle_aux_visibility()
-
-        cli.go_back()
-
-        model = cli.build_screen_model()
-        self.assertEqual(model.main_mode, "requests")
-        self.assertEqual(model.active_pane, "requests")
-
-    def test_go_back_hides_sidebar_before_leaving_detail_view(self) -> None:
+    def test_go_back_moves_detail_focus_to_request_list(self) -> None:
         journal = RequestJournal()
         journal.start_request(
             method="GET",
@@ -145,9 +116,24 @@ class TestRuntimeCLI(unittest.TestCase):
         cli.go_back()
 
         model = cli.build_screen_model()
-        self.assertFalse(model.aux.visible)
-        self.assertEqual(model.main_mode, "request_detail")
-        self.assertEqual(model.active_pane, "detail")
+        self.assertEqual(model.active_view, "traffic")
+        self.assertEqual(model.active_pane, "requests")
+
+    def test_admin_tab_selection_is_remembered_when_switching_views(self) -> None:
+        cli = RuntimeCLI(
+            **runtime_dependencies(RuntimeTestContext()),
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        cli.select_aux_tab("policies")
+        cli.switch_view("traffic")
+        cli.switch_view("admin")
+
+        model = cli.build_screen_model()
+        self.assertEqual(model.active_view, "admin")
+        self.assertEqual(model.admin.active_key, "policies")
+        self.assertEqual(model.active_pane, "policies")
 
     def test_selected_detail_request_stays_stable_when_new_entry_arrives(self) -> None:
         journal = RequestJournal()
@@ -463,7 +449,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
         cli.disable_selected_policy()
 
-        self.assertEqual(cli._status_message, "Open Policies tab first (Shift+P).")  # type: ignore[attr-defined]
+        self.assertEqual(cli._status_message, "Open Policies tab first (Ctrl+2, Shift+P).")  # type: ignore[attr-defined]
         self.assertIsNotNone(
             PolicyEngine(config.policy_repository).get_static_response_template_for_request(
                 method="GET", url="https://example.com/mock"
@@ -499,7 +485,7 @@ class TestRuntimeCLI(unittest.TestCase):
             )
         )
 
-    def test_policy_sidebar_order_matches_runtime_matching_precedence(self) -> None:
+    def test_policy_tab_order_matches_runtime_matching_precedence(self) -> None:
         config = RuntimeTestContext()
         config.add_static_response_rule(
             url="https://example.com/base",
@@ -526,7 +512,7 @@ class TestRuntimeCLI(unittest.TestCase):
             response_modifier=ResponseModifierService(),
         )
 
-        policies_tab = cli.build_screen_model().aux.aux_tabs[1]
+        policies_tab = cli.build_screen_model().admin.tabs[1]
         self.assertIn("high-priority-exact", policies_tab.items[0])
         self.assertIn("mid-priority-prefix", policies_tab.items[1])
         self.assertIn("low-priority", policies_tab.items[2])

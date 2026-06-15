@@ -53,10 +53,10 @@ class TestRuntimeUIController(unittest.TestCase):
         controller.select_aux_tab("policies")
 
         model = controller.build_screen_model()
-        self.assertEqual(model.main_mode, "request_detail")
+        self.assertEqual(model.active_view, "admin")
         self.assertEqual(model.detail.tab, "response")
-        self.assertEqual(model.active_pane, "aux")
-        self.assertEqual(model.aux.active_key, "policies")
+        self.assertEqual(model.active_pane, "policies")
+        self.assertEqual(model.admin.active_key, "policies")
 
     def test_textual_shortcut_uses_public_controller_actions(self) -> None:
         async def run_test() -> None:
@@ -68,11 +68,12 @@ class TestRuntimeUIController(unittest.TestCase):
                 await pilot.pause()
 
                 model = controller.build_screen_model()
-                self.assertEqual(model.active_pane, "aux")
-                self.assertEqual(model.aux.active_key, "policies")
+                self.assertEqual(model.active_view, "admin")
+                self.assertEqual(model.active_pane, "policies")
+                self.assertEqual(model.admin.active_key, "policies")
                 self.assertIsNotNone(app.focused)
                 assert app.focused is not None
-                self.assertEqual(app.focused.id, "sidebar-list")
+                self.assertEqual(app.focused.id, "admin-list")
 
         asyncio.run(run_test())
 
@@ -94,11 +95,13 @@ class TestRuntimeUIController(unittest.TestCase):
             app = RuntimeTextualApp(controller)
 
             async with app.run_test(size=(160, 42)) as pilot:
+                await pilot.press("ctrl+1")
+                await pilot.pause()
                 await pilot.press("enter")
                 await pilot.pause()
 
                 model = controller.build_screen_model()
-                self.assertEqual(model.main_mode, "request_detail")
+                self.assertEqual(model.active_view, "traffic")
                 self.assertEqual(model.active_pane, "detail")
                 self.assertEqual(model.request_list.selected_request_id, 1)
 

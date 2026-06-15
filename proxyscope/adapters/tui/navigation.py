@@ -1,4 +1,6 @@
-from proxyscope.adapters.tui.models import ActivePane, AuxPanelTabModel, DetailTab, MainMode
+from typing import Literal, cast
+
+from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeView, TabbedListTabModel
 from proxyscope.adapters.tui.state import RuntimeUIViewState
 from proxyscope.application.journal import LoggedExchange
 
@@ -9,6 +11,9 @@ class RuntimeUINavigationService:
 
     def set_active_pane(self, pane: ActivePane) -> None:
         self._state.active_pane = pane
+
+    def switch_view(self, view: RuntimeView) -> None:
+        self._state.switch_view(view)
 
     def select_request(self, entries: list[LoggedExchange], cursor: int) -> None:
         self.sync_request_selection(entries, preferred_cursor=cursor)
@@ -58,31 +63,33 @@ class RuntimeUINavigationService:
 
     def reset_request_view(self, *, has_entries: bool) -> None:
         self._state.reset_request_view()
-        if not has_entries:
-            self._state.switch_to_request_list_mode()
+        if not has_entries and self._state.active_view == "traffic":
+            self._state.active_pane = "requests"
 
     def clear_requests(self) -> None:
         self._state.reset_request_view()
-        self._state.main_mode = "requests"
-        self._state.active_pane = "requests"
-        self._state.aux_tab_key = "sites"
+        if self._state.active_view == "traffic":
+            self._state.active_pane = "requests"
 
     def select_detail_tab(self, tab: DetailTab) -> None:
+        self._state.active_view = "traffic"
         self._state.detail_tab = tab
         self._state.active_pane = "detail"
 
+    def select_admin_tab(self, tab_key: Literal["sites", "policies"]) -> None:
+        self._state.focus_admin_tab(tab_key)
+
     def select_aux_tab(self, tab_key: str) -> None:
-        self._state.focus_aux_tab(tab_key)
+        if tab_key in {"sites", "policies"}:
+            self.select_admin_tab(cast(Literal["sites", "policies"], tab_key))
 
     def select_aux_item(self, cursor: int) -> None:
-        if self._state.aux_tab_key == "sites":
+        if self._state.admin_tab_key == "sites":
             self._state.site_cursor = cursor
         else:
             self._state.policy_cursor = cursor
-        self._state.active_pane = "aux"
-
-    def toggle_aux_visibility(self) -> None:
-        self._state.toggle_aux_visibility()
+        self._state.active_view = "admin"
+        self._state.active_pane = self._state.admin_tab_key
 
     def go_back(self) -> bool:
         return self._state.go_back()
@@ -103,15 +110,14 @@ class RuntimeUINavigationService:
         self._state.policy_cursor = _clamp_cursor(self._state.policy_cursor, item_count)
 
     def is_policy_tab_active(self) -> bool:
-        return self._state.aux_visible and self._state.aux_tab_key == "policies"
+        return self._state.active_view == "admin" and self._state.admin_tab_key == "policies"
 
 
-def focus_step_order(*, main_mode: MainMode, aux_visible: bool, aux_tabs: list[AuxPanelTabModel]) -> list[str]:
-    steps = ["requests"]
-    if main_mode == "request_detail":
-        steps.extend(["detail-request", "detail-response"])
-    if aux_visible:
-        steps.extend(f"aux-{tab.key}" for tab in aux_tabs)
+def focus_step_order(*, active_view: RuntimeView, admin_tabs: list[TabbedListTabModel]) -> list[str]:
+    if active_view == "admin":
+        steps = [f"admin-{tab.key}" for tab in admin_tabs]
+    else:
+        steps = ["requests", "detail-request", "detail-response"]
     steps.append("command")
     return steps
 

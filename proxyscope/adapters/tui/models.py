@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Literal
 
-MainMode = Literal["requests", "request_detail"]
-ActivePane = Literal["requests", "detail", "aux"]
+RuntimeView = Literal["traffic", "admin"]
+ActivePane = Literal["requests", "detail", "sites", "policies"]
 DetailTab = Literal["request", "response"]
 
 
@@ -30,7 +30,7 @@ class RequestDetailModel:
 
 
 @dataclass(frozen=True)
-class AuxPanelTabModel:
+class TabbedListTabModel:
     key: str
     title: str
     items: list[str]
@@ -39,9 +39,8 @@ class AuxPanelTabModel:
 
 
 @dataclass(frozen=True)
-class AuxPanelModel:
-    visible: bool
-    aux_tabs: list[AuxPanelTabModel]
+class TabbedListModel:
+    tabs: list[TabbedListTabModel]
     active_key: str
 
 
@@ -55,7 +54,7 @@ class StatusBarModel:
 class RuntimeScreenModel:
     request_list: RequestListModel
     detail: RequestDetailModel
-    aux: AuxPanelModel
+    admin: TabbedListModel
     status_bar: StatusBarModel
-    main_mode: MainMode
+    active_view: RuntimeView
     active_pane: ActivePane

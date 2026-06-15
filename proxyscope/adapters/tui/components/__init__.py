@@ -1,6 +1,6 @@
-from proxyscope.adapters.tui.components.aux_sidebar import AuxSidebar
 from proxyscope.adapters.tui.components.command_bar import CommandBar
 from proxyscope.adapters.tui.components.request_detail import RequestDetailPane
 from proxyscope.adapters.tui.components.request_list import RequestList
+from proxyscope.adapters.tui.components.tabbed_list import TabbedListPane
 
-__all__ = ["AuxSidebar", "CommandBar", "RequestDetailPane", "RequestList"]
+__all__ = ["CommandBar", "RequestDetailPane", "RequestList", "TabbedListPane"]

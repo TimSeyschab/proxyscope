@@ -2,7 +2,7 @@ import logging
 from typing import Callable
 
 from proxyscope.adapters.tui.controller import RuntimeController
-from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel
+from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.adapters.tui.ui_controller import SuspendUI
 from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.journal import RequestJournal
@@ -61,6 +61,9 @@ class RuntimeCLI(logging.Handler):
 
     def set_active_pane(self, pane: ActivePane) -> None:
         self._controller.set_active_pane(pane)
+
+    def switch_view(self, view: RuntimeView) -> None:
+        self._controller.switch_view(view)
 
     def select_request(self, cursor: int) -> None:
         self._controller.select_request(cursor)

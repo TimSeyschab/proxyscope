@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Callable, Literal, cast
 
 from textual import events, on
 from textual.app import App, ComposeResult
@@ -8,11 +8,11 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from proxyscope.adapters.tui.components import AuxSidebar, CommandBar, RequestDetailPane, RequestList
+from proxyscope.adapters.tui.components import CommandBar, RequestDetailPane, RequestList, TabbedListPane
 from proxyscope.adapters.tui.components.rendering import (
     plain_text as _plain_text,
 )
-from proxyscope.adapters.tui.models import RuntimeScreenModel
+from proxyscope.adapters.tui.models import ActivePane, RuntimeScreenModel
 from proxyscope.adapters.tui.navigation import focus_step_order as _focus_step_order
 from proxyscope.adapters.tui.ui_controller import RuntimeUIController
 
@@ -22,8 +22,6 @@ RuntimeContentLayout = Literal["horizontal", "vertical"]
 @dataclass(frozen=True)
 class RuntimeLayoutPlan:
     content_layout: RuntimeContentLayout
-    show_detail: bool
-    show_sidebar: bool
 
 
 class HelpModal(ModalScreen[None]):
@@ -78,32 +76,22 @@ class HelpModal(ModalScreen[None]):
 
 
 def determine_runtime_layout(*, width: int, model: RuntimeScreenModel) -> RuntimeLayoutPlan:
-    show_detail = model.main_mode == "request_detail"
-    show_sidebar = model.aux.visible
     content_layout: RuntimeContentLayout = "horizontal"
 
     if width < 100:
         content_layout = "vertical"
 
-    if width < 140 and show_detail and show_sidebar:
-        if model.active_pane == "aux":
-            show_detail = False
-        else:
-            show_sidebar = False
-
-    return RuntimeLayoutPlan(
-        content_layout=content_layout,
-        show_detail=show_detail,
-        show_sidebar=show_sidebar,
-    )
+    return RuntimeLayoutPlan(content_layout=content_layout)
 
 
 class RuntimeTextualApp(App[None]):
     CSS_PATH = "runtime.tcss"
 
     BINDINGS = [
+        Binding("ctrl+1", "show_traffic_view", "Requests", show=True, priority=True),
+        Binding("ctrl+2", "show_admin_view", "Sites/Policies", show=True, priority=True),
         Binding("shift+b", "go_back", "Back", show=True, priority=True),
-        Binding("shift+s", "toggle_sites_sidebar", "Sidebar", show=True, priority=True),
+        Binding("shift+s", "show_sites", "Sites", show=True, priority=True),
         Binding("shift+p", "show_policies", "Policies", show=True, priority=True),
         Binding("shift+a", "add_site_to_whitelist", "Whitelist", show=False, priority=True),
         Binding("shift+u", "remove_site_from_whitelist", "Unwhitelist", show=False, priority=True),
@@ -122,16 +110,16 @@ class RuntimeTextualApp(App[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="root"):
-            with Horizontal(id="content"):
+            with Horizontal(id="traffic-view"):
                 yield RequestList()
                 yield RequestDetailPane()
-                yield AuxSidebar()
+            yield TabbedListPane()
             yield CommandBar()
 
     def on_mount(self) -> None:
         self.set_interval(0.2, self._tick)
-        self.query_one(RequestList).focus_list()
-        self._controller.set_active_pane("requests")
+        self.query_one(TabbedListPane).focus_list()
+        self._controller.set_active_pane("sites")
         self._refresh_screen()
 
     @on(CommandBar.Submitted)
@@ -160,10 +148,20 @@ class RuntimeTextualApp(App[None]):
             self._controller.set_active_pane("requests")
         elif widget.id == "detail-scroll":
             self._controller.set_active_pane("detail")
-        elif widget.id == "sidebar-list":
-            self._controller.set_active_pane("aux")
+        elif widget.id == "admin-list":
+            self._controller.set_active_pane(cast(ActivePane, self._controller.build_screen_model().admin.active_key))
 
     def on_key(self, event: events.Key) -> None:
+        if event.key == "ctrl+1":
+            event.stop()
+            event.prevent_default()
+            self.action_show_traffic_view()
+            return
+        if event.key == "ctrl+2":
+            event.stop()
+            event.prevent_default()
+            self.action_show_admin_view()
+            return
         if self._handle_shift_shortcut_key(event):
             return
         if event.key not in {"tab", "shift+tab"}:
@@ -190,7 +188,7 @@ class RuntimeTextualApp(App[None]):
             "m": self.action_add_editor_policy,
             "p": self.action_show_policies,
             "r": self.action_replay_request,
-            "s": self.action_toggle_sites_sidebar,
+            "s": self.action_show_sites,
             "t": self.action_toggle_request_follow_top,
             "u": self.action_remove_site_from_whitelist,
             "x": self.action_remove_policy,
@@ -212,14 +210,14 @@ class RuntimeTextualApp(App[None]):
         self._controller.set_active_pane("detail")
         self._refresh_screen()
 
-    @on(AuxSidebar.Highlighted)
-    def on_aux_sidebar_highlighted(self, event: AuxSidebar.Highlighted) -> None:
+    @on(TabbedListPane.Highlighted)
+    def on_tabbed_list_highlighted(self, event: TabbedListPane.Highlighted) -> None:
         self._controller.select_aux_item(event.cursor)
 
-    @on(AuxSidebar.Selected)
-    def on_aux_sidebar_selected(self, event: AuxSidebar.Selected) -> None:
+    @on(TabbedListPane.Selected)
+    def on_tabbed_list_selected(self, event: TabbedListPane.Selected) -> None:
         self._controller.select_aux_item(event.cursor)
-        if self._controller.build_screen_model().aux.active_key != "policies":
+        if self._controller.build_screen_model().admin.active_key != "policies":
             return
         self._controller.edit_selected_policy(suspend_ui=self.suspend)
         self._refresh_screen()
@@ -229,20 +227,25 @@ class RuntimeTextualApp(App[None]):
         self._sync_focus_after_navigation()
         self._refresh_screen()
 
-    def action_toggle_sites_sidebar(self) -> None:
-        model = self._controller.build_screen_model()
-        if model.aux.visible and model.aux.active_key == "sites":
-            self._controller.toggle_aux_visibility()
-            self._sync_focus_after_navigation()
-            self._refresh_screen()
-            return
+    def action_show_traffic_view(self) -> None:
+        self._controller.switch_view("traffic")
+        self.query_one(RequestList).focus_list()
+        self._controller.set_active_pane("requests")
+        self._refresh_screen()
+
+    def action_show_admin_view(self) -> None:
+        self._controller.switch_view("admin")
+        self.query_one(TabbedListPane).focus_list()
+        self._refresh_screen()
+
+    def action_show_sites(self) -> None:
         self._controller.select_aux_tab("sites")
-        self.query_one(AuxSidebar).focus_sidebar()
+        self.query_one(TabbedListPane).focus_list()
         self._refresh_screen()
 
     def action_show_policies(self) -> None:
         self._controller.select_aux_tab("policies")
-        self.query_one(AuxSidebar).focus_sidebar()
+        self.query_one(TabbedListPane).focus_list()
         self._refresh_screen()
 
     def action_add_site_to_whitelist(self) -> None:
@@ -296,10 +299,12 @@ class RuntimeTextualApp(App[None]):
         self.query_one(RequestList).render_model(model.request_list, active=model.active_pane == "requests")
         self.query_one(RequestDetailPane).render_model(
             model.detail,
-            main_mode=model.main_mode,
             active=model.active_pane == "detail",
         )
-        self.query_one(AuxSidebar).render_model(model.aux, active=model.active_pane == "aux")
+        self.query_one(TabbedListPane).render_model(
+            model.admin,
+            active=model.active_pane in {"sites", "policies"},
+        )
         self.query_one(CommandBar).render_model(model.status_bar)
         if self._controller.should_exit:
             self.exit()
@@ -308,42 +313,38 @@ class RuntimeTextualApp(App[None]):
         model = self._controller.build_screen_model()
         self.query_one(RequestDetailPane).render_model(
             model.detail,
-            main_mode=model.main_mode,
             active=model.active_pane == "detail",
         )
 
     def _apply_layout(self, model: RuntimeScreenModel) -> None:
         plan = determine_runtime_layout(width=self.size.width, model=model)
-        content = self.query_one("#content", Horizontal)
-        content.styles.layout = plan.content_layout
+        traffic_view = self.query_one("#traffic-view", Horizontal)
+        traffic_view.display = model.active_view == "traffic"
+        traffic_view.styles.layout = plan.content_layout
+        admin_view = self.query_one(TabbedListPane)
+        admin_view.display = model.active_view == "admin"
         main_pane = self.query_one(RequestList)
         detail_pane = self.query_one(RequestDetailPane)
-        sidebar_pane = self.query_one(AuxSidebar)
-
-        detail_pane.display = plan.show_detail
-        sidebar_pane.display = plan.show_sidebar
 
         if plan.content_layout == "vertical":
             main_pane.styles.height = "2fr"
             detail_pane.styles.height = "1fr"
-            sidebar_pane.styles.height = "1fr"
             main_pane.styles.width = "1fr"
             detail_pane.styles.width = "1fr"
-            sidebar_pane.styles.width = "1fr"
         else:
             main_pane.styles.height = "1fr"
             detail_pane.styles.height = "1fr"
-            sidebar_pane.styles.height = "1fr"
             main_pane.styles.width = "2fr"
             detail_pane.styles.width = "1fr"
-            sidebar_pane.styles.width = 32
+        admin_view.styles.height = "1fr"
+        admin_view.styles.width = "1fr"
 
     def _sync_focus_after_navigation(self) -> None:
         model = self._controller.build_screen_model()
-        if model.active_pane == "aux" and model.aux.visible:
-            self.query_one(AuxSidebar).focus_sidebar()
+        if model.active_view == "admin":
+            self.query_one(TabbedListPane).focus_list()
             return
-        if model.main_mode == "request_detail":
+        if model.active_pane == "detail":
             self.query_one(RequestDetailPane).focus_detail()
             self._controller.set_active_pane("detail")
             return
@@ -362,9 +363,8 @@ class RuntimeTextualApp(App[None]):
     def _focus_steps(self) -> list[str]:
         model = self._controller.build_screen_model()
         return _focus_step_order(
-            main_mode=model.main_mode,
-            aux_visible=model.aux.visible,
-            aux_tabs=model.aux.aux_tabs,
+            active_view=model.active_view,
+            admin_tabs=model.admin.tabs,
         )
 
     def _current_focus_step(self) -> str:
@@ -374,11 +374,11 @@ class RuntimeTextualApp(App[None]):
         model = self._controller.build_screen_model()
         if focused.id == "detail-scroll":
             return f"detail-{model.detail.tab}"
-        if focused.id == "sidebar-list":
-            return f"aux-{model.aux.active_key}"
+        if focused.id == "admin-list":
+            return f"admin-{model.admin.active_key}"
         if focused.id == "command-input":
             return "command"
-        return "requests"
+        return "admin-sites" if model.active_view == "admin" else "requests"
 
     def _focus_step(self, step: str) -> None:
         if step == "requests":
@@ -395,10 +395,10 @@ class RuntimeTextualApp(App[None]):
             self.query_one(RequestDetailPane).focus_detail()
             self._refresh_screen()
             return
-        if step.startswith("aux-"):
-            tab_key = step.removeprefix("aux-")
+        if step.startswith("admin-"):
+            tab_key = step.removeprefix("admin-")
             self._controller.select_aux_tab(tab_key)
-            self.query_one(AuxSidebar).focus_sidebar()
+            self.query_one(TabbedListPane).focus_list()
             self._refresh_screen()
             return
         self.query_one(CommandBar).focus_input()

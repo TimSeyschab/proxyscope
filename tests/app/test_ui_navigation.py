@@ -32,7 +32,7 @@ class TestRuntimeUINavigationService(unittest.TestCase):
         self.assertEqual(state.request_cursor, 1)
         self.assertEqual(state.selected_request_id, entries[1].request_id)
 
-    def test_selected_aux_items_clamp_cursor(self) -> None:
+    def test_selected_admin_items_clamp_cursor(self) -> None:
         state = RuntimeUIViewState(site_cursor=4, policy_cursor=4)
         navigation = RuntimeUINavigationService(state)
 
@@ -44,17 +44,27 @@ class TestRuntimeUINavigationService(unittest.TestCase):
         self.assertEqual(state.site_cursor, 0)
         self.assertEqual(state.policy_cursor, 0)
 
-    def test_go_back_hides_sidebar_before_leaving_detail(self) -> None:
-        state = RuntimeUIViewState(main_mode="request_detail", active_pane="detail")
+    def test_go_back_moves_detail_focus_to_requests(self) -> None:
+        state = RuntimeUIViewState(active_view="traffic", active_pane="detail")
         navigation = RuntimeUINavigationService(state)
 
         self.assertTrue(navigation.go_back())
-        self.assertFalse(state.aux_visible)
-        self.assertEqual(state.main_mode, "request_detail")
-
-        self.assertTrue(navigation.go_back())
-        self.assertEqual(state.main_mode, "requests")
         self.assertEqual(state.active_pane, "requests")
+
+        self.assertFalse(navigation.go_back())
+        self.assertEqual(state.active_view, "traffic")
+
+    def test_admin_view_remembers_selected_tab(self) -> None:
+        state = RuntimeUIViewState()
+        navigation = RuntimeUINavigationService(state)
+
+        navigation.select_aux_tab("policies")
+        navigation.switch_view("traffic")
+        navigation.switch_view("admin")
+
+        self.assertEqual(state.active_view, "admin")
+        self.assertEqual(state.admin_tab_key, "policies")
+        self.assertEqual(state.active_pane, "policies")
 
     def _entries(self, *paths: str) -> list[LoggedExchange]:
         journal = RequestJournal()

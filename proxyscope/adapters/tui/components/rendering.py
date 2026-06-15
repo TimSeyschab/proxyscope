@@ -1,6 +1,6 @@
 from rich.text import Text
 
-from proxyscope.adapters.tui.models import AuxPanelTabModel, DetailTab
+from proxyscope.adapters.tui.models import DetailTab, TabbedListTabModel
 
 
 def plain_text(value: str) -> Text:
@@ -14,9 +14,9 @@ def format_detail_tabs(*, detail_tab: DetailTab, has_response: bool) -> str:
     return f"{request_label} | {response_label}"
 
 
-def format_sidebar_tabs(*, aux_tabs: list[AuxPanelTabModel], active_key: str) -> str:
+def format_tabs(*, tabs: list[TabbedListTabModel], active_key: str) -> str:
     labels: list[str] = []
-    for tab in aux_tabs:
-        label = tab.title.split(":", 1)[-1].title()
+    for tab in tabs:
+        label = tab.title
         labels.append(f"[{label}]" if tab.key == active_key else f" {label} ")
     return " | ".join(labels) if labels else ""
