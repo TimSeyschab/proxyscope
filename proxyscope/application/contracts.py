@@ -3,6 +3,7 @@ from contextlib import AbstractContextManager
 from typing import Callable, Protocol, runtime_checkable
 
 from proxyscope.application.journal import LoggedExchange
+from proxyscope.application.requests import RequestWindow
 
 SuspendUI = Callable[[], AbstractContextManager[None]]
 
@@ -15,6 +16,8 @@ class RequestUseCases(Protocol):
     def list_entries(self) -> list[LoggedExchange]: ...
 
     def list_all_entries(self) -> list[LoggedExchange]: ...
+
+    def list_window(self, *, cursor: int, limit: int) -> RequestWindow: ...
 
     def clear(self) -> str: ...
 

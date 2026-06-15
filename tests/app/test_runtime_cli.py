@@ -197,6 +197,58 @@ class TestRuntimeCLI(unittest.TestCase):
         self.assertEqual(model.request_list.selected_request_id, alpha_request_id)
         self.assertEqual(model.request_list.cursor, 2)
 
+    def test_request_follow_top_selects_newest_entry_when_new_entry_arrives(self) -> None:
+        journal = RequestJournal()
+        journal.start_request(
+            method="GET",
+            path="/alpha",
+            start_line="GET /alpha HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        beta_request_id = journal.start_request(
+            method="GET",
+            path="/beta",
+            start_line="GET /beta HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        cli = RuntimeCLI(
+            **runtime_dependencies(RuntimeTestContext()),
+            request_journal=journal,
+            response_modifier=ResponseModifierService(),
+        )
+        cli.toggle_request_follow_top()
+
+        model = cli.build_screen_model()
+        self.assertEqual(model.request_list.selected_request_id, beta_request_id)
+        self.assertEqual(model.request_list.cursor, 0)
+        self.assertTrue(model.request_list.follow_top)
+
+        gamma_request_id = journal.start_request(
+            method="GET",
+            path="/gamma",
+            start_line="GET /gamma HTTP/1.1",
+            headers={},
+            body=b"",
+            client_ip="127.0.0.1",
+            target_host="example.com",
+            target_port=80,
+            protocol="http",
+        )
+        model = cli.build_screen_model()
+
+        self.assertEqual(model.request_list.selected_request_id, gamma_request_id)
+        self.assertEqual(model.request_list.cursor, 0)
+
     def test_execute_clear_command_clears_requests(self) -> None:
         journal = RequestJournal()
         request_id = journal.start_request(

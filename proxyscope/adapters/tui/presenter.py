@@ -14,6 +14,7 @@ from proxyscope.adapters.tui.state import RuntimeUIViewState
 from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.journal import LoggedExchange
 from proxyscope.application.policy_administration import PolicyAdministrationService
+from proxyscope.application.requests import RequestWindow
 from proxyscope.application.runtime_settings import RuntimeSettingsState
 
 
@@ -23,8 +24,7 @@ def build_runtime_screen_model(
     settings: RuntimeSettingsState,
     policies: PolicyAdministrationService,
     configuration: RuntimeConfigurationService,
-    entries: list[LoggedExchange],
-    all_entry_count: int,
+    request_window: RequestWindow,
     site_counter: Counter[str],
     policy_items: list[str],
     filter_summary: str,
@@ -51,15 +51,17 @@ def build_runtime_screen_model(
         f"filter={filter_summary} "
         f"config={config_path_text}"
     )
-    request_title = f"MAIN {len(entries)}/{all_entry_count}"
-    selected_entry = entries[state.request_cursor] if entries else None
+    request_title = f"MAIN {request_window.total_count}/{request_window.all_count}"
+    selected_entry = request_window.selected_entry
 
     return RuntimeScreenModel(
         request_list=RequestListModel(
             title=request_title,
-            rows=_build_request_rows(entries),
+            rows=_build_request_rows(request_window.entries),
             selected_request_id=None if selected_entry is None else selected_entry.request_id,
             cursor=state.request_cursor,
+            row_offset=request_window.offset,
+            follow_top=state.request_follow_top,
         ),
         detail=RequestDetailModel(
             tab=state.detail_tab,

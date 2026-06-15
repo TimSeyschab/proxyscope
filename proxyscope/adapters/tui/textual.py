@@ -112,6 +112,7 @@ class RuntimeTextualApp(App[None]):
         Binding("shift+i", "edit_policy", "Edit Policy", show=False, priority=True),
         Binding("shift+m", "add_editor_policy", "Editor Rule", show=False, priority=True),
         Binding("shift+r", "replay_request", "Replay", show=False, priority=True),
+        Binding("shift+t", "toggle_request_follow_top", "Follow Top", show=True, priority=True),
         Binding("shift+x", "remove_policy", "Delete Policy", show=False, priority=True),
     ]
 
@@ -190,6 +191,7 @@ class RuntimeTextualApp(App[None]):
             "p": self.action_show_policies,
             "r": self.action_replay_request,
             "s": self.action_toggle_sites_sidebar,
+            "t": self.action_toggle_request_follow_top,
             "u": self.action_remove_site_from_whitelist,
             "x": self.action_remove_policy,
         }
@@ -271,12 +273,16 @@ class RuntimeTextualApp(App[None]):
         self._controller.replay_selected_request(suspend_ui=self.suspend)
         self._refresh_screen()
 
+    def action_toggle_request_follow_top(self) -> None:
+        self._controller.toggle_request_follow_top()
+        self._refresh_screen()
+
     def action_remove_policy(self) -> None:
         self._controller.remove_selected_policy()
         self._refresh_screen()
 
     def _tick(self) -> None:
-        if not self.query(RequestList):
+        if not self.query(RequestList) or not self.query("#main-title"):
             return
         self._controller.process_pending_actions(suspend_ui=self.suspend)
         if self._controller.should_exit:
@@ -399,7 +405,7 @@ class RuntimeTextualApp(App[None]):
 
 
 def _shortcut_token_from_key_event(*, key: str, character: str | None) -> str | None:
-    known = {"a", "b", "d", "e", "i", "m", "p", "r", "s", "u", "x"}
+    known = {"a", "b", "d", "e", "i", "m", "p", "r", "s", "t", "u", "x"}
     normalized_key = key.lower()
     if normalized_key.startswith("shift+"):
         candidate = normalized_key.removeprefix("shift+")

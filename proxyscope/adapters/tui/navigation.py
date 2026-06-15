@@ -32,10 +32,16 @@ class RuntimeUINavigationService:
         entries: list[LoggedExchange],
         *,
         preferred_cursor: int | None = None,
+        follow_top: bool = False,
     ) -> None:
         if not entries:
             self._state.request_cursor = 0
             self._state.selected_request_id = None
+            return
+
+        if follow_top and preferred_cursor is None:
+            self._state.request_cursor = 0
+            self._state.selected_request_id = entries[0].request_id
             return
 
         selected_id = self._state.selected_request_id

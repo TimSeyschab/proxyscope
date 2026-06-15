@@ -1,14 +1,17 @@
 import unittest
 
-from textual.widgets import OptionList
+from textual.app import App, ComposeResult
+from textual.widgets import DataTable, OptionList
 from textual.widgets._option_list import Option
 
+from proxyscope.adapters.tui.components import RequestList
 from proxyscope.adapters.tui.components.rendering import format_detail_tabs, plain_text
 from proxyscope.adapters.tui.models import (
     AuxPanelModel,
     AuxPanelTabModel,
     RequestDetailModel,
     RequestListModel,
+    RequestRowModel,
     RuntimeScreenModel,
     StatusBarModel,
 )
@@ -22,6 +25,11 @@ from proxyscope.adapters.tui.textual import (
 from proxyscope.application.journal import LoggedExchange, LoggedRequestMessage, LoggedResponseMessage
 
 
+class RequestListTestApp(App[None]):
+    def compose(self) -> ComposeResult:
+        yield RequestList()
+
+
 def _screen_model(
     *, width_mode: str = "detail", active_pane: str = "requests", aux_visible: bool = True
 ) -> RuntimeScreenModel:
@@ -31,6 +39,8 @@ def _screen_model(
             rows=[],
             selected_request_id=None,
             cursor=0,
+            row_offset=0,
+            follow_top=False,
         ),
         detail=RequestDetailModel(
             tab="request",
@@ -73,6 +83,96 @@ class TestTextualUILayout(unittest.TestCase):
         self.assertEqual(plan.content_layout, "vertical")
         self.assertTrue(plan.show_detail)
         self.assertFalse(plan.show_sidebar)
+
+
+class TestTextualUIRequestList(unittest.TestCase):
+    def test_new_requests_keep_view_stable_when_selection_is_not_first_row(self) -> None:
+        async def run_test() -> None:
+            app = RequestListTestApp()
+
+            async with app.run_test(size=(100, 8)) as pilot:
+                request_list = app.query_one(RequestList)
+                table = app.query_one(DataTable)
+
+                request_list.render_model(_request_list_model([30, *range(20, 0, -1)], cursor=1), active=True)
+                table.scroll_to(y=0, animate=False, immediate=True, force=True)
+                await pilot.pause()
+
+                request_list.render_model(_request_list_model([50, 40, 30, *range(20, 0, -1)], cursor=3), active=True)
+                await pilot.pause()
+
+                self.assertEqual(table.cursor_row, 3)
+                self.assertEqual(table.scroll_y, 2)
+
+        import asyncio
+
+        asyncio.run(run_test())
+
+    def test_new_requests_do_not_scroll_down_when_selection_is_first_row(self) -> None:
+        async def run_test() -> None:
+            app = RequestListTestApp()
+
+            async with app.run_test(size=(100, 8)) as pilot:
+                request_list = app.query_one(RequestList)
+                table = app.query_one(DataTable)
+
+                request_list.render_model(_request_list_model([30, *range(20, 0, -1)], cursor=0), active=True)
+                table.scroll_to(y=0, animate=False, immediate=True, force=True)
+                await pilot.pause()
+
+                request_list.render_model(_request_list_model([50, 40, 30, *range(20, 0, -1)], cursor=2), active=True)
+                await pilot.pause()
+
+                self.assertEqual(table.cursor_row, 2)
+                self.assertEqual(table.scroll_y, 0)
+
+        import asyncio
+
+        asyncio.run(run_test())
+
+    def test_request_window_cursor_is_mapped_to_visible_table_row(self) -> None:
+        async def run_test() -> None:
+            app = RequestListTestApp()
+
+            async with app.run_test(size=(100, 8)) as pilot:
+                request_list = app.query_one(RequestList)
+                table = app.query_one(DataTable)
+
+                request_list.render_model(
+                    _request_list_model([90, 80, 70], cursor=11, row_offset=10),
+                    active=True,
+                )
+                await pilot.pause()
+
+                self.assertEqual(table.cursor_row, 1)
+
+        import asyncio
+
+        asyncio.run(run_test())
+
+    def test_follow_top_keeps_cursor_and_scroll_at_first_row(self) -> None:
+        async def run_test() -> None:
+            app = RequestListTestApp()
+
+            async with app.run_test(size=(100, 8)) as pilot:
+                request_list = app.query_one(RequestList)
+                table = app.query_one(DataTable)
+
+                request_list.render_model(_request_list_model([30, *range(20, 0, -1)], cursor=0), active=True)
+                await pilot.pause()
+
+                request_list.render_model(
+                    _request_list_model([50, 40, 30, *range(20, 0, -1)], cursor=0, follow_top=True),
+                    active=True,
+                )
+                await pilot.pause()
+
+                self.assertEqual(table.cursor_row, 0)
+                self.assertEqual(table.scroll_y, 0)
+
+        import asyncio
+
+        asyncio.run(run_test())
 
 
 class TestTextualUIDetailFormatting(unittest.TestCase):
@@ -273,6 +373,7 @@ class TestTextualEventCompatibility(unittest.TestCase):
 class TestTextualShortcutParsing(unittest.TestCase):
     def test_shift_plus_letter_maps_to_shortcut_token(self) -> None:
         self.assertEqual(_shortcut_token_from_key_event(key="shift+m", character=None), "m")
+        self.assertEqual(_shortcut_token_from_key_event(key="shift+t", character=None), "t")
 
     def test_uppercase_character_maps_to_shortcut_token(self) -> None:
         self.assertEqual(_shortcut_token_from_key_event(key="m", character="M"), "m")
@@ -280,6 +381,37 @@ class TestTextualShortcutParsing(unittest.TestCase):
 
     def test_lowercase_without_shift_is_not_treated_as_shortcut(self) -> None:
         self.assertIsNone(_shortcut_token_from_key_event(key="m", character="m"))
+
+
+def _request_list_model(
+    request_ids: list[int],
+    *,
+    cursor: int,
+    row_offset: int = 0,
+    follow_top: bool = False,
+) -> RequestListModel:
+    rows = [
+        RequestRowModel(
+            request_id=request_id,
+            cells=(
+                str(request_id),
+                "---",
+                "GET",
+                "example.com",
+                f"/{request_id}",
+                "-",
+            ),
+        )
+        for request_id in request_ids
+    ]
+    return RequestListModel(
+        title=f"MAIN {len(rows)}/{len(rows)}",
+        rows=rows,
+        cursor=cursor,
+        row_offset=row_offset,
+        follow_top=follow_top,
+        selected_request_id=rows[cursor - row_offset].request_id if rows else None,
+    )
 
 
 if __name__ == "__main__":

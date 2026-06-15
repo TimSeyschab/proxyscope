@@ -15,6 +15,7 @@ class RuntimeUIViewState:
     policy_cursor: int = 0
     request_cursor: int = 0
     selected_request_id: int | None = None
+    request_follow_top: bool = False
     detail_tab: DetailTab = "request"
 
     main_mode: MainMode = "requests"

@@ -118,6 +118,7 @@ poetry run python scripts/generate_readme_screenshots.py
 - `Shift+B`: Go back in the current view
 - `Shift+M`: Create an editor policy from the selected request
 - `Shift+R`: Edit and resend the selected request
+- `Shift+T`: Follow the newest request at the top
 - `Shift+A` / `Shift+U`: Add/remove selected site to/from whitelist
 - `Shift+D` / `Shift+E`: Disable/enable selected policy
 - `Shift+I`: Open selected policy in external editor

@@ -17,6 +17,8 @@ class RequestListModel:
     title: str
     rows: list[RequestRowModel]
     cursor: int
+    row_offset: int
+    follow_top: bool
     selected_request_id: int | None
 
 

@@ -65,6 +65,9 @@ class RuntimeCLI(logging.Handler):
     def select_request(self, cursor: int) -> None:
         self._controller.select_request(cursor)
 
+    def toggle_request_follow_top(self) -> None:
+        self._controller.toggle_request_follow_top()
+
     def open_selected_request_detail(self) -> None:
         self._controller.open_selected_request_detail()
 

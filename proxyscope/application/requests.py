@@ -43,6 +43,15 @@ class RequestFilter:
         self.text = None
 
 
+@dataclass(frozen=True)
+class RequestWindow:
+    entries: list[LoggedExchange]
+    offset: int
+    total_count: int
+    all_count: int
+    selected_entry: LoggedExchange | None
+
+
 class RequestApplicationService:
     def __init__(self, request_journal: RequestJournal) -> None:
         self._request_journal = request_journal
@@ -59,6 +68,33 @@ class RequestApplicationService:
         if self._filter.is_active():
             entries = [entry for entry in entries if self._filter.matches(entry)]
         return entries
+
+    def list_window(self, *, cursor: int, limit: int) -> RequestWindow:
+        all_entries = self.list_all_entries()
+        entries = all_entries
+        if self._filter.is_active():
+            entries = [entry for entry in entries if self._filter.matches(entry)]
+
+        total_count = len(entries)
+        if limit <= 0:
+            selected_index = min(max(cursor, 0), total_count - 1) if total_count else None
+            return RequestWindow(
+                entries=[],
+                offset=0,
+                total_count=total_count,
+                all_count=len(all_entries),
+                selected_entry=None if selected_index is None else entries[selected_index],
+            )
+
+        offset = _window_offset(cursor=cursor, total_count=total_count, limit=limit)
+        selected_index = min(max(cursor, 0), total_count - 1) if total_count else None
+        return RequestWindow(
+            entries=entries[offset : offset + limit],
+            offset=offset,
+            total_count=total_count,
+            all_count=len(all_entries),
+            selected_entry=None if selected_index is None else entries[selected_index],
+        )
 
     def list_all_entries(self) -> list[LoggedExchange]:
         entries = list(self._request_journal.list_entries())
@@ -142,3 +178,12 @@ def _entry_search_text(entry: LoggedExchange) -> str:
         parts.extend((str(entry.response.status_code), entry.response.reason, entry.response.body_preview))
         parts.extend(f"{name}: {value}" for name, value in entry.response.headers)
     return "\n".join(parts).lower()
+
+
+def _window_offset(*, cursor: int, total_count: int, limit: int) -> int:
+    if total_count <= 0 or limit <= 0:
+        return 0
+    clamped_cursor = min(max(cursor, 0), total_count - 1)
+    if total_count <= limit:
+        return 0
+    return min(max(clamped_cursor - limit // 2, 0), total_count - limit)

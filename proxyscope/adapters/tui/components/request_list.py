@@ -6,6 +6,8 @@ from textual.widgets import DataTable, Static
 from proxyscope.adapters.tui.components.rendering import plain_text
 from proxyscope.adapters.tui.models import RequestListModel
 
+RequestListRowCells = tuple[str, str, str, str, str, str]
+
 
 class RequestList(Vertical):
     class Highlighted(Message):
@@ -20,7 +22,9 @@ class RequestList(Vertical):
 
     def __init__(self) -> None:
         super().__init__(id="main-pane", classes="pane")
-        self._rows: tuple[tuple[str, str, str, str, str, str], ...] = ()
+        self._rows: tuple[RequestListRowCells, ...] = ()
+        self._request_ids: tuple[int, ...] = ()
+        self._row_offset = 0
 
     def compose(self) -> ComposeResult:
         yield Static(id="main-title", classes="pane-title")
@@ -34,11 +38,11 @@ class RequestList(Vertical):
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         event.stop()
-        self.post_message(self.Highlighted(event.cursor_row))
+        self.post_message(self.Highlighted(self._row_offset + event.cursor_row))
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         event.stop()
-        self.post_message(self.Selected(event.cursor_row))
+        self.post_message(self.Selected(self._row_offset + event.cursor_row))
 
     def render_model(self, model: RequestListModel, *, active: bool) -> None:
         title = self.query_one("#main-title", Static)
@@ -46,14 +50,56 @@ class RequestList(Vertical):
         title.set_class(active, "-active")
 
         table = self.query_one(DataTable)
+        previous_scroll_y = table.scroll_y
+        previous_selected_index = _index_of(self._request_ids, model.selected_request_id)
         rows = tuple(row.cells for row in model.rows)
-        if rows != self._rows:
+        request_ids = tuple(row.request_id for row in model.rows)
+        rows_changed = rows != self._rows or request_ids != self._request_ids or model.row_offset != self._row_offset
+        if rows_changed:
             table.clear(columns=False)
             for row in rows:
                 table.add_row(*row)
             self._rows = rows
+            self._request_ids = request_ids
+            self._row_offset = model.row_offset
+
         if model.rows:
-            table.move_cursor(row=min(model.cursor, len(model.rows) - 1), animate=False, scroll=True)
+            cursor = min(max(model.cursor - model.row_offset, 0), len(model.rows) - 1)
+            if model.follow_top:
+                table.move_cursor(row=cursor, animate=False, scroll=False)
+                table.scroll_to(y=0, animate=False, immediate=True, force=True)
+                return
+            if rows_changed and previous_selected_index is None:
+                table.move_cursor(row=cursor, animate=False, scroll=True)
+                return
+            table.move_cursor(row=cursor, animate=False, scroll=False)
+            if rows_changed:
+                scroll_y = _stable_scroll_y(
+                    previous_scroll_y=previous_scroll_y,
+                    previous_selected_index=previous_selected_index,
+                    selected_index=cursor,
+                )
+                table.scroll_to(y=scroll_y, animate=False, immediate=True, force=True)
 
     def focus_list(self) -> None:
         self.query_one(DataTable).focus()
+
+
+def _stable_scroll_y(
+    *,
+    previous_scroll_y: float,
+    previous_selected_index: int | None,
+    selected_index: int,
+) -> float:
+    if previous_selected_index is None or previous_selected_index == 0:
+        return 0
+    return max(0, previous_scroll_y + selected_index - previous_selected_index)
+
+
+def _index_of(request_ids: tuple[int, ...], request_id: int | None) -> int | None:
+    if request_id is None:
+        return None
+    try:
+        return request_ids.index(request_id)
+    except ValueError:
+        return None

@@ -15,6 +15,8 @@ from proxyscope.application.runtime_settings import RuntimeSettingsState
 from proxyscope.application.services import RuntimeApplicationServices
 from proxyscope.policies.models import PolicyRule, StaticResponseAction
 
+REQUEST_LIST_WINDOW_SIZE = 250
+
 
 class RuntimeController:
     def __init__(
@@ -77,7 +79,17 @@ class RuntimeController:
         self._ui_navigation.set_active_pane(pane)
 
     def select_request(self, cursor: int) -> None:
+        if self._view_state.request_follow_top and cursor != 0:
+            self._view_state.request_follow_top = False
         self._ui_navigation.select_request(self._services.requests.list_entries(), cursor)
+
+    def toggle_request_follow_top(self) -> None:
+        self._view_state.request_follow_top = not self._view_state.request_follow_top
+        if self._view_state.request_follow_top:
+            self._ui_navigation.select_request(self._services.requests.list_entries(), 0)
+            self._view_state.status_message = "Request list follows the newest request."
+            return
+        self._view_state.status_message = "Request list keeps the selected request stable."
 
     def open_selected_request_detail(self) -> None:
         if not self._ui_navigation.open_selected_request_detail(self._services.requests.list_entries()):
@@ -206,6 +218,7 @@ class RuntimeController:
             "  Shift+I                     Edit the selected policy (Policies tab).\n"
             "  Shift+M                     Add and edit selected request as editor policy.\n"
             "  Shift+R                     Replay the selected request after editing.\n"
+            "  Shift+T                     Toggle following the newest request at the top.\n"
             "  Shift+X                     Remove the selected policy (Policies tab).\n"
             "  Shift+<letter>              Terminal sends uppercase character (e.g. Shift+M == M).\n"
             "  Esc / Enter                 Close this help dialog."
@@ -243,9 +256,12 @@ class RuntimeController:
             self._view_state.status_message = f"Failed to close active SSL tunnels: {exc}"
 
     def build_screen_model(self) -> "RuntimeScreenModel":
-        all_entries = self._services.requests.list_all_entries()
         entries = self._services.requests.list_entries()
-        self._ui_navigation.sync_request_selection(entries)
+        self._ui_navigation.sync_request_selection(entries, follow_top=self._view_state.request_follow_top)
+        request_window = self._services.requests.list_window(
+            cursor=self._view_state.request_cursor,
+            limit=REQUEST_LIST_WINDOW_SIZE,
+        )
 
         policy_items = [description for _name, description in self._ordered_policy_items()]
         self._ui_navigation.clamp_policy_cursor(len(policy_items))
@@ -255,8 +271,7 @@ class RuntimeController:
             settings=self._settings,
             policies=self._policies,
             configuration=self._configuration,
-            entries=entries,
-            all_entry_count=len(all_entries),
+            request_window=request_window,
             site_counter=self._services.requests.site_counter(),
             policy_items=policy_items,
             filter_summary=self._services.requests.filter_summary,
