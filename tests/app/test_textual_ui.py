@@ -364,6 +364,13 @@ class TestTextualShortcutParsing(unittest.TestCase):
         self.assertEqual(_shortcut_token_from_key_event(key="shift+m", character=None), "m")
         self.assertEqual(_shortcut_token_from_key_event(key="shift+t", character=None), "t")
 
+    def test_shift_plus_number_maps_to_view_shortcut_token(self) -> None:
+        self.assertEqual(_shortcut_token_from_key_event(key="shift+1", character=None), "!")
+        self.assertEqual(_shortcut_token_from_key_event(key="!", character="!"), "!")
+        self.assertEqual(_shortcut_token_from_key_event(key="shift+2", character=None), "@")
+        self.assertEqual(_shortcut_token_from_key_event(key='"', character='"'), "@")
+        self.assertEqual(_shortcut_token_from_key_event(key="@", character="@"), "@")
+
     def test_uppercase_character_maps_to_shortcut_token(self) -> None:
         self.assertEqual(_shortcut_token_from_key_event(key="m", character="M"), "m")
         self.assertEqual(_shortcut_token_from_key_event(key="M", character=None), "m")

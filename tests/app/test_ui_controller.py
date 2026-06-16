@@ -95,7 +95,7 @@ class TestRuntimeUIController(unittest.TestCase):
             app = RuntimeTextualApp(controller)
 
             async with app.run_test(size=(160, 42)) as pilot:
-                await pilot.press("ctrl+1")
+                await pilot.press("shift+1")
                 await pilot.pause()
                 await pilot.press("enter")
                 await pilot.pause()

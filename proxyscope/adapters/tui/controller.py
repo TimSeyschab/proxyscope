@@ -211,8 +211,8 @@ class RuntimeController:
             "  Enter on a request          Open request detail.\n"
             "  Enter on a policy           Open policy editor (Policies tab).\n"
             "  Tab / Shift+Tab             Move forward or backward through panes.\n"
-            "  Ctrl+1                      Show Requests view.\n"
-            "  Ctrl+2                      Show Sites/Policies view.\n"
+            "  Shift+1                     Show Requests view.\n"
+            "  Shift+2                     Show Sites/Policies view.\n"
             "  Shift+S                     Show Sites tab.\n"
             "  Shift+P                     Show Policies tab.\n"
             "  Shift+B                     Move focus from detail back to requests.\n"
@@ -246,7 +246,7 @@ class RuntimeController:
     def _ensure_policy_tab_active(self) -> bool:
         if self._ui_navigation.is_policy_tab_active():
             return True
-        self._view_state.status_message = "Open Policies tab first (Ctrl+2, Shift+P)."
+        self._view_state.status_message = "Open Policies tab first (Shift+2, Shift+P)."
         return False
 
     def _schedule_policy_edit(self, name: str) -> None:

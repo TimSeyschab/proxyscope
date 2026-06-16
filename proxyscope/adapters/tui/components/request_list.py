@@ -45,6 +45,7 @@ class RequestList(Vertical):
         self.post_message(self.Selected(self._row_offset + event.cursor_row))
 
     def render_model(self, model: RequestListModel, *, active: bool) -> None:
+        self.set_class(active, "-active")
         title = self.query_one("#main-title", Static)
         title.update(plain_text(model.title))
         title.set_class(active, "-active")

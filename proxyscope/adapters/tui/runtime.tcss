@@ -1,45 +1,44 @@
 Screen {
-    background: #11161c;
-    color: #e6edf3;
+    background: #101315;
+    color: #e7e1d5;
 }
 
 #root {
     layout: vertical;
     height: 100%;
-    padding: 0;
-    margin: 0;
 }
 
 #traffic-view {
     layout: horizontal;
     height: 1fr;
-    padding: 0;
-    margin: 0;
 }
 
 .pane {
-    border: round #4b647a;
-    background: #16202a;
-    padding: 0;
-    margin: 0;
+    border: round #465158;
+    background: #171c20;
+}
+
+.pane.-active {
+    border: round #d9a94f;
 }
 
 .pane-title {
-    color: #8fd3ff;
+    color: #9eb6bd;
     text-style: bold;
     padding: 0 1;
     margin: 0;
 }
 
 .pane-title.-active {
-    color: #ffd280;
+    color: #d9a94f;
 }
 
-#detail-tabs {
-    color: #91a7bb;
+#detail-tabs,
+#admin-tabs {
+    color: #a8ada7;
     padding: 0 1;
     margin: 0;
-    border-bottom: solid #31424f;
+    border-bottom: solid #2f393e;
 }
 
 #main-pane {
@@ -60,12 +59,38 @@ Screen {
 
 #requests {
     height: 1fr;
+    background: #171c20;
 }
 
 #detail-scroll {
     height: 1fr;
-    background: #10171e;
-    border: solid #31424f;
+    background: #11161a;
+}
+
+#admin-list {
+    height: 1fr;
+    border: none;
+    padding: 0;
+    background: #171c20;
+}
+
+#admin-list:focus {
+    border: none;
+    background: #171c20;
+    background-tint: transparent;
+}
+
+#admin-list > .option-list--option {
+    padding: 0 1;
+}
+
+#admin-list > .option-list--option-highlighted,
+#admin-list:focus > .option-list--option-highlighted,
+#requests > .datatable--cursor,
+#requests:focus > .datatable--cursor {
+    color: #101315;
+    background: #d9a94f;
+    text-style: bold;
 }
 
 #detail-body {
@@ -73,43 +98,28 @@ Screen {
     margin: 0;
 }
 
-#admin-list {
-    height: 1fr;
-    background: #10171e;
-    border: solid #31424f;
-}
-
-#admin-tabs {
-    color: #91a7bb;
-    padding: 0 1;
-    margin: 0;
-    border-bottom: solid #31424f;
-}
-
 #command-pane {
     height: 4;
-    border-top: solid #31424f;
-    padding: 0;
-    margin: 0;
-    background: #0d1318;
+    border-top: solid #2f393e;
+    background: #0c0f11;
 }
 
 #command-input {
     margin: 0;
     padding: 0 1;
     border: none;
-    background: #0d1318;
+    background: #0c0f11;
 }
 
 #status-line {
-    color: #ffd280;
+    color: #d9a94f;
     text-style: bold;
     padding: 0 1;
     margin: 0;
 }
 
 #config-line {
-    color: #91a7bb;
+    color: #a8ada7;
     padding: 0 1;
     margin: 0;
 }

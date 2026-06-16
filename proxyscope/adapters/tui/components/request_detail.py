@@ -18,6 +18,7 @@ class RequestDetailPane(Vertical):
             yield Static(id="detail-body")
 
     def render_model(self, model: RequestDetailModel, *, active: bool) -> None:
+        self.set_class(active, "-active")
         title_text = f"DETAIL [{model.tab}]"
         title = self.query_one("#detail-title", Static)
         title.update(plain_text(title_text))

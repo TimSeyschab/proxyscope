@@ -37,6 +37,7 @@ class TabbedListPane(Vertical):
         self.post_message(self.Selected(event.option_index))
 
     def render_model(self, model: TabbedListModel, *, active: bool) -> None:
+        self.set_class(active, "-active")
         active_tab = next((tab for tab in model.tabs if tab.key == model.active_key), None)
         title = self.query_one("#admin-title", Static)
         title.update(plain_text("ADMIN" if active_tab is None else active_tab.title.upper()))

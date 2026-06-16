@@ -449,7 +449,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
         cli.disable_selected_policy()
 
-        self.assertEqual(cli._status_message, "Open Policies tab first (Ctrl+2, Shift+P).")  # type: ignore[attr-defined]
+        self.assertEqual(cli._status_message, "Open Policies tab first (Shift+2, Shift+P).")  # type: ignore[attr-defined]
         self.assertIsNotNone(
             PolicyEngine(config.policy_repository).get_static_response_template_for_request(
                 method="GET", url="https://example.com/mock"

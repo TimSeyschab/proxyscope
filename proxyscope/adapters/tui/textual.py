@@ -34,24 +34,24 @@ class HelpModal(ModalScreen[None]):
         width: 92;
         max-width: 90%;
         max-height: 85%;
-        background: #10171e;
-        border: round #8fd3ff;
+        background: #11161a;
+        border: round #d9a94f;
         padding: 1 2;
     }
 
     #help-title {
-        color: #8fd3ff;
+        color: #d9a94f;
         text-style: bold;
         padding: 0 0 1 0;
     }
 
     #help-body {
-        color: #e6edf3;
+        color: #e7e1d5;
         padding: 0;
     }
 
     #help-footer {
-        color: #91a7bb;
+        color: #a8ada7;
         padding: 1 0 0 0;
     }
     """
@@ -88,8 +88,8 @@ class RuntimeTextualApp(App[None]):
     CSS_PATH = "runtime.tcss"
 
     BINDINGS = [
-        Binding("ctrl+1", "show_traffic_view", "Requests", show=True, priority=True),
-        Binding("ctrl+2", "show_admin_view", "Sites/Policies", show=True, priority=True),
+        Binding("shift+1", "show_traffic_view", "Requests", show=True, priority=True),
+        Binding("shift+2", "show_admin_view", "Sites/Policies", show=True, priority=True),
         Binding("shift+b", "go_back", "Back", show=True, priority=True),
         Binding("shift+s", "show_sites", "Sites", show=True, priority=True),
         Binding("shift+p", "show_policies", "Policies", show=True, priority=True),
@@ -152,17 +152,7 @@ class RuntimeTextualApp(App[None]):
             self._controller.set_active_pane(cast(ActivePane, self._controller.build_screen_model().admin.active_key))
 
     def on_key(self, event: events.Key) -> None:
-        if event.key == "ctrl+1":
-            event.stop()
-            event.prevent_default()
-            self.action_show_traffic_view()
-            return
-        if event.key == "ctrl+2":
-            event.stop()
-            event.prevent_default()
-            self.action_show_admin_view()
-            return
-        if self._handle_shift_shortcut_key(event):
+        if self._handle_shortcut_key(event):
             return
         if event.key not in {"tab", "shift+tab"}:
             return
@@ -170,7 +160,7 @@ class RuntimeTextualApp(App[None]):
         event.prevent_default()
         self._cycle_focus(backward=event.key == "shift+tab")
 
-    def _handle_shift_shortcut_key(self, event: events.Key) -> bool:
+    def _handle_shortcut_key(self, event: events.Key) -> bool:
         focused = self.focused
         if focused is not None and focused.id == "command-input":
             return False
@@ -180,6 +170,8 @@ class RuntimeTextualApp(App[None]):
             return False
 
         shortcuts: dict[str, Callable[[], None]] = {
+            "!": self.action_show_traffic_view,
+            "@": self.action_show_admin_view,
             "a": self.action_add_site_to_whitelist,
             "b": self.action_go_back,
             "d": self.action_disable_policy,
@@ -407,6 +399,10 @@ class RuntimeTextualApp(App[None]):
 def _shortcut_token_from_key_event(*, key: str, character: str | None) -> str | None:
     known = {"a", "b", "d", "e", "i", "m", "p", "r", "s", "t", "u", "x"}
     normalized_key = key.lower()
+    if normalized_key in {"shift+1", "!"} or character == "!":
+        return "!"
+    if normalized_key in {"shift+2", '"', "@"} or character in {'"', "@"}:
+        return "@"
     if normalized_key.startswith("shift+"):
         candidate = normalized_key.removeprefix("shift+")
         return candidate if candidate in known else None
