@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import Callable, Literal, cast
+from typing import Callable, Literal
 
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Static
+from textual.widgets import Input, Static
 
 from proxyscope.adapters.tui.components import (
     CommandModal,
@@ -15,11 +15,13 @@ from proxyscope.adapters.tui.components import (
     RuntimeViewFrame,
     StatusFooter,
     TabbedListPane,
+    TrafficViewPane,
 )
+from proxyscope.adapters.tui.components.contracts import ComponentFocus
 from proxyscope.adapters.tui.components.rendering import (
     plain_text as _plain_text,
 )
-from proxyscope.adapters.tui.models import ActivePane, RuntimeScreenModel
+from proxyscope.adapters.tui.models import RuntimeScreenModel
 from proxyscope.adapters.tui.navigation import focus_step_order as _focus_step_order
 from proxyscope.adapters.tui.ui_controller import RuntimeUIController
 
@@ -115,17 +117,18 @@ class RuntimeTextualApp(App[None]):
     def __init__(self, controller: RuntimeUIController) -> None:
         super().__init__()
         self._controller = controller
+        self._focused_target: ComponentFocus | None = None
 
     def compose(self) -> ComposeResult:
         yield RuntimeViewFrame(
-            Horizontal(RequestList(), RequestDetailPane(), id="traffic-view"),
+            TrafficViewPane(),
             TabbedListPane(),
         )
 
     def on_mount(self) -> None:
         self.set_interval(0.2, self._tick)
         self.query_one(TabbedListPane).focus_list()
-        self._controller.set_active_pane("sites")
+        self._activate_focus(TabbedListPane.focus_target("sites"))
         self._refresh_screen()
 
     def _handle_command_modal_result(self, command: str | None) -> None:
@@ -145,18 +148,23 @@ class RuntimeTextualApp(App[None]):
 
     @on(RequestList.Highlighted)
     def on_request_list_highlighted(self, event: RequestList.Highlighted) -> None:
-        self._controller.set_active_pane("requests")
+        self._controller.set_active_focus(RequestList.focus_target)
         self._controller.select_request(event.cursor)
         self._refresh_detail_only()
 
-    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
-        widget = event.widget
-        if widget.id == "requests":
-            self._controller.set_active_pane("requests")
-        elif widget.id == "detail-scroll":
-            self._controller.set_active_pane("detail")
-        elif widget.id == "admin-list":
-            self._controller.set_active_pane(cast(ActivePane, self._controller.build_screen_model().admin.active_key))
+    @on(RequestList.Focused)
+    def on_request_list_focused(self) -> None:
+        self._activate_focus(RequestList.focus_target)
+
+    @on(RequestDetailPane.Focused)
+    def on_request_detail_focused(self) -> None:
+        model = self._controller.build_screen_model()
+        self._activate_focus(RequestDetailPane.focus_target(model.detail.tab))
+
+    @on(TabbedListPane.Focused)
+    def on_tabbed_list_focused(self) -> None:
+        active_key = self._controller.build_screen_model().admin.active_key
+        self._activate_focus(TabbedListPane.focus_target(active_key))
 
     def on_key(self, event: events.Key) -> None:
         if event.key == ":" or event.character == ":":
@@ -174,7 +182,7 @@ class RuntimeTextualApp(App[None]):
 
     def _handle_shortcut_key(self, event: events.Key) -> bool:
         focused = self.focused
-        if focused is not None and focused.id == "command-input":
+        if isinstance(focused, Input):
             return False
 
         shortcut = _shortcut_token_from_key_event(key=event.key, character=event.character)
@@ -208,11 +216,12 @@ class RuntimeTextualApp(App[None]):
 
     @on(RequestList.Selected)
     def on_request_list_selected(self, event: RequestList.Selected) -> None:
-        self._controller.set_active_pane("requests")
+        self._controller.set_active_focus(RequestList.focus_target)
         self._controller.select_request(event.cursor)
         self._controller.open_selected_request_detail()
-        self.query_one(RequestDetailPane).focus_detail()
-        self._controller.set_active_pane("detail")
+        self.query_one(TrafficViewPane).focus_detail()
+        model = self._controller.build_screen_model()
+        self._activate_focus(RequestDetailPane.focus_target(model.detail.tab))
         self._refresh_screen()
 
     @on(TabbedListPane.Highlighted)
@@ -233,24 +242,28 @@ class RuntimeTextualApp(App[None]):
         self._refresh_screen()
 
     def action_show_traffic_view(self) -> None:
-        self._controller.switch_view("traffic")
-        self.query_one(RequestList).focus_list()
-        self._controller.set_active_pane("requests")
+        self._controller.switch_view(TrafficViewPane.component_id.value)
+        self.query_one(TrafficViewPane).focus_requests()
+        self._activate_focus(RequestList.focus_target)
         self._refresh_screen()
 
     def action_show_admin_view(self) -> None:
-        self._controller.switch_view("admin")
+        self._controller.switch_view(TabbedListPane.component_id.value)
         self.query_one(TabbedListPane).focus_list()
+        model = self._controller.build_screen_model()
+        self._activate_focus(TabbedListPane.focus_target(model.admin.active_key))
         self._refresh_screen()
 
     def action_show_sites(self) -> None:
         self._controller.select_aux_tab("sites")
         self.query_one(TabbedListPane).focus_list()
+        self._activate_focus(TabbedListPane.focus_target("sites"))
         self._refresh_screen()
 
     def action_show_policies(self) -> None:
         self._controller.select_aux_tab("policies")
         self.query_one(TabbedListPane).focus_list()
+        self._activate_focus(TabbedListPane.focus_target("policies"))
         self._refresh_screen()
 
     def action_add_site_to_whitelist(self) -> None:
@@ -294,7 +307,7 @@ class RuntimeTextualApp(App[None]):
         self._refresh_screen()
 
     def _tick(self) -> None:
-        if not self.query(RequestList) or not self.query("#main-title"):
+        if not self.query(TrafficViewPane) or not self.query(StatusFooter):
             return
         self._controller.process_pending_actions(suspend_ui=self.suspend)
         if self._controller.should_exit:
@@ -305,14 +318,10 @@ class RuntimeTextualApp(App[None]):
     def _refresh_screen(self) -> None:
         model = self._controller.build_screen_model()
         self._apply_layout(model)
-        self.query_one(RequestList).render_model(model.request_list, active=model.active_pane == "requests")
-        self.query_one(RequestDetailPane).render_model(
-            model.detail,
-            active=model.active_pane == "detail",
-        )
+        self.query_one(TrafficViewPane).render_model(model)
         self.query_one(TabbedListPane).render_model(
             model.admin,
-            active=model.active_pane in {"sites", "policies"},
+            active=model.active_view == TabbedListPane.component_id.value,
         )
         self.query_one(StatusFooter).render_model(model.status_bar)
         if self._controller.should_exit:
@@ -320,60 +329,44 @@ class RuntimeTextualApp(App[None]):
 
     def _refresh_detail_only(self) -> None:
         model = self._controller.build_screen_model()
-        self.query_one(RequestDetailPane).render_model(
-            model.detail,
-            active=model.active_pane == "detail",
-        )
+        self.query_one(TrafficViewPane).render_detail(model)
 
     def _apply_layout(self, model: RuntimeScreenModel) -> None:
         plan = determine_runtime_layout(width=self.size.width, model=model)
-        traffic_view = self.query_one("#traffic-view", Horizontal)
-        traffic_view.display = model.active_view == "traffic"
-        traffic_view.styles.layout = plan.content_layout
+        traffic_view = self.query_one(TrafficViewPane)
+        traffic_view.display = model.active_view == TrafficViewPane.component_id.value
+        traffic_view.apply_layout(content_layout=plan.content_layout, model=model)
         admin_view = self.query_one(TabbedListPane)
-        admin_view.display = model.active_view == "admin"
-        main_pane = self.query_one(RequestList)
-        detail_pane = self.query_one(RequestDetailPane)
-        detail_pane.display = model.detail_visible
-
-        if plan.content_layout == "vertical":
-            if not model.detail_visible or model.detail_ratio == "half":
-                main_pane.styles.height = "1fr"
-            else:
-                main_pane.styles.height = "2fr"
-            detail_pane.styles.height = "1fr"
-            main_pane.styles.width = "1fr"
-            detail_pane.styles.width = "1fr"
-        else:
-            main_pane.styles.height = "1fr"
-            detail_pane.styles.height = "1fr"
-            main_pane.styles.width = "1fr" if model.detail_ratio == "half" else "2fr"
-            detail_pane.styles.width = "1fr"
+        admin_view.display = model.active_view == TabbedListPane.component_id.value
         admin_view.styles.height = "1fr"
         admin_view.styles.width = "1fr"
 
     def _sync_focus_after_navigation(self) -> None:
         model = self._controller.build_screen_model()
-        if model.active_view == "admin":
+        if model.active_view == TabbedListPane.component_id.value:
             self.query_one(TabbedListPane).focus_list()
+            self._activate_focus(TabbedListPane.focus_target(model.admin.active_key))
             return
-        if model.active_pane == "detail" and model.detail_visible:
-            self.query_one(RequestDetailPane).focus_detail()
-            self._controller.set_active_pane("detail")
+        if model.active_pane == RequestDetailPane.focus_target(model.detail.tab).pane_key and model.detail_visible:
+            self.query_one(TrafficViewPane).focus_detail()
+            self._activate_focus(RequestDetailPane.focus_target(model.detail.tab))
             return
-        self.query_one(RequestList).focus_list()
-        self._controller.set_active_pane("requests")
+        self.query_one(TrafficViewPane).focus_requests()
+        self._activate_focus(RequestList.focus_target)
 
     def _cycle_focus(self, *, backward: bool) -> None:
         steps = self._focus_steps()
+        if not steps:
+            return
         current = self._current_focus_step()
         if current not in steps:
-            current = "requests"
+            self._focus_step(self._fallback_focus_step(steps))
+            return
         index = steps.index(current)
         offset = -1 if backward else 1
         self._focus_step(steps[(index + offset) % len(steps)])
 
-    def _focus_steps(self) -> list[str]:
+    def _focus_steps(self) -> list[ComponentFocus]:
         model = self._controller.build_screen_model()
         return _focus_step_order(
             active_view=model.active_view,
@@ -381,39 +374,56 @@ class RuntimeTextualApp(App[None]):
             admin_tabs=model.admin.tabs,
         )
 
-    def _current_focus_step(self) -> str:
-        focused = self.focused
-        if focused is None:
-            return "requests"
+    def _current_focus_step(self) -> ComponentFocus | None:
         model = self._controller.build_screen_model()
-        if focused.id == "detail-scroll":
-            return f"detail-{model.detail.tab}"
-        if focused.id == "admin-list":
-            return f"admin-{model.admin.active_key}"
-        return "admin-sites" if model.active_view == "admin" else "requests"
+        if self._focused_target is None or self._focused_target.component_id.value != model.active_view:
+            return None
+        if RequestDetailPane.owns_focus(self._focused_target) and model.detail_visible:
+            return RequestDetailPane.focus_target(model.detail.tab)
+        if TabbedListPane.owns_focus(self._focused_target):
+            return TabbedListPane.focus_target(model.admin.active_key)
+        if RequestList.owns_focus(self._focused_target):
+            return RequestList.focus_target
+        return None
 
-    def _focus_step(self, step: str) -> None:
-        if step == "requests":
-            self.query_one(RequestList).focus_list()
-            self._controller.set_active_pane("requests")
+    def _fallback_focus_step(self, steps: list[ComponentFocus]) -> ComponentFocus:
+        model = self._controller.build_screen_model()
+        if model.active_view == TabbedListPane.component_id.value:
+            active_admin_step = TabbedListPane.focus_target(model.admin.active_key)
+            if active_admin_step in steps:
+                return active_admin_step
+        if model.active_view == TrafficViewPane.component_id.value and model.detail_visible:
+            active_detail_step = RequestDetailPane.focus_target(model.detail.tab)
+            if active_detail_step in steps:
+                return active_detail_step
+        if RequestList.focus_target in steps:
+            return RequestList.focus_target
+        return steps[0]
+
+    def _focus_step(self, step: ComponentFocus) -> None:
+        if RequestList.owns_focus(step):
+            self.query_one(TrafficViewPane).focus_requests()
+            self._activate_focus(step)
             return
-        if step == "detail-request":
-            self._controller.select_detail_tab("request")
-            self.query_one(RequestDetailPane).focus_detail()
+        if RequestDetailPane.owns_focus(step):
+            detail_tab = RequestDetailPane.tab_key_from_focus(step)
+            self._controller.select_detail_tab(detail_tab)
+            self.query_one(TrafficViewPane).focus_detail()
+            self._activate_focus(step)
             self._refresh_screen()
             return
-        if step == "detail-response":
-            self._controller.select_detail_tab("response")
-            self.query_one(RequestDetailPane).focus_detail()
-            self._refresh_screen()
-            return
-        if step.startswith("admin-"):
-            tab_key = step.removeprefix("admin-")
+        if TabbedListPane.owns_focus(step):
+            tab_key = TabbedListPane.tab_key_from_focus(step)
             self._controller.select_aux_tab(tab_key)
             self.query_one(TabbedListPane).focus_list()
+            self._activate_focus(step)
             self._refresh_screen()
             return
         self.action_show_command_modal()
+
+    def _activate_focus(self, focus: ComponentFocus) -> None:
+        self._focused_target = focus
+        self._controller.set_active_focus(focus)
 
     def action_show_command_modal(self) -> None:
         self.push_screen(CommandModal(), self._handle_command_modal_result)

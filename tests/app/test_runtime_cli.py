@@ -12,6 +12,10 @@ from proxyscope.policies.engine import PolicyEngine
 from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
 
 
+def _status_message(cli: RuntimeCLI) -> str:
+    return cli.build_screen_model().status_bar.message
+
+
 class TestRuntimeCLI(unittest.TestCase):
     def _journal_with_requests(self) -> RequestJournal:
         journal = RequestJournal()
@@ -66,8 +70,8 @@ class TestRuntimeCLI(unittest.TestCase):
         )
         should_exit = cli.execute_command("help")
         self.assertFalse(should_exit)
-        self.assertIn("filter", cli._status_message)  # type: ignore[attr-defined]
-        self.assertIn("mitm", cli._status_message)  # type: ignore[attr-defined]
+        self.assertIn("filter", _status_message(cli))
+        self.assertIn("mitm", _status_message(cli))
 
     def test_execute_question_mark_command_uses_help(self) -> None:
         cli = RuntimeCLI(
@@ -75,11 +79,17 @@ class TestRuntimeCLI(unittest.TestCase):
             request_journal=RequestJournal(),
             response_modifier=ResponseModifierService(),
         )
+        help_cli = RuntimeCLI(
+            **runtime_dependencies(RuntimeTestContext()),
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+        help_cli.execute_command("help")
 
         should_exit = cli.execute_command("?")
 
         self.assertFalse(should_exit)
-        self.assertEqual(cli._status_message, cli.HELP_SUMMARY)  # type: ignore[attr-defined]
+        self.assertEqual(_status_message(cli), _status_message(help_cli))
 
     def test_default_view_is_admin_sites(self) -> None:
         cli = RuntimeCLI(
@@ -463,7 +473,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
         cli.disable_selected_policy()
 
-        self.assertEqual(cli._status_message, "Open Policies tab first (Shift+2, Shift+P).")  # type: ignore[attr-defined]
+        self.assertEqual(_status_message(cli), "Open Policies tab first (Shift+2, Shift+P).")
         self.assertIsNotNone(
             PolicyEngine(config.policy_repository).get_static_response_template_for_request(
                 method="GET", url="https://example.com/mock"
@@ -541,13 +551,22 @@ class TestRuntimeCLI(unittest.TestCase):
             body=b"demo",
             method="GET",
         )
-        cli = RuntimeCLI(
-            **runtime_dependencies(config),
-            request_journal=RequestJournal(),
-            response_modifier=ResponseModifierService(),
-        )
-        cli.execute_command(f"policy edit {rule_name}")
-        self.assertEqual(cli._pending_policy_edit_name, rule_name)  # type: ignore[attr-defined]
+        with patch(
+            "proxyscope.adapters.factory.edit_policy_rule_with_external_editor",
+            return_value=(False, None, "cancelled"),
+        ) as edit_mock:
+            cli = RuntimeCLI(
+                **runtime_dependencies(config),
+                request_journal=RequestJournal(),
+                response_modifier=ResponseModifierService(),
+            )
+            cli.execute_command(f"policy edit {rule_name}")
+            cli.process_pending_actions()
+
+        edit_mock.assert_called_once()
+        edited_rule = edit_mock.call_args.args[0]
+        self.assertEqual(edited_rule.name, rule_name)
+        self.assertEqual(_status_message(cli), "cancelled")
 
     def test_shift_m_adds_editor_policy_and_opens_editor(self) -> None:
         config = RuntimeTestContext()
@@ -564,7 +583,7 @@ class TestRuntimeCLI(unittest.TestCase):
 
         self.assertTrue(config.open_editor_policy_entries())
         edit_mock.assert_called_once()
-        self.assertEqual(cli._status_message, "cancelled")  # type: ignore[attr-defined]
+        self.assertEqual(_status_message(cli), "cancelled")
 
     def test_decode_gzip_encoded_body(self) -> None:
         payload = b'{"ok":true}'
@@ -664,7 +683,7 @@ class TestRuntimeCLI(unittest.TestCase):
             cli.execute_command(f"export json {path}")
 
             self.assertTrue(path.exists())
-            self.assertIn("Exported json snapshot", cli._status_message)  # type: ignore[attr-defined]
+            self.assertIn("Exported json snapshot", _status_message(cli))
 
     def test_session_save_and_load_commands(self) -> None:
         source_cli = RuntimeCLI(
@@ -686,4 +705,4 @@ class TestRuntimeCLI(unittest.TestCase):
 
             target_cli.execute_command(f"session load {path}")
             self.assertEqual(len(target_journal.list_entries()), 2)
-            self.assertIn("Loaded session snapshot", target_cli._status_message)  # type: ignore[attr-defined]
+            self.assertIn("Loaded session snapshot", _status_message(target_cli))

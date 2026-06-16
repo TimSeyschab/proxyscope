@@ -1,8 +1,10 @@
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import DataTable, Static
 
+from proxyscope.adapters.tui.components.contracts import REQUESTS_FOCUS, ComponentFocus
 from proxyscope.adapters.tui.components.rendering import plain_text
 from proxyscope.adapters.tui.models import RequestListModel
 
@@ -10,6 +12,15 @@ RequestListRowCells = tuple[str, str, str, str, str, str]
 
 
 class RequestList(Vertical):
+    focus_target: ComponentFocus = REQUESTS_FOCUS
+
+    class Focused(Message):
+        pass
+
+    @classmethod
+    def owns_focus(cls, focus: ComponentFocus) -> bool:
+        return focus == cls.focus_target
+
     class Highlighted(Message):
         def __init__(self, cursor: int) -> None:
             super().__init__()
@@ -35,6 +46,9 @@ class RequestList(Vertical):
         table.cursor_type = "row"
         table.zebra_stripes = True
         table.add_columns("ID", "Status", "Method", "Host", "Path", "Duration")
+
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        self.post_message(self.Focused())
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         event.stop()

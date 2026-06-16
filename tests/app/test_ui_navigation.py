@@ -1,5 +1,6 @@
 import unittest
 
+from proxyscope.adapters.tui.components.contracts import detail_focus
 from proxyscope.adapters.tui.navigation import RuntimeUINavigationService
 from proxyscope.adapters.tui.state import RuntimeUIViewState
 from proxyscope.application.journal import LoggedExchange, RequestJournal
@@ -45,7 +46,8 @@ class TestRuntimeUINavigationService(unittest.TestCase):
         self.assertEqual(state.policy_cursor, 0)
 
     def test_go_back_closes_visible_detail(self) -> None:
-        state = RuntimeUIViewState(active_view="traffic", active_pane="detail", detail_visible=True)
+        state = RuntimeUIViewState(detail_visible=True)
+        state.set_active_focus(detail_focus("request"))
         navigation = RuntimeUINavigationService(state)
 
         self.assertTrue(navigation.go_back())

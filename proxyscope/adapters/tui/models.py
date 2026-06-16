@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Literal
 
-RuntimeView = Literal["traffic", "admin"]
-ActivePane = Literal["requests", "detail", "sites", "policies"]
+RuntimeView = str
+ActivePane = str
 DetailTab = Literal["request", "response"]
 DetailRatio = Literal["third", "half"]
 

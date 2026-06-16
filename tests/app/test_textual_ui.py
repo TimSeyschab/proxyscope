@@ -334,8 +334,8 @@ class TestTextualUIFocusOrder(unittest.TestCase):
         )
 
         self.assertEqual(
-            steps,
-            ["admin-sites", "admin-policies"],
+            [step.key for step in steps],
+            ["admin:sites", "admin:policies"],
         )
 
     def test_focus_order_uses_only_requests_when_detail_is_closed(self) -> None:
@@ -348,7 +348,7 @@ class TestTextualUIFocusOrder(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(steps, ["requests"])
+        self.assertEqual([step.key for step in steps], ["traffic:requests"])
 
     def test_focus_order_uses_request_and_detail_when_detail_is_open(self) -> None:
         steps = _focus_step_order(
@@ -360,7 +360,10 @@ class TestTextualUIFocusOrder(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(steps, ["requests", "detail-request", "detail-response"])
+        self.assertEqual(
+            [step.key for step in steps],
+            ["traffic:requests", "traffic:detail:request", "traffic:detail:response"],
+        )
 
 
 class TestTextualUIBindings(unittest.TestCase):

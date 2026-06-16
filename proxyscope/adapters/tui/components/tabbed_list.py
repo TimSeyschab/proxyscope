@@ -1,13 +1,41 @@
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import OptionList, Static
 
+from proxyscope.adapters.tui.components.contracts import (
+    ADMIN_COMPONENT_ID,
+    ComponentFocus,
+    ComponentId,
+    admin_tab_focus,
+)
 from proxyscope.adapters.tui.components.rendering import format_tabs, plain_text
-from proxyscope.adapters.tui.models import TabbedListModel
+from proxyscope.adapters.tui.models import TabbedListModel, TabbedListTabModel
 
 
 class TabbedListPane(Vertical):
+    component_id: ComponentId = ADMIN_COMPONENT_ID
+
+    class Focused(Message):
+        pass
+
+    @staticmethod
+    def focus_target(tab_key: str) -> ComponentFocus:
+        return admin_tab_focus(tab_key)
+
+    @classmethod
+    def focus_order(cls, tabs: list[TabbedListTabModel]) -> list[ComponentFocus]:
+        return [cls.focus_target(tab.key) for tab in tabs]
+
+    @classmethod
+    def owns_focus(cls, focus: ComponentFocus) -> bool:
+        return focus.component_id == cls.component_id
+
+    @classmethod
+    def tab_key_from_focus(cls, focus: ComponentFocus) -> str:
+        return focus.target_id.value
+
     class Highlighted(Message):
         def __init__(self, cursor: int) -> None:
             super().__init__()
@@ -27,6 +55,9 @@ class TabbedListPane(Vertical):
         yield Static(id="admin-title", classes="pane-title")
         yield Static(id="admin-tabs")
         yield OptionList(id="admin-list")
+
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        self.post_message(self.Focused())
 
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         event.stop()

@@ -1,6 +1,16 @@
 from typing import Literal, cast
 
-from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeView, TabbedListTabModel
+from proxyscope.adapters.tui.components.contracts import (
+    ADMIN_COMPONENT_ID,
+    REQUESTS_FOCUS,
+    TRAFFIC_COMPONENT_ID,
+    ComponentFocus,
+    admin_tab_focus,
+    detail_focus,
+)
+from proxyscope.adapters.tui.components.runtime_view import TrafficViewPane
+from proxyscope.adapters.tui.components.tabbed_list import TabbedListPane
+from proxyscope.adapters.tui.models import DetailTab, RuntimeView, TabbedListTabModel
 from proxyscope.adapters.tui.state import RuntimeUIViewState
 from proxyscope.application.journal import LoggedExchange
 
@@ -9,8 +19,8 @@ class RuntimeUINavigationService:
     def __init__(self, state: RuntimeUIViewState) -> None:
         self._state = state
 
-    def set_active_pane(self, pane: ActivePane) -> None:
-        self._state.active_pane = pane
+    def set_active_focus(self, focus: ComponentFocus) -> None:
+        self._state.set_active_focus(focus)
 
     def switch_view(self, view: RuntimeView) -> None:
         self._state.switch_view(view)
@@ -63,25 +73,19 @@ class RuntimeUINavigationService:
 
     def reset_request_view(self, *, has_entries: bool) -> None:
         self._state.reset_request_view()
-        if not has_entries and self._state.active_view == "traffic":
-            self._state.active_pane = "requests"
-
-    def clear_requests(self) -> None:
-        self._state.reset_request_view()
-        if self._state.active_view == "traffic":
-            self._state.active_pane = "requests"
+        if not has_entries and self._state.active_component_id == TRAFFIC_COMPONENT_ID:
+            self._state.set_active_focus(REQUESTS_FOCUS)
 
     def select_detail_tab(self, tab: DetailTab) -> None:
-        self._state.active_view = "traffic"
         self._state.detail_visible = True
         self._state.detail_tab = tab
-        self._state.active_pane = "detail"
+        self._state.set_active_focus(detail_focus(tab))
 
     def toggle_detail_ratio(self) -> None:
         self._state.toggle_detail_ratio()
 
     def select_admin_tab(self, tab_key: Literal["sites", "policies"]) -> None:
-        self._state.focus_admin_tab(tab_key)
+        self._state.set_active_focus(admin_tab_focus(tab_key))
 
     def select_aux_tab(self, tab_key: str) -> None:
         if tab_key in {"sites", "policies"}:
@@ -92,8 +96,7 @@ class RuntimeUINavigationService:
             self._state.site_cursor = cursor
         else:
             self._state.policy_cursor = cursor
-        self._state.active_view = "admin"
-        self._state.active_pane = self._state.admin_tab_key
+        self._state.set_active_focus(admin_tab_focus(self._state.admin_tab_key))
 
     def go_back(self) -> bool:
         return self._state.go_back()
@@ -114,7 +117,7 @@ class RuntimeUINavigationService:
         self._state.policy_cursor = _clamp_cursor(self._state.policy_cursor, item_count)
 
     def is_policy_tab_active(self) -> bool:
-        return self._state.active_view == "admin" and self._state.admin_tab_key == "policies"
+        return self._state.active_component_id == ADMIN_COMPONENT_ID and self._state.admin_tab_key == "policies"
 
 
 def focus_step_order(
@@ -122,12 +125,10 @@ def focus_step_order(
     active_view: RuntimeView,
     detail_visible: bool,
     admin_tabs: list[TabbedListTabModel],
-) -> list[str]:
-    if active_view == "admin":
-        return [f"admin-{tab.key}" for tab in admin_tabs]
-    if not detail_visible:
-        return ["requests"]
-    return ["requests", "detail-request", "detail-response"]
+) -> list[ComponentFocus]:
+    if active_view == ADMIN_COMPONENT_ID.value:
+        return TabbedListPane.focus_order(admin_tabs)
+    return TrafficViewPane.focus_order(detail_visible=detail_visible)
 
 
 def _clamp_cursor(cursor: int, item_count: int) -> int:

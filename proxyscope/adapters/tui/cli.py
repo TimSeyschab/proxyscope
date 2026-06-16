@@ -1,8 +1,9 @@
 import logging
 from typing import Callable
 
+from proxyscope.adapters.tui.components.contracts import ComponentFocus
 from proxyscope.adapters.tui.controller import RuntimeController
-from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel, RuntimeView
+from proxyscope.adapters.tui.models import DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.adapters.tui.ui_controller import SuspendUI
 from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.journal import RequestJournal
@@ -41,26 +42,11 @@ class RuntimeCLI(logging.Handler):
         )
 
     @property
-    def _status_message(self) -> str:
-        return self._controller.status_message
-
-    @property
-    def HELP_SUMMARY(self) -> str:  # noqa: N802
-        return self._controller.help_summary
-
-    @property
-    def _pending_policy_edit_name(self) -> str | None:
-        return self._controller.pending_policy_edit_name
-
-    @property
     def should_exit(self) -> bool:
         return self._controller.should_exit
 
-    def set_status_message(self, message: str) -> None:
-        self._controller.set_status_message(message)
-
-    def set_active_pane(self, pane: ActivePane) -> None:
-        self._controller.set_active_pane(pane)
+    def set_active_focus(self, focus: ComponentFocus) -> None:
+        self._controller.set_active_focus(focus)
 
     def switch_view(self, view: RuntimeView) -> None:
         self._controller.switch_view(view)
@@ -85,9 +71,6 @@ class RuntimeCLI(logging.Handler):
 
     def select_aux_item(self, cursor: int) -> None:
         self._controller.select_aux_item(cursor)
-
-    def toggle_aux_visibility(self) -> None:
-        self._controller.toggle_aux_visibility()
 
     def go_back(self) -> None:
         self._controller.go_back()

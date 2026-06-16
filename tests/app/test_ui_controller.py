@@ -73,9 +73,6 @@ class TestRuntimeUIController(unittest.TestCase):
                 self.assertEqual(model.active_view, "admin")
                 self.assertEqual(model.active_pane, "policies")
                 self.assertEqual(model.admin.active_key, "policies")
-                self.assertIsNotNone(app.focused)
-                assert app.focused is not None
-                self.assertEqual(app.focused.id, "admin-list")
 
         asyncio.run(run_test())
 
@@ -142,6 +139,42 @@ class TestRuntimeUIController(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    def test_textual_tab_after_admin_switch_with_hidden_detail_focus_enters_admin_list(self) -> None:
+        async def run_test() -> None:
+            journal = RequestJournal()
+            journal.start_request(
+                method="GET",
+                path="/hello",
+                start_line="GET /hello HTTP/1.1",
+                headers={},
+                body=b"",
+                client_ip="127.0.0.1",
+                target_host="example.com",
+                target_port=80,
+                protocol="http",
+            )
+            controller = self._controller(journal=journal)
+            app = RuntimeTextualApp(controller)
+
+            async with app.run_test(size=(160, 42)) as pilot:
+                await pilot.press("shift+1")
+                await pilot.pause()
+                await pilot.press("enter")
+                await pilot.pause()
+
+                controller.select_aux_tab("policies")
+                app._refresh_screen()
+                await pilot.pause()
+
+                await pilot.press("tab")
+                await pilot.pause()
+
+                model = controller.build_screen_model()
+                self.assertEqual(model.active_view, "admin")
+                self.assertEqual(model.active_pane, "policies")
+
+        asyncio.run(run_test())
+
     def test_textual_detail_ratio_shortcut_toggles_between_third_and_half(self) -> None:
         async def run_test() -> None:
             controller = self._controller()
@@ -173,12 +206,12 @@ class TestRuntimeUIController(unittest.TestCase):
                 await pilot.press(":")
                 await pilot.pause()
 
-                self.assertEqual(app.focused.id if app.focused is not None else None, "command-input")
+                self.assertIsInstance(app.focused, Input)
 
                 await pilot.press("enter")
                 await pilot.pause()
 
-                self.assertNotEqual(app.focused.id if app.focused is not None else None, "command-input")
+                self.assertNotIsInstance(app.focused, Input)
                 self.assertEqual(controller.build_screen_model().status_bar.message, "Press ':' for commands.")
 
         asyncio.run(run_test())

@@ -1,7 +1,8 @@
 from typing import Callable
 
 from proxyscope.adapters.factory import create_default_runtime_application_services
-from proxyscope.adapters.tui.models import ActivePane, DetailTab, RuntimeScreenModel, RuntimeView
+from proxyscope.adapters.tui.components.contracts import ComponentFocus
+from proxyscope.adapters.tui.models import DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.adapters.tui.navigation import RuntimeUINavigationService
 from proxyscope.adapters.tui.presenter import build_runtime_screen_model
 from proxyscope.adapters.tui.state import RuntimeUIViewState
@@ -57,26 +58,14 @@ class RuntimeController:
         )
 
     @property
-    def status_message(self) -> str:
-        return self._view_state.status_message
-
-    @property
-    def help_summary(self) -> str:
-        return self._command_registry.build_help_summary()
-
-    @property
-    def pending_policy_edit_name(self) -> str | None:
-        return self._services.policies.pending_edit_name
-
-    @property
     def should_exit(self) -> bool:
         return self._view_state.should_exit
 
     def set_status_message(self, message: str) -> None:
         self._view_state.status_message = message
 
-    def set_active_pane(self, pane: ActivePane) -> None:
-        self._ui_navigation.set_active_pane(pane)
+    def set_active_focus(self, focus: ComponentFocus) -> None:
+        self._ui_navigation.set_active_focus(focus)
 
     def switch_view(self, view: RuntimeView) -> None:
         self._ui_navigation.switch_view(view)
@@ -112,9 +101,6 @@ class RuntimeController:
 
     def select_aux_item(self, cursor: int) -> None:
         self._ui_navigation.select_aux_item(cursor)
-
-    def toggle_aux_visibility(self) -> None:
-        self._ui_navigation.switch_view("admin")
 
     def go_back(self) -> None:
         if not self._ui_navigation.go_back():

@@ -1,12 +1,34 @@
+from typing import cast
+
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
+from textual.message import Message
 from textual.widgets import Static
 
+from proxyscope.adapters.tui.components.contracts import ComponentFocus, detail_focus
 from proxyscope.adapters.tui.components.rendering import format_detail_tabs, plain_text
-from proxyscope.adapters.tui.models import RequestDetailModel
+from proxyscope.adapters.tui.models import DetailTab, RequestDetailModel
 
 
 class RequestDetailPane(Vertical):
+    _target_prefix = "detail:"
+
+    class Focused(Message):
+        pass
+
+    @staticmethod
+    def focus_target(tab_key: str) -> ComponentFocus:
+        return detail_focus(tab_key)
+
+    @classmethod
+    def owns_focus(cls, focus: ComponentFocus) -> bool:
+        return focus.target_id.value.startswith(cls._target_prefix)
+
+    @classmethod
+    def tab_key_from_focus(cls, focus: ComponentFocus) -> DetailTab:
+        return cast(DetailTab, focus.target_id.value.removeprefix(cls._target_prefix))
+
     def __init__(self) -> None:
         super().__init__(id="detail-pane", classes="pane")
         self._detail_cache = ""
@@ -16,6 +38,9 @@ class RequestDetailPane(Vertical):
         yield Static(id="detail-tabs")
         with VerticalScroll(id="detail-scroll", can_focus=True):
             yield Static(id="detail-body")
+
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        self.post_message(self.Focused())
 
     def render_model(self, model: RequestDetailModel, *, active: bool) -> None:
         self.set_class(active, "-active")
