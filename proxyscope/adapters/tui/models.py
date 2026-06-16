@@ -4,6 +4,7 @@ from typing import Literal
 RuntimeView = Literal["traffic", "admin"]
 ActivePane = Literal["requests", "detail", "sites", "policies"]
 DetailTab = Literal["request", "response"]
+DetailRatio = Literal["third", "half"]
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,8 @@ class StatusBarModel:
 class RuntimeScreenModel:
     request_list: RequestListModel
     detail: RequestDetailModel
+    detail_visible: bool
+    detail_ratio: DetailRatio
     admin: TabbedListModel
     status_bar: StatusBarModel
     active_view: RuntimeView

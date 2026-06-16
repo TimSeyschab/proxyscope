@@ -30,7 +30,13 @@ class RequestListTestApp(App[None]):
         yield RequestList()
 
 
-def _screen_model(*, active_view: str = "traffic", active_pane: str = "requests") -> RuntimeScreenModel:
+def _screen_model(
+    *,
+    active_view: str = "traffic",
+    active_pane: str = "requests",
+    detail_visible: bool = False,
+    detail_ratio: str = "third",
+) -> RuntimeScreenModel:
     return RuntimeScreenModel(
         request_list=RequestListModel(
             title="MAIN 1/1",
@@ -45,6 +51,8 @@ def _screen_model(*, active_view: str = "traffic", active_pane: str = "requests"
             text="No request selected.",
             has_response=False,
         ),
+        detail_visible=detail_visible,
+        detail_ratio=detail_ratio,  # type: ignore[arg-type]
         admin=TabbedListModel(
             tabs=[
                 TabbedListTabModel(
@@ -318,6 +326,7 @@ class TestTextualUIFocusOrder(unittest.TestCase):
     def test_focus_order_uses_admin_tabs_on_admin_view(self) -> None:
         steps = _focus_step_order(
             active_view="admin",
+            detail_visible=False,
             admin_tabs=[
                 TabbedListTabModel(key="sites", title="Sites", items=["example.com"], cursor=0),
                 TabbedListTabModel(key="policies", title="Policies", items=["policy-1"], cursor=0),
@@ -326,19 +335,32 @@ class TestTextualUIFocusOrder(unittest.TestCase):
 
         self.assertEqual(
             steps,
-            ["admin-sites", "admin-policies", "command"],
+            ["admin-sites", "admin-policies"],
         )
 
-    def test_focus_order_uses_request_and_detail_on_traffic_view(self) -> None:
+    def test_focus_order_uses_only_requests_when_detail_is_closed(self) -> None:
         steps = _focus_step_order(
             active_view="traffic",
+            detail_visible=False,
             admin_tabs=[
                 TabbedListTabModel(key="sites", title="Sites", items=["example.com"], cursor=0),
                 TabbedListTabModel(key="policies", title="Policies", items=["policy-1"], cursor=0),
             ],
         )
 
-        self.assertEqual(steps, ["requests", "detail-request", "detail-response", "command"])
+        self.assertEqual(steps, ["requests"])
+
+    def test_focus_order_uses_request_and_detail_when_detail_is_open(self) -> None:
+        steps = _focus_step_order(
+            active_view="traffic",
+            detail_visible=True,
+            admin_tabs=[
+                TabbedListTabModel(key="sites", title="Sites", items=["example.com"], cursor=0),
+                TabbedListTabModel(key="policies", title="Policies", items=["policy-1"], cursor=0),
+            ],
+        )
+
+        self.assertEqual(steps, ["requests", "detail-request", "detail-response"])
 
 
 class TestTextualUIBindings(unittest.TestCase):

@@ -44,15 +44,24 @@ class TestRuntimeUINavigationService(unittest.TestCase):
         self.assertEqual(state.site_cursor, 0)
         self.assertEqual(state.policy_cursor, 0)
 
-    def test_go_back_moves_detail_focus_to_requests(self) -> None:
-        state = RuntimeUIViewState(active_view="traffic", active_pane="detail")
+    def test_go_back_closes_visible_detail(self) -> None:
+        state = RuntimeUIViewState(active_view="traffic", active_pane="detail", detail_visible=True)
         navigation = RuntimeUINavigationService(state)
 
         self.assertTrue(navigation.go_back())
+        self.assertFalse(state.detail_visible)
         self.assertEqual(state.active_pane, "requests")
 
         self.assertFalse(navigation.go_back())
         self.assertEqual(state.active_view, "traffic")
+
+    def test_toggle_detail_ratio_keeps_selection_state(self) -> None:
+        state = RuntimeUIViewState(detail_ratio="third")
+        navigation = RuntimeUINavigationService(state)
+
+        navigation.toggle_detail_ratio()
+
+        self.assertEqual(state.detail_ratio, "half")
 
     def test_admin_view_remembers_selected_tab(self) -> None:
         state = RuntimeUIViewState()

@@ -73,8 +73,12 @@ class RuntimeUINavigationService:
 
     def select_detail_tab(self, tab: DetailTab) -> None:
         self._state.active_view = "traffic"
+        self._state.detail_visible = True
         self._state.detail_tab = tab
         self._state.active_pane = "detail"
+
+    def toggle_detail_ratio(self) -> None:
+        self._state.toggle_detail_ratio()
 
     def select_admin_tab(self, tab_key: Literal["sites", "policies"]) -> None:
         self._state.focus_admin_tab(tab_key)
@@ -113,13 +117,17 @@ class RuntimeUINavigationService:
         return self._state.active_view == "admin" and self._state.admin_tab_key == "policies"
 
 
-def focus_step_order(*, active_view: RuntimeView, admin_tabs: list[TabbedListTabModel]) -> list[str]:
+def focus_step_order(
+    *,
+    active_view: RuntimeView,
+    detail_visible: bool,
+    admin_tabs: list[TabbedListTabModel],
+) -> list[str]:
     if active_view == "admin":
-        steps = [f"admin-{tab.key}" for tab in admin_tabs]
-    else:
-        steps = ["requests", "detail-request", "detail-response"]
-    steps.append("command")
-    return steps
+        return [f"admin-{tab.key}" for tab in admin_tabs]
+    if not detail_visible:
+        return ["requests"]
+    return ["requests", "detail-request", "detail-response"]
 
 
 def _clamp_cursor(cursor: int, item_count: int) -> int:

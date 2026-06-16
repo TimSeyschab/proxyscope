@@ -8,6 +8,10 @@ Screen {
     height: 100%;
 }
 
+#view-content {
+    height: 1fr;
+}
+
 #traffic-view {
     layout: horizontal;
     height: 1fr;
@@ -98,16 +102,9 @@ Screen {
     margin: 0;
 }
 
-#command-pane {
-    height: 4;
+#status-pane {
+    height: 2;
     border-top: solid #2f393e;
-    background: #0c0f11;
-}
-
-#command-input {
-    margin: 0;
-    padding: 0 1;
-    border: none;
     background: #0c0f11;
 }
 

@@ -77,6 +77,9 @@ class RuntimeCLI(logging.Handler):
     def select_detail_tab(self, tab: DetailTab) -> None:
         self._controller.select_detail_tab(tab)
 
+    def toggle_detail_ratio(self) -> None:
+        self._controller.toggle_detail_ratio()
+
     def select_aux_tab(self, tab_key: str) -> None:
         self._controller.select_aux_tab(tab_key)
 

@@ -101,6 +101,12 @@ class RuntimeController:
     def select_detail_tab(self, tab: DetailTab) -> None:
         self._ui_navigation.select_detail_tab(tab)
 
+    def toggle_detail_ratio(self) -> None:
+        self._ui_navigation.toggle_detail_ratio()
+        ratio = self._view_state.detail_ratio
+        ratio_text = "1/2" if ratio == "half" else "1/3"
+        self._view_state.status_message = f"Detail width set to {ratio_text}."
+
     def select_aux_tab(self, tab_key: str) -> None:
         self._ui_navigation.select_aux_tab(tab_key)
 
@@ -208,14 +214,17 @@ class RuntimeController:
     def build_help_text(self) -> str:
         return self._command_registry.build_help_text() + (
             "\n\nNavigation\n"
+            "  :                            Open command prompt.\n"
             "  Enter on a request          Open request detail.\n"
             "  Enter on a policy           Open policy editor (Policies tab).\n"
-            "  Tab / Shift+Tab             Move forward or backward through panes.\n"
+            "  Empty command / Esc          Close command prompt.\n"
+            "  Tab / Shift+Tab             Move forward or backward through view panes.\n"
             "  Shift+1                     Show Requests view.\n"
             "  Shift+2                     Show Sites/Policies view.\n"
             "  Shift+S                     Show Sites tab.\n"
             "  Shift+P                     Show Policies tab.\n"
-            "  Shift+B                     Move focus from detail back to requests.\n"
+            "  Shift+B                     Close request detail.\n"
+            "  Shift+V                     Toggle request detail width (1/3 or 1/2).\n"
             "  Shift+A                     Add the selected site to the whitelist.\n"
             "  Shift+U                     Remove the selected site from the whitelist.\n"
             "  Shift+D                     Disable the selected policy (Policies tab).\n"

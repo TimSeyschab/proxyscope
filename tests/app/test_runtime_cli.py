@@ -117,7 +117,21 @@ class TestRuntimeCLI(unittest.TestCase):
 
         model = cli.build_screen_model()
         self.assertEqual(model.active_view, "traffic")
+        self.assertFalse(model.detail_visible)
         self.assertEqual(model.active_pane, "requests")
+
+    def test_toggle_detail_ratio_updates_screen_model(self) -> None:
+        cli = RuntimeCLI(
+            **runtime_dependencies(RuntimeTestContext()),
+            request_journal=RequestJournal(),
+            response_modifier=ResponseModifierService(),
+        )
+
+        cli.toggle_detail_ratio()
+
+        model = cli.build_screen_model()
+        self.assertEqual(model.detail_ratio, "half")
+        self.assertEqual(model.status_bar.message, "Detail width set to 1/2.")
 
     def test_admin_tab_selection_is_remembered_when_switching_views(self) -> None:
         cli = RuntimeCLI(

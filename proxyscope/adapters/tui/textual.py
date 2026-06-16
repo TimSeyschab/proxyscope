@@ -8,7 +8,14 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from proxyscope.adapters.tui.components import CommandBar, RequestDetailPane, RequestList, TabbedListPane
+from proxyscope.adapters.tui.components import (
+    CommandModal,
+    RequestDetailPane,
+    RequestList,
+    RuntimeViewFrame,
+    StatusFooter,
+    TabbedListPane,
+)
 from proxyscope.adapters.tui.components.rendering import (
     plain_text as _plain_text,
 )
@@ -101,6 +108,7 @@ class RuntimeTextualApp(App[None]):
         Binding("shift+m", "add_editor_policy", "Editor Rule", show=False, priority=True),
         Binding("shift+r", "replay_request", "Replay", show=False, priority=True),
         Binding("shift+t", "toggle_request_follow_top", "Follow Top", show=True, priority=True),
+        Binding("shift+v", "toggle_detail_ratio", "Detail Size", show=True, priority=True),
         Binding("shift+x", "remove_policy", "Delete Policy", show=False, priority=True),
     ]
 
@@ -109,12 +117,10 @@ class RuntimeTextualApp(App[None]):
         self._controller = controller
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="root"):
-            with Horizontal(id="traffic-view"):
-                yield RequestList()
-                yield RequestDetailPane()
-            yield TabbedListPane()
-            yield CommandBar()
+        yield RuntimeViewFrame(
+            Horizontal(RequestList(), RequestDetailPane(), id="traffic-view"),
+            TabbedListPane(),
+        )
 
     def on_mount(self) -> None:
         self.set_interval(0.2, self._tick)
@@ -122,9 +128,10 @@ class RuntimeTextualApp(App[None]):
         self._controller.set_active_pane("sites")
         self._refresh_screen()
 
-    @on(CommandBar.Submitted)
-    def on_command_bar_submitted(self, event: CommandBar.Submitted) -> None:
-        command = event.command
+    def _handle_command_modal_result(self, command: str | None) -> None:
+        if command is None:
+            self._sync_focus_after_navigation()
+            return
         if self._controller.is_help_command(command):
             self._controller.execute_command(command)
             self._refresh_screen()
@@ -152,6 +159,11 @@ class RuntimeTextualApp(App[None]):
             self._controller.set_active_pane(cast(ActivePane, self._controller.build_screen_model().admin.active_key))
 
     def on_key(self, event: events.Key) -> None:
+        if event.key == ":" or event.character == ":":
+            event.stop()
+            event.prevent_default()
+            self.action_show_command_modal()
+            return
         if self._handle_shortcut_key(event):
             return
         if event.key not in {"tab", "shift+tab"}:
@@ -183,6 +195,7 @@ class RuntimeTextualApp(App[None]):
             "s": self.action_show_sites,
             "t": self.action_toggle_request_follow_top,
             "u": self.action_remove_site_from_whitelist,
+            "v": self.action_toggle_detail_ratio,
             "x": self.action_remove_policy,
         }
         action = shortcuts.get(shortcut)
@@ -272,6 +285,10 @@ class RuntimeTextualApp(App[None]):
         self._controller.toggle_request_follow_top()
         self._refresh_screen()
 
+    def action_toggle_detail_ratio(self) -> None:
+        self._controller.toggle_detail_ratio()
+        self._refresh_screen()
+
     def action_remove_policy(self) -> None:
         self._controller.remove_selected_policy()
         self._refresh_screen()
@@ -297,7 +314,7 @@ class RuntimeTextualApp(App[None]):
             model.admin,
             active=model.active_pane in {"sites", "policies"},
         )
-        self.query_one(CommandBar).render_model(model.status_bar)
+        self.query_one(StatusFooter).render_model(model.status_bar)
         if self._controller.should_exit:
             self.exit()
 
@@ -317,16 +334,20 @@ class RuntimeTextualApp(App[None]):
         admin_view.display = model.active_view == "admin"
         main_pane = self.query_one(RequestList)
         detail_pane = self.query_one(RequestDetailPane)
+        detail_pane.display = model.detail_visible
 
         if plan.content_layout == "vertical":
-            main_pane.styles.height = "2fr"
+            if not model.detail_visible or model.detail_ratio == "half":
+                main_pane.styles.height = "1fr"
+            else:
+                main_pane.styles.height = "2fr"
             detail_pane.styles.height = "1fr"
             main_pane.styles.width = "1fr"
             detail_pane.styles.width = "1fr"
         else:
             main_pane.styles.height = "1fr"
             detail_pane.styles.height = "1fr"
-            main_pane.styles.width = "2fr"
+            main_pane.styles.width = "1fr" if model.detail_ratio == "half" else "2fr"
             detail_pane.styles.width = "1fr"
         admin_view.styles.height = "1fr"
         admin_view.styles.width = "1fr"
@@ -336,7 +357,7 @@ class RuntimeTextualApp(App[None]):
         if model.active_view == "admin":
             self.query_one(TabbedListPane).focus_list()
             return
-        if model.active_pane == "detail":
+        if model.active_pane == "detail" and model.detail_visible:
             self.query_one(RequestDetailPane).focus_detail()
             self._controller.set_active_pane("detail")
             return
@@ -356,6 +377,7 @@ class RuntimeTextualApp(App[None]):
         model = self._controller.build_screen_model()
         return _focus_step_order(
             active_view=model.active_view,
+            detail_visible=model.detail_visible,
             admin_tabs=model.admin.tabs,
         )
 
@@ -368,8 +390,6 @@ class RuntimeTextualApp(App[None]):
             return f"detail-{model.detail.tab}"
         if focused.id == "admin-list":
             return f"admin-{model.admin.active_key}"
-        if focused.id == "command-input":
-            return "command"
         return "admin-sites" if model.active_view == "admin" else "requests"
 
     def _focus_step(self, step: str) -> None:
@@ -393,11 +413,14 @@ class RuntimeTextualApp(App[None]):
             self.query_one(TabbedListPane).focus_list()
             self._refresh_screen()
             return
-        self.query_one(CommandBar).focus_input()
+        self.action_show_command_modal()
+
+    def action_show_command_modal(self) -> None:
+        self.push_screen(CommandModal(), self._handle_command_modal_result)
 
 
 def _shortcut_token_from_key_event(*, key: str, character: str | None) -> str | None:
-    known = {"a", "b", "d", "e", "i", "m", "p", "r", "s", "t", "u", "x"}
+    known = {"a", "b", "d", "e", "i", "m", "p", "r", "s", "t", "u", "v", "x"}
     normalized_key = key.lower()
     if normalized_key in {"shift+1", "!"} or character == "!":
         return "!"

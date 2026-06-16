@@ -111,11 +111,15 @@ poetry run python scripts/generate_readme_screenshots.py
 
 ## Keyboard Shortcuts (TUI)
 
-- `Tab` / `Shift+Tab`: Cycle focus through panes
-- `Enter`: Open request detail or execute the current command input
-- `Shift+S`: Toggle sidebar (Sites)
-- `Shift+P`: Open Policies sidebar
-- `Shift+B`: Go back in the current view
+- `:`: Open command prompt
+- `Enter`: Open request detail, open selected policy in the editor, or submit the command prompt
+- `Tab` / `Shift+Tab`: Cycle focus through panes in the current view
+- `Shift+1`: Open Requests view
+- `Shift+2`: Open Sites/Policies view
+- `Shift+S`: Open Sites tab
+- `Shift+P`: Open Policies tab
+- `Shift+B`: Close request detail
+- `Shift+V`: Toggle request detail width between 1/3 and 1/2
 - `Shift+M`: Create an editor policy from the selected request
 - `Shift+R`: Edit and resend the selected request
 - `Shift+T`: Follow the newest request at the top

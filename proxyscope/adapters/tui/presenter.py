@@ -68,6 +68,8 @@ def build_runtime_screen_model(
             text=_format_detail(selected_entry, state.detail_tab),
             has_response=selected_entry is not None and selected_entry.response is not None,
         ),
+        detail_visible=state.detail_visible,
+        detail_ratio=state.detail_ratio,
         admin=TabbedListModel(
             tabs=_build_admin_tabs(
                 site_items=site_items,
