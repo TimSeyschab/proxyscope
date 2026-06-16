@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 from proxyscope.adapters.tui.cli import RuntimeCLI
@@ -16,6 +17,20 @@ SCREENSHOT_DIR = Path("docs/screenshots")
 OVERVIEW_SCREENSHOT = SCREENSHOT_DIR / "01-overview.svg"
 DETAIL_SCREENSHOT = SCREENSHOT_DIR / "02-request-detail.svg"
 POLICIES_SCREENSHOT = SCREENSHOT_DIR / "03-policies.svg"
+
+
+def _show_status(runtime_cli: RuntimeCLI, message: str) -> None:
+    runtime_cli.emit(
+        logging.LogRecord(
+            name="proxyscope.screenshots",
+            level=logging.WARNING,
+            pathname=__file__,
+            lineno=0,
+            msg=message,
+            args=(),
+            exc_info=None,
+        )
+    )
 
 
 def _seed_runtime_data(
@@ -116,7 +131,7 @@ async def _capture_screenshots() -> None:
         proxy_base_url="http://127.0.0.1:8080",
     )
     _seed_runtime_data(runtime_cli, journal, policies)
-    runtime_cli.set_status_message("Demo session loaded.")
+    _show_status(runtime_cli, "Demo session loaded.")
 
     app = RuntimeTextualApp(runtime_cli)
     async with app.run_test(size=(160, 42)) as pilot:
@@ -126,13 +141,13 @@ async def _capture_screenshots() -> None:
         runtime_cli.select_request(1)
         runtime_cli.open_selected_request_detail()
         runtime_cli.select_detail_tab("response")
-        runtime_cli.set_status_message("Detail view for request #2")
+        _show_status(runtime_cli, "Detail view for request #2")
         app._refresh_screen()
         await pilot.pause(0.1)
         app.save_screenshot(str(DETAIL_SCREENSHOT))
 
         runtime_cli.select_aux_tab("policies")
-        runtime_cli.set_status_message("Policies sidebar")
+        _show_status(runtime_cli, "Policies sidebar")
         app._refresh_screen()
         await pilot.pause(0.1)
         app.save_screenshot(str(POLICIES_SCREENSHOT))
