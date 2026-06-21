@@ -1,6 +1,6 @@
 [project]
 name = "proxyscope"
-version = "0.3.1"
+version = "0.4.0"
 description = "Interactive HTTP/HTTPS debugging proxy with runtime policies and terminal UI."
 authors = [
     { name = "Tim Seyschab", email = "tim@shellnuts.de" }
