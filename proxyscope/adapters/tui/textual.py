@@ -12,7 +12,7 @@ from proxyscope.adapters.tui.components import (
     CommandModal,
     RequestDetailPane,
     RequestList,
-    RuntimeViewFrame,
+    RuntimeScreenLayout,
     StatusFooter,
     TabbedListPane,
     TrafficViewPane,
@@ -120,7 +120,7 @@ class RuntimeTextualApp(App[None]):
         self._focused_target: ComponentFocus | None = None
 
     def compose(self) -> ComposeResult:
-        yield RuntimeViewFrame(
+        yield RuntimeScreenLayout(
             TrafficViewPane(),
             TabbedListPane(),
         )

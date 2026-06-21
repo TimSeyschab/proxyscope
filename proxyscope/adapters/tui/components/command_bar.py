@@ -15,15 +15,15 @@ class CommandModal(ModalScreen[str | None]):
     }
 
     #command-dialog {
-        width: 90;
+        width: 64;
+        height: 3;
         max-width: 90%;
-        background: #11161a;
-        border: round #d9a94f;
-        padding: 1 2;
+        background: transparent;
+        padding: 0;
     }
 
     #command-input {
-        border: none;
+        border: round #d9a94f;
         background: #11161a;
         color: #e7e1d5;
         padding: 0;

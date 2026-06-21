@@ -10,6 +10,8 @@ Screen {
 
 #view-content {
     height: 1fr;
+    margin: 0;
+    padding: 0;
 }
 
 #traffic-view {
@@ -103,9 +105,13 @@ Screen {
 }
 
 #status-pane {
-    height: 2;
-    border-top: solid #2f393e;
+    height: 3;
+    border-left: round #465158;
+    border-right: round #465158;
+    border-bottom: round #465158;
     background: #0c0f11;
+    margin: 0;
+    padding: 0;
 }
 
 #status-line {

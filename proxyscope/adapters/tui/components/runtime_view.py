@@ -1,10 +1,8 @@
 from typing import Literal
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.widget import Widget
+from textual.containers import Horizontal
 
-from proxyscope.adapters.tui.components.command_bar import StatusFooter
 from proxyscope.adapters.tui.components.contracts import TRAFFIC_COMPONENT_ID, ComponentFocus, ComponentId
 from proxyscope.adapters.tui.components.request_detail import RequestDetailPane
 from proxyscope.adapters.tui.components.request_list import RequestList
@@ -75,14 +73,3 @@ class TrafficViewPane(Horizontal):
             RequestDetailPane.focus_target("request"),
             RequestDetailPane.focus_target("response"),
         ]
-
-
-class RuntimeViewFrame(Vertical):
-    def __init__(self, *content: Widget) -> None:
-        super().__init__(id="root")
-        self._content = content
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="view-content"):
-            yield from self._content
-        yield StatusFooter()
