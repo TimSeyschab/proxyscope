@@ -1,0 +1,89 @@
+import threading
+import time
+import unittest
+from threading import Event
+
+from proxyscope.application.response_edits import PendingResponseEdit, ResponseModifierService
+from proxyscope.proxy.upstream.forwarding import ForwardResponse
+
+
+class TestResponseModifierService(unittest.TestCase):
+    def test_returns_original_when_interactive_editor_is_disabled(self) -> None:
+        service = ResponseModifierService(interactive_enabled=False)
+        response = ForwardResponse(200, "OK", {"X-Test": "a"}, b"hello")
+        out = service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
+        self.assertEqual(out.body, b"hello")
+        self.assertEqual(out.headers.get("X-Test"), "a")
+
+    def test_blocks_and_applies_edit_when_requested_by_pipeline(self) -> None:
+        service = ResponseModifierService(interactive_enabled=True)
+        response = ForwardResponse(200, "OK", {"Content-Type": "text/plain"}, b"original")
+
+        result_holder: dict[str, ForwardResponse] = {}
+
+        def run_modify() -> None:
+            result_holder["response"] = service.maybe_modify_response(
+                request_url="https://example.com/a",
+                method="GET",
+                response=response,
+            )
+
+        thread = threading.Thread(target=run_modify, daemon=True)
+        thread.start()
+
+        pending = None
+        for _ in range(100):
+            pending = service.poll_pending_edit()
+            if pending is not None:
+                break
+            thread.join(timeout=0.01)
+        self.assertIsNotNone(pending)
+        assert pending is not None
+        pending.apply(headers={"Content-Type": "text/plain"}, body=b"edited")
+        thread.join(timeout=1.0)
+
+        out = result_holder["response"]
+        self.assertEqual(out.body, b"edited")
+
+    def test_apply_recomputes_content_length(self) -> None:
+        pending = PendingResponseEdit(
+            request_url="https://example.com/a",
+            method="GET",
+            response=ForwardResponse(200, "OK", {"Content-Length": "8", "Transfer-Encoding": "chunked"}, b"original"),
+            _done=Event(),
+        )
+        pending.apply(headers={"Content-Type": "text/plain", "Transfer-Encoding": "chunked"}, body=b"hello")
+        out = pending.wait(timeout_s=0.1)
+        lowered = {k.lower(): v for k, v in out.headers.items()}
+        self.assertEqual(lowered["content-length"], "5")
+        self.assertNotIn("transfer-encoding", lowered)
+
+    def test_timeout_keeps_original_response(self) -> None:
+        service = ResponseModifierService(interactive_enabled=True, edit_timeout_s=0.01)
+        response = ForwardResponse(200, "OK", {}, b"original")
+
+        out = service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
+
+        self.assertIs(out, response)
+        self.assertIsNone(service.poll_pending_edit())
+
+    def test_cancel_pending_edits_unblocks_waiting_requests(self) -> None:
+        service = ResponseModifierService(interactive_enabled=True, edit_timeout_s=10)
+        response = ForwardResponse(200, "OK", {}, b"original")
+        result: list[ForwardResponse] = []
+        thread = threading.Thread(
+            target=lambda: result.append(
+                service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
+            )
+        )
+        thread.start()
+        for _ in range(100):
+            if service.poll_pending_edit() is not None:
+                break
+            time.sleep(0.001)
+
+        self.assertEqual(service.cancel_pending_edits(), 1)
+        thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(result, [response])

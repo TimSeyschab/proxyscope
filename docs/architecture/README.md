@@ -29,4 +29,4 @@ outer adapters.
 - [Policy Processing](policy-processing.md)
 - [Application Services](application-services.md)
 - [Runtime Lifecycle](runtime-lifecycle.md)
-- [Refactoring Roadmap](../architecture-refactoring-plan.md)
+- [Configuration](../configuration.md)

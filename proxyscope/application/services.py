@@ -7,13 +7,13 @@ from proxyscope.application.actions import (
     RuntimeReplayActionService,
     RuntimeResponseEditActionService,
 )
+from proxyscope.application.commands.runtime_service import RuntimeCommandService
 from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.journal import RequestJournal
 from proxyscope.application.policies import PolicyApplicationService
 from proxyscope.application.policy_administration import PolicyAdministrationService
 from proxyscope.application.requests import RequestApplicationService
 from proxyscope.application.response_edits import ResponseModifierService
-from proxyscope.application.runtime_commands import RuntimeCommandService
 from proxyscope.application.runtime_settings import RuntimeSettingsState
 from proxyscope.application.sessions import ExportEntries, LoadEntries, SessionApplicationService
 from proxyscope.application.settings import SettingsApplicationService

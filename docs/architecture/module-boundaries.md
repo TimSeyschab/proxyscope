@@ -50,6 +50,12 @@ proxy, or MITM adapters. The application layer may not depend on `app`,
 factory. These rules are enforced by
 `tests/architecture/test_import_boundaries.py`.
 
+Packages should stay small enough to keep ownership obvious. A production
+package may define at most five direct classes across its immediate Python
+modules; if a package needs more, split it into subpackages with narrower
+responsibilities and expose a small facade from `__init__.py` when compatibility
+or ergonomics require it. This is enforced by the same architecture test suite.
+
 ## Composition Root
 
 `proxyscope.app.application.ProxyApplication` owns the lifecycle, while

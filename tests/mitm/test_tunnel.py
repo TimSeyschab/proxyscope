@@ -11,7 +11,7 @@ from proxyscope.mitm.tunnel import (
     _parse_request_start_line,
     _relay_tls_bidirectional,
 )
-from proxyscope.proxy.connect_tunnel import ConnectTarget, ConnectUpstreamConnectionError, ConnectUpstreamTimeoutError
+from proxyscope.proxy.connect.tunnel import ConnectTarget, ConnectUpstreamConnectionError, ConnectUpstreamTimeoutError
 from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
 
 

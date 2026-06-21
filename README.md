@@ -81,7 +81,7 @@ curl -x http://127.0.0.1:8080 https://httpbin.org/get
 
 ![Request detail view](docs/screenshots/02-request-detail.svg)
 
-### Policies Sidebar
+### Policies View
 
 ![Policies sidebar](docs/screenshots/03-policies.svg)
 
