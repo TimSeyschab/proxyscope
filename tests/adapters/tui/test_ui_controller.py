@@ -110,6 +110,55 @@ class TestRuntimeUIController(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    def test_new_request_does_not_move_visual_focus_from_detail_view(self) -> None:
+        async def run_test() -> None:
+            journal = RequestJournal()
+            journal.start_request(
+                method="GET",
+                path="/hello",
+                start_line="GET /hello HTTP/1.1",
+                headers={},
+                body=b"",
+                client_ip="127.0.0.1",
+                target_host="example.com",
+                target_port=80,
+                protocol="http",
+            )
+            controller = self._controller(journal=journal)
+            app = RuntimeTextualApp(controller)
+
+            async with app.run_test(size=(160, 42)) as pilot:
+                await pilot.press("shift+1")
+                await pilot.pause()
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertEqual(controller.build_screen_model().active_pane, "detail")
+                focused_before = app.focused
+
+                journal.start_request(
+                    method="GET",
+                    path="/new",
+                    start_line="GET /new HTTP/1.1",
+                    headers={},
+                    body=b"",
+                    client_ip="127.0.0.1",
+                    target_host="example.com",
+                    target_port=80,
+                    protocol="http",
+                )
+                app._refresh_screen()
+                await pilot.pause()
+
+                model = controller.build_screen_model()
+                self.assertEqual(model.active_view, "traffic")
+                self.assertTrue(model.detail_visible)
+                self.assertEqual(model.active_pane, "detail")
+                self.assertEqual(model.request_list.selected_request_id, 1)
+                self.assertIs(app.focused, focused_before)
+
+        asyncio.run(run_test())
+
     def test_textual_go_back_closes_open_detail_view(self) -> None:
         async def run_test() -> None:
             journal = RequestJournal()

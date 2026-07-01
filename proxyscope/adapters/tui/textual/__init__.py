@@ -149,7 +149,6 @@ class RuntimeTextualApp(App[None]):
 
     @on(RequestList.Highlighted)
     def on_request_list_highlighted(self, event: RequestList.Highlighted) -> None:
-        self._controller.set_active_focus(RequestList.focus_target)
         self._controller.select_request(event.cursor)
         self._refresh_detail_only()
 
