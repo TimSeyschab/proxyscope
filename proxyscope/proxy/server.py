@@ -1,12 +1,9 @@
 import logging
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Final
 from urllib.parse import urlsplit
 
-from proxyscope.mitm.certificates import MitmCertificateError, certificate_authority_for_root, default_ca
-from proxyscope.mitm.tunnel import MitmTLSInterceptor
 from proxyscope.processing.models import ExchangeRequest
 from proxyscope.processing.ports import (
     BODY_PREVIEW_BYTES,
@@ -27,6 +24,7 @@ from proxyscope.proxy.forwarding import UpstreamForwarder, prepare_forward_reque
 from proxyscope.proxy.http_bridge import map_incoming_request, write_forward_response
 from proxyscope.proxy.runtime import ProxyRuntimeContext
 from proxyscope.proxy.tunnel_registry import TunnelConnectionRegistry
+from proxyscope.proxy.types import TunnelInterceptor
 
 SERVER_LOGGER: Final = logging.getLogger("pscope.server")
 
@@ -39,7 +37,7 @@ class ProxyHTTPServer(ThreadingHTTPServer):
         *,
         forwarder: Forwarder,
         runtime_context: ProxyRuntimeContext,
-        mitm_interceptor: MitmTLSInterceptor | None = None,
+        mitm_interceptor: TunnelInterceptor | None = None,
     ) -> None:
         super().__init__(server_address, request_handler_class)
         self.forwarder = forwarder
@@ -393,32 +391,16 @@ def create_server(
     *,
     runtime_context: ProxyRuntimeContext,
     forwarder: Forwarder | None = None,
-    mitm_interceptor: MitmTLSInterceptor | None = None,
-    auto_enable_mitm: bool = True,
-    ca_root: str | Path | None = None,
+    mitm_interceptor: TunnelInterceptor | None = None,
 ) -> ProxyHTTPServer:
     resolved_forwarder = forwarder or UpstreamForwarder()
-    resolved_mitm_interceptor = mitm_interceptor
-    if resolved_mitm_interceptor is None and auto_enable_mitm:
-        ca = default_ca() if ca_root is None else certificate_authority_for_root(ca_root)
-        try:
-            created_new_ca = ca.ensure_ca_material()
-            if created_new_ca:
-                SERVER_LOGGER.info(
-                    "Generated local MITM CA materials cert=%s key=%s",
-                    ca.ca_cert_path,
-                    ca.ca_key_path,
-                )
-            resolved_mitm_interceptor = MitmTLSInterceptor(certificate_authority=ca, runtime_context=runtime_context)
-        except MitmCertificateError as exc:
-            SERVER_LOGGER.warning("MITM disabled: failed to initialize local CA: %s", exc)
 
     return ProxyHTTPServer(
         (host, port),
         RequestLoggingHandler,
         forwarder=resolved_forwarder,
         runtime_context=runtime_context,
-        mitm_interceptor=resolved_mitm_interceptor,
+        mitm_interceptor=mitm_interceptor,
     )
 
 

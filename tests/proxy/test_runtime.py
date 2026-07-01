@@ -50,7 +50,7 @@ class TestRuntimeContextIsolation(unittest.TestCase):
             )
             journal = RequestJournal()
             context = create_proxy_runtime_context(**processing_dependencies(config), request_journal=journal)
-            server = create_server("127.0.0.1", 0, runtime_context=context, auto_enable_mitm=False)
+            server = create_server("127.0.0.1", 0, runtime_context=context)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             contexts.append(context)

@@ -74,7 +74,7 @@ class TestResponseFlowsE2E(unittest.TestCase):
             request_journal=journal,
             response_modifier=response_modifier,
         )
-        proxy = create_server("127.0.0.1", 0, runtime_context=runtime_context, auto_enable_mitm=False)
+        proxy = create_server("127.0.0.1", 0, runtime_context=runtime_context)
         proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
         proxy_thread.start()
         proxy_host, proxy_port = proxy.server_address
@@ -162,7 +162,7 @@ class TestResponseFlowsE2E(unittest.TestCase):
 
         journal = RequestJournal()
         runtime_context = create_proxy_runtime_context(**processing_dependencies(loaded), request_journal=journal)
-        proxy = create_server("127.0.0.1", 0, runtime_context=runtime_context, auto_enable_mitm=False)
+        proxy = create_server("127.0.0.1", 0, runtime_context=runtime_context)
         proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
         proxy_thread.start()
         proxy_host, proxy_port = proxy.server_address

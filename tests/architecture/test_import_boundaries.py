@@ -23,6 +23,16 @@ class TestImportBoundaries(unittest.TestCase):
         unexpected = violations - ALLOWED_APP_IMPORTS
         self.assertEqual(unexpected, set(), f"New forbidden app imports: {sorted(unexpected)}")
 
+    def test_proxy_does_not_construct_mitm_adapter(self) -> None:
+        violations: set[tuple[str, str]] = set()
+        for path in (PACKAGE_ROOT / "proxy").rglob("*.py"):
+            source_module = _module_name(path)
+            for imported_module in _absolute_imports(path):
+                if imported_module.startswith("proxyscope.mitm"):
+                    violations.add((source_module, imported_module))
+
+        self.assertEqual(violations, set(), f"Proxy must not import MITM adapter code: {sorted(violations)}")
+
     def test_policy_domain_does_not_depend_on_app_proxy_or_mitm(self) -> None:
         violations: set[tuple[str, str]] = set()
         for path in (PACKAGE_ROOT / "policies").rglob("*.py"):

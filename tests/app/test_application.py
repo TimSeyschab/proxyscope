@@ -42,7 +42,7 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
     def test_enter_failure_releases_composed_resources(self) -> None:
         server = _FakeServer()
         application = ProxyApplication(
-            ApplicationOptions(use_ui=False),
+            ApplicationOptions(use_ui=False, mitm_enabled=False),
             server_factory=lambda *_args, **_kwargs: server,  # type: ignore[arg-type]
         )
 
@@ -58,7 +58,7 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
     def test_shutdown_is_idempotent_and_joins_server_thread(self) -> None:
         server = _FakeServer()
         application = ProxyApplication(
-            ApplicationOptions(use_ui=False),
+            ApplicationOptions(use_ui=False, mitm_enabled=False),
             server_factory=lambda *_args, **_kwargs: server,  # type: ignore[arg-type]
         )
 
@@ -79,7 +79,6 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
                 port,
                 runtime_context=kwargs["runtime_context"],  # type: ignore[arg-type]
                 forwarder=_StaticForwarder(),
-                auto_enable_mitm=False,
             )
 
         imported_textual: list[str] = []
@@ -92,7 +91,7 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
 
         with patch("builtins.__import__", side_effect=track_import):
             with ProxyApplication(
-                ApplicationOptions(host="127.0.0.1", port=0, use_ui=False),
+                ApplicationOptions(host="127.0.0.1", port=0, use_ui=False, mitm_enabled=False),
                 server_factory=server_factory,  # type: ignore[arg-type]
             ) as application:
                 host, port = application.server.server_address
@@ -114,7 +113,7 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
 
         runtime_ui.run.side_effect = run_ui
         application = ProxyApplication(
-            ApplicationOptions(use_ui=True),
+            ApplicationOptions(use_ui=True, mitm_enabled=False),
             server_factory=lambda *_args, **_kwargs: server,  # type: ignore[arg-type]
         )
 
@@ -129,7 +128,7 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
     def test_shutdown_cancels_pending_response_edits(self) -> None:
         server = _FakeServer()
         application = ProxyApplication(
-            ApplicationOptions(use_ui=True, edit_timeout_s=10),
+            ApplicationOptions(use_ui=True, edit_timeout_s=10, mitm_enabled=False),
             server_factory=lambda *_args, **_kwargs: server,  # type: ignore[arg-type]
         )
         result: list[ExchangeResponse] = []

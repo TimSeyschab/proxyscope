@@ -8,7 +8,7 @@ from types import TracebackType
 from proxyscope.adapters.factory import create_default_runtime_application_services
 from proxyscope.adapters.observability.events import RuntimeEventDispatcher
 from proxyscope.adapters.observability.logging import configure_logging
-from proxyscope.app.composition import create_proxy_runtime_context
+from proxyscope.app.composition import create_mitm_interceptor, create_proxy_runtime_context
 from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.journal import RequestJournal
 from proxyscope.application.policy_administration import PolicyAdministrationService
@@ -185,8 +185,11 @@ class ProxyApplication:
             self.options.host,
             self.options.port,
             runtime_context=runtime_context,
-            auto_enable_mitm=settings.mitm_enabled,
-            ca_root=settings.mitm_certs_dir,
+            mitm_interceptor=create_mitm_interceptor(
+                runtime_context=runtime_context,
+                enabled=settings.mitm_enabled,
+                ca_root=settings.mitm_certs_dir,
+            ),
         )
         self._settings = settings
         self._policies = policies

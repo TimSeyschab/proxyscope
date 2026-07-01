@@ -51,7 +51,6 @@ class TestRequestLoggingServer(unittest.TestCase):
             0,
             runtime_context=self.runtime_context,
             forwarder=StaticForwarder(),
-            auto_enable_mitm=False,
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -153,7 +152,6 @@ class TestRequestLoggingServer(unittest.TestCase):
             0,
             runtime_context=self.runtime_context,
             forwarder=DummyForwarder(),
-            auto_enable_mitm=False,
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -191,7 +189,6 @@ class TestRequestLoggingServer(unittest.TestCase):
             0,
             runtime_context=self.runtime_context,
             forwarder=forwarder,
-            auto_enable_mitm=False,
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -250,7 +247,6 @@ class TestRequestLoggingServer(unittest.TestCase):
             0,
             runtime_context=self.runtime_context,
             forwarder=forwarder,
-            auto_enable_mitm=False,
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -291,7 +287,6 @@ class TestRequestLoggingServer(unittest.TestCase):
             0,
             runtime_context=self.runtime_context,
             forwarder=StaticForwarder(),
-            auto_enable_mitm=False,
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -334,7 +329,6 @@ class TestRequestLoggingServer(unittest.TestCase):
             "127.0.0.1",
             0,
             runtime_context=self.runtime_context,
-            auto_enable_mitm=False,
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
