@@ -3,7 +3,13 @@ import unittest
 from pathlib import Path
 
 from proxyscope.adapters.factory import create_default_runtime_application_services
-from proxyscope.application.contracts import PolicyUseCases, RequestUseCases, SessionUseCases, SettingsUseCases
+from proxyscope.application.contracts import (
+    PolicyUseCases,
+    RequestUseCases,
+    RuntimeViewUseCases,
+    SessionUseCases,
+    SettingsUseCases,
+)
 from proxyscope.application.journal import RequestJournal
 from proxyscope.application.response_edits import ResponseModifierService
 from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
@@ -25,6 +31,7 @@ class TestRuntimeApplicationServices(unittest.TestCase):
         self.assertIsInstance(self.services.sessions, SessionUseCases)
         self.assertIsInstance(self.services.settings, SettingsUseCases)
         self.assertIsInstance(self.services.policies, PolicyUseCases)
+        self.assertIsInstance(self.services.runtime_view, RuntimeViewUseCases)
 
     def test_request_filtering_and_site_tracking_are_application_use_cases(self) -> None:
         self.journal.start_request(

@@ -11,44 +11,36 @@ from proxyscope.adapters.tui.models import (
     TabbedListTabModel,
 )
 from proxyscope.adapters.tui.state import RuntimeUIViewState
-from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.journal import LoggedExchange
-from proxyscope.application.policy_administration import PolicyAdministrationService
 from proxyscope.application.requests import RequestWindow
-from proxyscope.application.runtime_settings import RuntimeSettingsState
+from proxyscope.application.runtime_view import RuntimeStatusSnapshot
 
 
 def build_runtime_screen_model(
     *,
     state: RuntimeUIViewState,
-    settings: RuntimeSettingsState,
-    policies: PolicyAdministrationService,
-    configuration: RuntimeConfigurationService,
+    runtime_status: RuntimeStatusSnapshot,
     request_window: RequestWindow,
     site_counter: Counter[str],
     policy_items: list[str],
-    filter_summary: str,
 ) -> RuntimeScreenModel:
     site_items = site_counter.most_common()
-    settings_snapshot = settings.snapshot
-    entries_whitelist = settings_snapshot.log_whitelist
+    entries_whitelist = runtime_status.whitelist_entries
     whitelist_text = "*" if not entries_whitelist else ",".join(entries_whitelist[:3])
     if len(entries_whitelist) > 3:
         whitelist_text += ",..."
-    cache_text = "on" if settings_snapshot.cache_invalidation_enabled else "off"
-    mitm_text = "on" if settings_snapshot.mitm_enabled else "off"
-    policy_count = len(policies.list_rules())
-    editor_policy_count = len(policies.open_editor_entries())
-    config_path = configuration.path
+    cache_text = "on" if runtime_status.cache_invalidation_enabled else "off"
+    mitm_text = "on" if runtime_status.mitm_enabled else "off"
+    config_path = runtime_status.config_path
     config_path_text = "-" if config_path is None else str(config_path)
     config_text = (
-        f"level={settings.log_level_name()} "
+        f"level={runtime_status.log_level_name} "
         f"whitelist={whitelist_text} "
         f"cache_invalidation={cache_text} "
         f"mitm={mitm_text} "
-        f"editor_policies={editor_policy_count} "
-        f"policies={policy_count} "
-        f"filter={filter_summary} "
+        f"editor_policies={runtime_status.editor_policy_count} "
+        f"policies={runtime_status.policy_count} "
+        f"filter={runtime_status.request_filter_summary} "
         f"config={config_path_text}"
     )
     request_title = f"MAIN {request_window.total_count}/{request_window.all_count}"

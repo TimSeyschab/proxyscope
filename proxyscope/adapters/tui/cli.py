@@ -5,11 +5,6 @@ from proxyscope.adapters.tui.components.contracts import ComponentFocus
 from proxyscope.adapters.tui.controller import RuntimeController
 from proxyscope.adapters.tui.models import DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.adapters.tui.ui_controller import SuspendUI
-from proxyscope.application.configuration import RuntimeConfigurationService
-from proxyscope.application.journal import RequestJournal
-from proxyscope.application.policy_administration import PolicyAdministrationService
-from proxyscope.application.response_edits import ResponseModifierService
-from proxyscope.application.runtime_settings import RuntimeSettingsState
 from proxyscope.application.services import RuntimeApplicationServices
 
 
@@ -17,28 +12,16 @@ class RuntimeCLI(logging.Handler):
     def __init__(
         self,
         *,
-        settings: RuntimeSettingsState,
-        policies: PolicyAdministrationService,
-        configuration: RuntimeConfigurationService,
-        request_journal: RequestJournal,
-        response_modifier: ResponseModifierService,
-        proxy_base_url: str | None = None,
-        application_services: RuntimeApplicationServices | None = None,
+        application_services: RuntimeApplicationServices,
     ) -> None:
         super().__init__(level=logging.INFO)
         self._shutdown_server: Callable[[], None] | None = None
         self._on_cache_toggle: Callable[[], None] | None = None
         self._controller = RuntimeController(
-            settings=settings,
-            policies=policies,
-            configuration=configuration,
-            request_journal=request_journal,
-            response_modifier=response_modifier,
-            proxy_base_url=proxy_base_url,
+            application_services=application_services,
             request_shutdown=self._request_shutdown,
             on_cache_toggle=self._trigger_cache_toggle_hook,
             on_log_level_change=self._set_log_level,
-            application_services=application_services,
         )
 
     @property

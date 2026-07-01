@@ -8,16 +8,17 @@ from proxyscope.adapters.tui.controller import RuntimeController
 from proxyscope.adapters.tui.textual import RuntimeTextualApp
 from proxyscope.adapters.tui.ui_controller import RuntimeUIController
 from proxyscope.application.journal import RequestJournal
-from proxyscope.application.response_edits import ResponseModifierService
-from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
+from tests.support.runtime_context import RuntimeTestContext, runtime_application_services
 
 
 class TestRuntimeUIController(unittest.TestCase):
     def _controller(self, *, journal: RequestJournal | None = None) -> RuntimeCLI:
+        config = RuntimeTestContext()
         return RuntimeCLI(
-            **runtime_dependencies(RuntimeTestContext()),
-            request_journal=journal or RequestJournal(),
-            response_modifier=ResponseModifierService(),
+            application_services=runtime_application_services(
+                config,
+                request_journal=journal,
+            ),
         )
 
     def test_runtime_cli_implements_ui_controller_protocol(self) -> None:
@@ -26,10 +27,12 @@ class TestRuntimeUIController(unittest.TestCase):
         self.assertIsInstance(controller, RuntimeUIController)
 
     def test_runtime_controller_implements_ui_controller_protocol(self) -> None:
+        config = RuntimeTestContext()
         controller = RuntimeController(
-            **runtime_dependencies(RuntimeTestContext()),
-            request_journal=RequestJournal(),
-            response_modifier=ResponseModifierService(),
+            application_services=runtime_application_services(
+                config,
+                request_journal=RequestJournal(),
+            ),
         )
 
         self.assertIsInstance(controller, RuntimeUIController)

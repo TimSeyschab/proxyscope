@@ -4,6 +4,7 @@ from typing import Callable, Protocol, runtime_checkable
 
 from proxyscope.application.journal import LoggedExchange
 from proxyscope.application.requests import RequestWindow
+from proxyscope.application.runtime_view import RuntimePolicyListItem, RuntimeStatusSnapshot
 
 SuspendUI = Callable[[], AbstractContextManager[None]]
 
@@ -58,3 +59,21 @@ class PolicyUseCases(Protocol):
     def set_enabled(self, name: str | None, *, enabled: bool) -> str: ...
 
     def remove(self, name: str | None) -> str: ...
+
+    def edit(self, name: str | None, *, suspend_ui: SuspendUI | None = None) -> str: ...
+
+    def process_pending_edit(self, *, suspend_ui: SuspendUI | None = None) -> str | None: ...
+
+    def add_request_to_editor_policy(
+        self,
+        entry: LoggedExchange,
+        *,
+        suspend_ui: SuspendUI | None = None,
+    ) -> str: ...
+
+
+@runtime_checkable
+class RuntimeViewUseCases(Protocol):
+    def status(self) -> RuntimeStatusSnapshot: ...
+
+    def policy_items(self) -> list[RuntimePolicyListItem]: ...

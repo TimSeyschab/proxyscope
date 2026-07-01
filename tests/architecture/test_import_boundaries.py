@@ -74,6 +74,27 @@ class TestImportBoundaries(unittest.TestCase):
 
         self.assertEqual(violations, set(), f"Forbidden command-handler sibling imports: {sorted(violations)}")
 
+    def test_tui_runtime_entrypoints_use_application_services_bundle(self) -> None:
+        forbidden_prefixes = (
+            "proxyscope.adapters.factory",
+            "proxyscope.application.configuration",
+            "proxyscope.application.journal",
+            "proxyscope.application.policy_administration",
+            "proxyscope.application.response_edits",
+            "proxyscope.application.runtime_settings",
+        )
+        violations: set[tuple[str, str]] = set()
+        for path in (
+            PACKAGE_ROOT / "adapters" / "tui" / "cli.py",
+            PACKAGE_ROOT / "adapters" / "tui" / "controller.py",
+        ):
+            source_module = _module_name(path)
+            for imported_module in _absolute_imports(path):
+                if imported_module.startswith(forbidden_prefixes):
+                    violations.add((source_module, imported_module))
+
+        self.assertEqual(violations, set(), f"TUI entrypoints bypass application services: {sorted(violations)}")
+
     def test_packages_define_at_most_five_direct_classes(self) -> None:
         violations: dict[str, list[str]] = {}
         package_dirs = {path.parent for path in PACKAGE_ROOT.rglob("*.py") if "__pycache__" not in path.parts}

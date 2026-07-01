@@ -3,15 +3,16 @@ import unittest
 
 from proxyscope.adapters.tui.cli import RuntimeCLI
 from proxyscope.application.journal import RequestJournal
-from proxyscope.application.response_edits import ResponseModifierService
-from tests.support.runtime_context import RuntimeTestContext, runtime_dependencies
+from tests.support.runtime_context import RuntimeTestContext, runtime_application_services
 
 
 def _runtime_cli(*, config: RuntimeTestContext | None = None, journal: RequestJournal | None = None) -> RuntimeCLI:
+    context = config or RuntimeTestContext()
     return RuntimeCLI(
-        **runtime_dependencies(config or RuntimeTestContext()),
-        request_journal=journal or RequestJournal(),
-        response_modifier=ResponseModifierService(),
+        application_services=runtime_application_services(
+            context,
+            request_journal=journal,
+        ),
     )
 
 

@@ -15,6 +15,7 @@ from proxyscope.application.policy_administration import PolicyAdministrationSer
 from proxyscope.application.requests import RequestApplicationService
 from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.application.runtime_settings import RuntimeSettingsState
+from proxyscope.application.runtime_view import RuntimeViewApplicationService
 from proxyscope.application.sessions import ExportEntries, LoadEntries, SessionApplicationService
 from proxyscope.application.settings import SettingsApplicationService
 
@@ -25,6 +26,7 @@ class RuntimeApplicationServices:
     policies: PolicyApplicationService
     sessions: SessionApplicationService
     settings: SettingsApplicationService
+    runtime_view: RuntimeViewApplicationService
     runtime_commands: RuntimeCommandService
     replay: RuntimeReplayActionService
     response_edits: RuntimeResponseEditActionService
@@ -44,15 +46,23 @@ def create_runtime_application_services(
     export_entries: ExportEntries,
     load_entries: LoadEntries,
 ) -> RuntimeApplicationServices:
+    request_service = RequestApplicationService(request_journal)
+    policy_service = PolicyApplicationService(policies, configuration, policy_editor=policy_editor)
     return RuntimeApplicationServices(
-        requests=RequestApplicationService(request_journal),
-        policies=PolicyApplicationService(policies, configuration, policy_editor=policy_editor),
+        requests=request_service,
+        policies=policy_service,
         sessions=SessionApplicationService(
             request_journal,
             export_entries=export_entries,
             load_entries=load_entries,
         ),
         settings=SettingsApplicationService(settings, configuration),
+        runtime_view=RuntimeViewApplicationService(
+            settings=settings,
+            policies=policies,
+            configuration=configuration,
+            requests=request_service,
+        ),
         runtime_commands=RuntimeCommandService(settings=settings, policies=policies, configuration=configuration),
         replay=RuntimeReplayActionService(proxy_base_url=proxy_base_url, replay_request=replay_request),
         response_edits=RuntimeResponseEditActionService(

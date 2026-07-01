@@ -1,6 +1,5 @@
 from typing import Callable
 
-from proxyscope.adapters.factory import create_default_runtime_application_services
 from proxyscope.adapters.tui.components.contracts import ComponentFocus
 from proxyscope.adapters.tui.models import DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.adapters.tui.navigation import RuntimeUINavigationService
@@ -8,13 +7,7 @@ from proxyscope.adapters.tui.presenter import build_runtime_screen_model
 from proxyscope.adapters.tui.state import RuntimeUIViewState
 from proxyscope.adapters.tui.ui_controller import SuspendUI
 from proxyscope.application.commands import create_runtime_command_registry
-from proxyscope.application.configuration import RuntimeConfigurationService
-from proxyscope.application.journal import RequestJournal
-from proxyscope.application.policy_administration import PolicyAdministrationService
-from proxyscope.application.response_edits import ResponseModifierService
-from proxyscope.application.runtime_settings import RuntimeSettingsState
 from proxyscope.application.services import RuntimeApplicationServices
-from proxyscope.policies.models import PolicyRule, StaticResponseAction
 
 REQUEST_LIST_WINDOW_SIZE = 250
 
@@ -23,33 +16,17 @@ class RuntimeController:
     def __init__(
         self,
         *,
-        settings: RuntimeSettingsState,
-        policies: PolicyAdministrationService,
-        configuration: RuntimeConfigurationService,
-        request_journal: RequestJournal,
-        response_modifier: ResponseModifierService,
-        proxy_base_url: str | None = None,
+        application_services: RuntimeApplicationServices,
         request_shutdown: Callable[[], None] | None = None,
         on_cache_toggle: Callable[[], None] | None = None,
         on_log_level_change: Callable[[int], None] | None = None,
-        application_services: RuntimeApplicationServices | None = None,
     ) -> None:
-        self._settings = settings
-        self._policies = policies
-        self._configuration = configuration
         self._request_shutdown = request_shutdown
         self._on_cache_toggle = on_cache_toggle
         self._on_log_level_change = on_log_level_change
         self._view_state = RuntimeUIViewState()
         self._ui_navigation = RuntimeUINavigationService(self._view_state)
-        self._services = application_services or create_default_runtime_application_services(
-            settings=settings,
-            policies=policies,
-            configuration=configuration,
-            request_journal=request_journal,
-            response_modifier=response_modifier,
-            proxy_base_url=proxy_base_url,
-        )
+        self._services = application_services
         self._command_registry = create_runtime_command_registry(
             self._services,
             request_shutdown=self._request_shutdown,
@@ -228,8 +205,7 @@ class RuntimeController:
         self._ui_navigation.reset_request_view(has_entries=bool(self._services.requests.list_entries()))
 
     def _ordered_policy_items(self) -> list[tuple[str, str]]:
-        rules = self._policies.sorted_rules()
-        return [(rule.name, _format_policy_item(rule)) for rule in rules]
+        return [(item.name, item.description) for item in self._services.runtime_view.policy_items()]
 
     def _selected_site(self) -> str | None:
         return self._ui_navigation.selected_site(self._services.requests.site_names())
@@ -268,20 +244,8 @@ class RuntimeController:
 
         return build_runtime_screen_model(
             state=self._view_state,
-            settings=self._settings,
-            policies=self._policies,
-            configuration=self._configuration,
+            runtime_status=self._services.runtime_view.status(),
             request_window=request_window,
             site_counter=self._services.requests.site_counter(),
             policy_items=policy_items,
-            filter_summary=self._services.requests.filter_summary,
         )
-
-
-def _format_policy_item(rule: PolicyRule) -> str:
-    state = "ON" if rule.enabled else "OFF"
-    method = ",".join(rule.match.methods or ("*",))
-    target = rule.match.url_exact or rule.match.url_prefix or "*"
-    if isinstance(rule.action, StaticResponseAction):
-        return f"{state:>3} p={rule.priority} {rule.name} | static {method} {target} -> {rule.action.status_code}"
-    return f"{state:>3} p={rule.priority} {rule.name} | open_editor {method} {target}"

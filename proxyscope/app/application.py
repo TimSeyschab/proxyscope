@@ -215,13 +215,8 @@ class ProxyApplication:
         assert self._request_journal is not None
         assert self._response_modifier is not None
         assert self._runtime_events is not None
+        assert self._application_services is not None
         runtime_ui = RuntimeCLI(
-            settings=self._settings,
-            policies=self._policies,
-            configuration=self._configuration,
-            request_journal=self._request_journal,
-            response_modifier=self._response_modifier,
-            proxy_base_url=f"http://{self.options.host}:{self.options.port}",
             application_services=self._application_services,
         )
         runtime_ui.setFormatter(

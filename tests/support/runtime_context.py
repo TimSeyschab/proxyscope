@@ -4,14 +4,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from proxyscope.application.configuration import RuntimeConfigurationService
+from proxyscope.application.journal import RequestJournal
 from proxyscope.application.policy_administration import PolicyAdministrationService
+from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.application.runtime_settings import RuntimeSettingsState
+from proxyscope.application.services import RuntimeApplicationServices
 from proxyscope.config.repository import ConfigRepository, JsonConfigRepository
 from proxyscope.config.settings import ConfigDocument, RuntimeSettings, normalize_whitelist_entry
 from proxyscope.policies.models import PolicyRule
 from proxyscope.policies.repository import PolicyRepository
 
-__all__ = ["RuntimeTestContext", "normalize_whitelist_entry", "processing_dependencies", "runtime_dependencies"]
+__all__ = [
+    "RuntimeTestContext",
+    "normalize_whitelist_entry",
+    "processing_dependencies",
+    "runtime_application_services",
+    "runtime_dependencies",
+]
 
 
 @dataclass(frozen=True)
@@ -274,6 +283,23 @@ def runtime_dependencies(config: RuntimeTestContext) -> dict[str, object]:
         "policies": config.policy_administration,
         "configuration": config.configuration,
     }
+
+
+def runtime_application_services(
+    config: RuntimeTestContext,
+    *,
+    request_journal: RequestJournal | None = None,
+    response_modifier: ResponseModifierService | None = None,
+    proxy_base_url: str | None = None,
+) -> RuntimeApplicationServices:
+    from proxyscope.adapters.factory import create_default_runtime_application_services
+
+    return create_default_runtime_application_services(
+        **runtime_dependencies(config),
+        request_journal=request_journal or RequestJournal(),
+        response_modifier=response_modifier or ResponseModifierService(),
+        proxy_base_url=proxy_base_url,
+    )
 
 
 def processing_dependencies(config: RuntimeTestContext) -> dict[str, object]:
