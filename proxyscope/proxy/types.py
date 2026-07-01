@@ -1,7 +1,3 @@
-from typing import Protocol
+from proxyscope.processing.ports import Forwarder, ForwardRequest, ForwardResponse, StreamingForwarder
 
-from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse
-
-
-class Forwarder(Protocol):
-    def forward(self, request: ForwardRequest) -> ForwardResponse: ...
+__all__ = ["ForwardRequest", "ForwardResponse", "Forwarder", "StreamingForwarder"]

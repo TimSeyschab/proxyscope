@@ -1,16 +1,16 @@
 import unittest
 
+from proxyscope.processing.models import ExchangeResponse
 from proxyscope.proxy.http1.response_modifier_rewriter import HTTP1ResponseModifierRewriter
-from proxyscope.proxy.upstream.forwarding import ForwardResponse
 
 
 class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
     def test_delegates_complete_response_to_processor(self) -> None:
-        seen: list[ForwardResponse] = []
+        seen: list[ExchangeResponse] = []
 
-        def process_response(response: ForwardResponse) -> ForwardResponse:
+        def process_response(response: ExchangeResponse) -> ExchangeResponse:
             seen.append(response)
-            return ForwardResponse(
+            return ExchangeResponse(
                 status_code=response.status_code,
                 reason=response.reason,
                 headers={"Content-Type": "text/plain"},
@@ -58,7 +58,7 @@ class TestHTTP1ResponseModifierRewriter(unittest.TestCase):
         self.assertEqual(acquired_methods, 1)
 
     def test_processes_close_delimited_response_when_stream_closes(self) -> None:
-        seen: list[ForwardResponse] = []
+        seen: list[ExchangeResponse] = []
         rewriter = HTTP1ResponseModifierRewriter(
             process_response=lambda response: seen.append(response) or response,
             acquire_request_method=lambda: "GET",

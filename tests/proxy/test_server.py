@@ -8,8 +8,8 @@ import unittest
 from proxyscope.app.composition import create_proxy_runtime_context
 from proxyscope.application.journal import RequestJournal
 from proxyscope.application.response_edits import ResponseModifierService
+from proxyscope.processing.ports import ForwardRequest, ForwardResponse
 from proxyscope.proxy.server import create_server
-from proxyscope.proxy.upstream.forwarding import ForwardRequest, ForwardResponse
 from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
 
 

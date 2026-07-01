@@ -5,7 +5,7 @@ from unittest.mock import patch
 from proxyscope.adapters.editing.response_editor import _maybe_save_static_response_rule
 from proxyscope.application.response_edits import PendingResponseEdit
 from proxyscope.policies.engine import PolicyEngine
-from proxyscope.proxy.upstream.forwarding import ForwardResponse
+from proxyscope.processing.models import ExchangeResponse
 from tests.support.runtime_context import RuntimeTestContext
 
 
@@ -16,7 +16,7 @@ class TestResponseEditing(unittest.TestCase):
         pending = PendingResponseEdit(
             request_url="https://example.com/edited",
             method="GET",
-            response=ForwardResponse(
+            response=ExchangeResponse(
                 status_code=200,
                 reason="OK",
                 headers={"Content-Type": "text/plain"},
@@ -52,7 +52,7 @@ class TestResponseEditing(unittest.TestCase):
         pending = PendingResponseEdit(
             request_url="https://example.com/edited",
             method="GET",
-            response=ForwardResponse(
+            response=ExchangeResponse(
                 status_code=200,
                 reason="OK",
                 headers={"Content-Type": "text/plain"},

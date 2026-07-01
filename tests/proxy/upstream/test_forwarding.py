@@ -2,7 +2,8 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from proxyscope.proxy.upstream.forwarding import ForwardRequest, UpstreamForwarder, capture_body_preview
+from proxyscope.processing.ports import ForwardRequest, capture_body_preview
+from proxyscope.proxy.upstream.forwarding import UpstreamForwarder
 
 
 class TestForwardingStubs(unittest.TestCase):

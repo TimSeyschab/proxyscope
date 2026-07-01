@@ -1,70 +1,67 @@
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
 from urllib.parse import urlsplit
 
 import requests
 
-from proxyscope.processing.models import ExchangeResponse as ForwardResponse
+from proxyscope.processing.ports import (
+    STREAM_CHUNK_SIZE,
+    ForwardRequest,
+    ForwardResponse,
+)
 
-STREAM_CHUNK_SIZE = 64 * 1024
-BODY_PREVIEW_BYTES = 4096
 
+class RequestsForwardResponseStream:
+    def __init__(self, response: requests.Response) -> None:
+        self._response = response
 
-@dataclass(frozen=True)
-class ForwardRequest:
-    method: str
-    path: str
-    headers: dict[str, str]
-    body: bytes = b""
+    @property
+    def status_code(self) -> int:
+        return self._response.status_code
+
+    @property
+    def reason(self) -> str:
+        return self._response.reason
+
+    @property
+    def headers(self) -> Mapping[str, str]:
+        return self._response.headers
+
+    def iter_body_chunks(self, chunk_size: int) -> Iterable[bytes]:
+        return self._response.raw.stream(chunk_size, decode_content=False)
+
+    def close(self) -> None:
+        self._response.close()
 
 
 class UpstreamForwarder:
     """Forward a request to its dynamic upstream target."""
 
     def forward(self, request: ForwardRequest) -> ForwardResponse:
-        response = self.open_stream(request)
+        stream = self.open_stream(request)
         try:
-            body = response.content
+            body = b"".join(stream.iter_body_chunks(STREAM_CHUNK_SIZE))
             return ForwardResponse(
-                response.status_code,
-                response.reason,
-                dict(response.headers),
+                stream.status_code,
+                stream.reason,
+                dict(stream.headers),
                 body,
                 body_size=len(body),
             )
         finally:
-            response.close()
+            stream.close()
 
-    def open_stream(self, request: ForwardRequest) -> requests.Response:
+    def open_stream(self, request: ForwardRequest) -> RequestsForwardResponseStream:
         url = resolve_target_url(request)
-        return requests.request(
-            request.method,
-            url,
-            headers=request.headers,
-            data=request.body,
-            timeout=60,
-            stream=True,
+        return RequestsForwardResponseStream(
+            requests.request(
+                request.method,
+                url,
+                headers=request.headers,
+                data=request.body,
+                timeout=60,
+                stream=True,
+            )
         )
-
-
-def capture_body_preview(
-    chunks: Iterable[bytes],
-    *,
-    max_bytes: int = BODY_PREVIEW_BYTES,
-    on_chunk: Callable[[bytes], None] | None = None,
-) -> tuple[bytes, int]:
-    preview = bytearray()
-    total_bytes = 0
-    for chunk in chunks:
-        if not chunk:
-            continue
-        if on_chunk is not None:
-            on_chunk(chunk)
-        total_bytes += len(chunk)
-        remaining = max_bytes - len(preview)
-        if remaining > 0:
-            preview.extend(chunk[:remaining])
-    return bytes(preview), total_bytes
 
 
 def resolve_target_url(request: ForwardRequest) -> str:

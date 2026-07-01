@@ -95,6 +95,28 @@ class TestImportBoundaries(unittest.TestCase):
 
         self.assertEqual(violations, set(), f"TUI entrypoints bypass application services: {sorted(violations)}")
 
+    def test_proxy_server_streams_through_forwarding_port(self) -> None:
+        source = (PACKAGE_ROOT / "proxy" / "server.py").read_text(encoding="utf-8")
+
+        self.assertIn("StreamingForwarder", source)
+        self.assertNotIn("isinstance(server.forwarder, UpstreamForwarder)", source)
+
+    def test_application_and_adapter_tests_do_not_import_proxy_forwarding_models(self) -> None:
+        forbidden_prefixes = (
+            "proxyscope.proxy.forwarding",
+            "proxyscope.proxy.upstream.forwarding.ForwardRequest",
+            "proxyscope.proxy.upstream.forwarding.ForwardResponse",
+        )
+        violations: set[tuple[str, str]] = set()
+        for test_dir in (PROJECT_ROOT / "tests" / "application", PROJECT_ROOT / "tests" / "adapters"):
+            for path in test_dir.rglob("*.py"):
+                source_module = _module_name(path)
+                for imported_module in _absolute_imports(path):
+                    if imported_module.startswith(forbidden_prefixes):
+                        violations.add((source_module, imported_module))
+
+        self.assertEqual(violations, set(), f"Tests import proxy forwarding models: {sorted(violations)}")
+
     def test_packages_define_at_most_five_direct_classes(self) -> None:
         violations: dict[str, list[str]] = {}
         package_dirs = {path.parent for path in PACKAGE_ROOT.rglob("*.py") if "__pycache__" not in path.parts}

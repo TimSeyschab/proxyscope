@@ -6,8 +6,8 @@ from unittest.mock import Mock, patch
 
 from proxyscope.app.application import ApplicationOptions, ProxyApplication
 from proxyscope.processing.models import ExchangeResponse
+from proxyscope.processing.ports import ForwardRequest
 from proxyscope.proxy.server import create_server
-from proxyscope.proxy.upstream.forwarding import ForwardRequest
 
 
 class _StaticForwarder:

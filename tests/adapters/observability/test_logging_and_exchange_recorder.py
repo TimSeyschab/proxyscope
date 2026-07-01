@@ -5,7 +5,7 @@ from unittest.mock import patch
 from proxyscope.adapters.observability.exchange_recorder import RequestResponseRecorder
 from proxyscope.adapters.observability.logging import configure_logging
 from proxyscope.application.journal import RequestJournal
-from proxyscope.proxy.upstream.forwarding import ForwardResponse
+from proxyscope.processing.models import ExchangeResponse
 from tests.support.runtime_context import RuntimeTestContext
 
 
@@ -38,7 +38,7 @@ class TestRequestResponseLogging(unittest.TestCase):
         self.assertIsNotNone(request_id)
 
         self.recorder.record_response(
-            ForwardResponse(status_code=200, reason="OK", headers={"Content-Type": "text/plain"}, body=b"ok"),
+            ExchangeResponse(status_code=200, reason="OK", headers={"Content-Type": "text/plain"}, body=b"ok"),
             request_id=request_id,
             duration_ms=2.3,
             client_ip="127.0.0.1",

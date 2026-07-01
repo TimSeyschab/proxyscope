@@ -1,6 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 
-from proxyscope.proxy.forwarding import ForwardRequest, ForwardResponse
+from proxyscope.processing.ports import ForwardRequest, ForwardResponse
 
 
 def map_incoming_request(handler: BaseHTTPRequestHandler) -> ForwardRequest:

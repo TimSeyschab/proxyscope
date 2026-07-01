@@ -4,22 +4,22 @@ import unittest
 from threading import Event
 
 from proxyscope.application.response_edits import PendingResponseEdit, ResponseModifierService
-from proxyscope.proxy.upstream.forwarding import ForwardResponse
+from proxyscope.processing.models import ExchangeResponse
 
 
 class TestResponseModifierService(unittest.TestCase):
     def test_returns_original_when_interactive_editor_is_disabled(self) -> None:
         service = ResponseModifierService(interactive_enabled=False)
-        response = ForwardResponse(200, "OK", {"X-Test": "a"}, b"hello")
+        response = ExchangeResponse(200, "OK", {"X-Test": "a"}, b"hello")
         out = service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
         self.assertEqual(out.body, b"hello")
         self.assertEqual(out.headers.get("X-Test"), "a")
 
     def test_blocks_and_applies_edit_when_requested_by_pipeline(self) -> None:
         service = ResponseModifierService(interactive_enabled=True)
-        response = ForwardResponse(200, "OK", {"Content-Type": "text/plain"}, b"original")
+        response = ExchangeResponse(200, "OK", {"Content-Type": "text/plain"}, b"original")
 
-        result_holder: dict[str, ForwardResponse] = {}
+        result_holder: dict[str, ExchangeResponse] = {}
 
         def run_modify() -> None:
             result_holder["response"] = service.maybe_modify_response(
@@ -49,7 +49,7 @@ class TestResponseModifierService(unittest.TestCase):
         pending = PendingResponseEdit(
             request_url="https://example.com/a",
             method="GET",
-            response=ForwardResponse(200, "OK", {"Content-Length": "8", "Transfer-Encoding": "chunked"}, b"original"),
+            response=ExchangeResponse(200, "OK", {"Content-Length": "8", "Transfer-Encoding": "chunked"}, b"original"),
             _done=Event(),
         )
         pending.apply(headers={"Content-Type": "text/plain", "Transfer-Encoding": "chunked"}, body=b"hello")
@@ -60,7 +60,7 @@ class TestResponseModifierService(unittest.TestCase):
 
     def test_timeout_keeps_original_response(self) -> None:
         service = ResponseModifierService(interactive_enabled=True, edit_timeout_s=0.01)
-        response = ForwardResponse(200, "OK", {}, b"original")
+        response = ExchangeResponse(200, "OK", {}, b"original")
 
         out = service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)
 
@@ -69,8 +69,8 @@ class TestResponseModifierService(unittest.TestCase):
 
     def test_cancel_pending_edits_unblocks_waiting_requests(self) -> None:
         service = ResponseModifierService(interactive_enabled=True, edit_timeout_s=10)
-        response = ForwardResponse(200, "OK", {}, b"original")
-        result: list[ForwardResponse] = []
+        response = ExchangeResponse(200, "OK", {}, b"original")
+        result: list[ExchangeResponse] = []
         thread = threading.Thread(
             target=lambda: result.append(
                 service.maybe_modify_response(request_url="https://example.com/a", method="GET", response=response)

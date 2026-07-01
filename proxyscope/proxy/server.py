@@ -8,26 +8,25 @@ from urllib.parse import urlsplit
 from proxyscope.mitm.certificates import MitmCertificateError, certificate_authority_for_root, default_ca
 from proxyscope.mitm.tunnel import MitmTLSInterceptor
 from proxyscope.processing.models import ExchangeRequest
+from proxyscope.processing.ports import (
+    BODY_PREVIEW_BYTES,
+    STREAM_CHUNK_SIZE,
+    Forwarder,
+    ForwardRequest,
+    ForwardResponse,
+    StreamingForwarder,
+    capture_body_preview,
+)
 from proxyscope.proxy.connect_tunnel import (
     ConnectUpstreamConnectionError,
     ConnectUpstreamTimeoutError,
     handle_connect_tunnel,
     parse_connect_target,
 )
-from proxyscope.proxy.forwarding import (
-    BODY_PREVIEW_BYTES,
-    STREAM_CHUNK_SIZE,
-    ForwardRequest,
-    ForwardResponse,
-    UpstreamForwarder,
-    capture_body_preview,
-    prepare_forward_request,
-    resolve_target_url,
-)
+from proxyscope.proxy.forwarding import UpstreamForwarder, prepare_forward_request, resolve_target_url
 from proxyscope.proxy.http_bridge import map_incoming_request, write_forward_response
 from proxyscope.proxy.runtime import ProxyRuntimeContext
 from proxyscope.proxy.tunnel_registry import TunnelConnectionRegistry
-from proxyscope.proxy.types import Forwarder
 
 SERVER_LOGGER: Final = logging.getLogger("pscope.server")
 
@@ -130,7 +129,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
 
     def _forward_upstream_streaming(
         self,
-        forwarder: UpstreamForwarder,
+        forwarder: StreamingForwarder,
         request: ForwardRequest,
         *,
         send_body: bool,
@@ -150,7 +149,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
                     self.wfile.write(chunk)
 
                 preview, body_size = capture_body_preview(
-                    upstream_response.raw.stream(STREAM_CHUNK_SIZE, decode_content=False),
+                    upstream_response.iter_body_chunks(STREAM_CHUNK_SIZE),
                     max_bytes=BODY_PREVIEW_BYTES,
                     on_chunk=write_chunk,
                 )
@@ -235,7 +234,7 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
                 exchange,
                 exchange.static_response,
             )
-        elif isinstance(server.forwarder, UpstreamForwarder) and not exchange.requires_buffered_response:
+        elif isinstance(server.forwarder, StreamingForwarder) and not exchange.requires_buffered_response:
             forward_response = self._forward_upstream_streaming(
                 server.forwarder,
                 forward_request,
