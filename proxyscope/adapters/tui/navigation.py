@@ -96,7 +96,6 @@ class RuntimeUINavigationService:
             self._state.site_cursor = cursor
         else:
             self._state.policy_cursor = cursor
-        self._state.set_active_focus(admin_tab_focus(self._state.admin_tab_key))
 
     def go_back(self) -> bool:
         return self._state.go_back()

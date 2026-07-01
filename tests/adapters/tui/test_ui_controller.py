@@ -159,6 +159,27 @@ class TestRuntimeUIController(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    def test_site_counter_refresh_does_not_leave_request_view(self) -> None:
+        async def run_test() -> None:
+            controller = self._controller()
+            app = RuntimeTextualApp(controller)
+
+            async with app.run_test(size=(160, 42)) as pilot:
+                await pilot.press("shift+1")
+                await pilot.pause()
+
+                focused_before = app.focused
+                controller.on_site_visit("example.com")
+                app._refresh_screen()
+                await pilot.pause()
+
+                model = controller.build_screen_model()
+                self.assertEqual(model.active_view, "traffic")
+                self.assertEqual(model.active_pane, "requests")
+                self.assertIs(app.focused, focused_before)
+
+        asyncio.run(run_test())
+
     def test_textual_go_back_closes_open_detail_view(self) -> None:
         async def run_test() -> None:
             journal = RequestJournal()
