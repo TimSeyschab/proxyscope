@@ -2,7 +2,7 @@ from typing import Protocol, runtime_checkable
 
 from proxyscope.adapters.tui.components.contracts import ComponentFocus
 from proxyscope.adapters.tui.models import DetailTab, RuntimeScreenModel, RuntimeView
-from proxyscope.application.contracts import SuspendUI
+from proxyscope.application.contracts import RequestPolicyAction, RequestPolicyTarget, SuspendUI
 
 
 @runtime_checkable
@@ -51,6 +51,16 @@ class RuntimeUIController(Protocol):
     def edit_selected_policy(self, *, suspend_ui: SuspendUI | None = None) -> None: ...
 
     def add_selected_request_to_editor_policy(self, *, suspend_ui: SuspendUI | None = None) -> None: ...
+
+    def selected_request_has_response(self) -> bool: ...
+
+    def apply_selected_request_policy_action(
+        self,
+        *,
+        target: RequestPolicyTarget,
+        action: RequestPolicyAction,
+        suspend_ui: SuspendUI | None = None,
+    ) -> None: ...
 
     def replay_selected_request(self, *, suspend_ui: SuspendUI | None = None) -> None: ...
 

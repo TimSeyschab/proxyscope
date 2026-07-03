@@ -10,7 +10,11 @@ from proxyscope.application.runtime_view import (
     RuntimeStatusSnapshot,
     RuntimeViewApplicationService,
 )
-from proxyscope.application.services import RuntimeApplicationServices, create_runtime_application_services
+from proxyscope.application.services import (
+    RuntimeApplicationAdapters,
+    RuntimeApplicationServices,
+    create_runtime_application_services,
+)
 from proxyscope.application.sessions import SessionApplicationService
 from proxyscope.application.settings import SettingsApplicationService
 
@@ -20,6 +24,7 @@ __all__ = [
     "CommandRegistry",
     "RequestApplicationService",
     "RuntimePolicyListItem",
+    "RuntimeApplicationAdapters",
     "RuntimeApplicationServices",
     "RuntimeStatusSnapshot",
     "RuntimeViewApplicationService",

@@ -2,17 +2,13 @@ import unittest
 from threading import Event
 from unittest.mock import patch
 
-from proxyscope.adapters.editing.response_editor import _maybe_save_static_response_rule
+from proxyscope.adapters.editing.response_editor import edit_pending_response_with_external_editor
 from proxyscope.application.response_edits import PendingResponseEdit
-from proxyscope.policies.engine import PolicyEngine
 from proxyscope.processing.models import ExchangeResponse
-from tests.support.runtime_context import RuntimeTestContext
 
 
 class TestResponseEditing(unittest.TestCase):
-    def test_save_static_policy_from_edited_response(self) -> None:
-        config = RuntimeTestContext()
-        config.add_open_editor_policy("https://example.com/edited", method="GET")
+    def test_successful_edit_returns_edited_payload_without_policy_prompt(self) -> None:
         pending = PendingResponseEdit(
             request_url="https://example.com/edited",
             method="GET",
@@ -23,32 +19,21 @@ class TestResponseEditing(unittest.TestCase):
                 body=b"original",
             ),
             _done=Event(),
-        )
-        with patch("builtins.input", return_value="y"):
-            policy_name = _maybe_save_static_response_rule(
-                pending=pending,
-                headers={"Content-Type": "text/plain"},
-                body=b"edited-body",
-                policies=config.policy_administration,
-            )
-        self.assertIsNotNone(policy_name)
-        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
-            method="GET",
-            url="https://example.com/edited",
-        )
-        self.assertIsNotNone(template)
-        assert template is not None
-        self.assertEqual(template.body, b"edited-body")
-        self.assertEqual(template.status_code, 200)
-        self.assertFalse(
-            PolicyEngine(config.policy_repository).should_modify_response_for_request(
-                method="GET",
-                url="https://example.com/edited",
-            )
         )
 
-    def test_does_not_save_static_policy_when_user_declines(self) -> None:
-        config = RuntimeTestContext()
+        with (
+            patch("proxyscope.adapters.editing.response_editor._resolve_editor_command", return_value="editor"),
+            patch("proxyscope.adapters.editing.response_editor._run_editor"),
+            patch("builtins.input", side_effect=AssertionError("response editor must not prompt")),
+        ):
+            result = edit_pending_response_with_external_editor(pending)
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.headers, {"Content-Type": "text/plain"})
+        self.assertEqual(result.body, b"original")
+        self.assertEqual(pending.wait(), ExchangeResponse(200, "OK", {"Content-Type": "text/plain", "Content-Length": "8"}, b"original"))
+
+    def test_editor_failure_keeps_original_response(self) -> None:
         pending = PendingResponseEdit(
             request_url="https://example.com/edited",
             method="GET",
@@ -60,19 +45,15 @@ class TestResponseEditing(unittest.TestCase):
             ),
             _done=Event(),
         )
-        with patch("builtins.input", return_value="n"):
-            policy_name = _maybe_save_static_response_rule(
-                pending=pending,
-                headers={"Content-Type": "text/plain"},
-                body=b"edited-body",
-                policies=config.policy_administration,
-            )
-        self.assertIsNone(policy_name)
-        template = PolicyEngine(config.policy_repository).get_static_response_template_for_request(
-            method="GET",
-            url="https://example.com/edited",
-        )
-        self.assertIsNone(template)
+
+        with (
+            patch("proxyscope.adapters.editing.response_editor._resolve_editor_command", return_value="editor"),
+            patch("proxyscope.adapters.editing.response_editor._run_editor", side_effect=RuntimeError("cancelled")),
+        ):
+            result = edit_pending_response_with_external_editor(pending)
+
+        self.assertFalse(result.success)
+        self.assertEqual(pending.wait(), pending.response)
 
 
 if __name__ == "__main__":

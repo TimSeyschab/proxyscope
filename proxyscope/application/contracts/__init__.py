@@ -1,12 +1,14 @@
 from collections import Counter
 from contextlib import AbstractContextManager
-from typing import Callable, Protocol, runtime_checkable
+from typing import Callable, Literal, Protocol, runtime_checkable
 
 from proxyscope.application.journal import LoggedExchange
 from proxyscope.application.requests import RequestWindow
 from proxyscope.application.runtime_view import RuntimePolicyListItem, RuntimeStatusSnapshot
 
 SuspendUI = Callable[[], AbstractContextManager[None]]
+RequestPolicyTarget = Literal["request", "response"]
+RequestPolicyAction = Literal["open_editor_policy", "static_response_policy"]
 
 
 @runtime_checkable
@@ -65,6 +67,20 @@ class PolicyUseCases(Protocol):
     def process_pending_edit(self, *, suspend_ui: SuspendUI | None = None) -> str | None: ...
 
     def add_request_to_editor_policy(
+        self,
+        entry: LoggedExchange,
+        *,
+        suspend_ui: SuspendUI | None = None,
+    ) -> str: ...
+
+    def add_response_editor_policy_for_request(
+        self,
+        entry: LoggedExchange,
+        *,
+        suspend_ui: SuspendUI | None = None,
+    ) -> str: ...
+
+    def add_static_response_policy_for_request(
         self,
         entry: LoggedExchange,
         *,

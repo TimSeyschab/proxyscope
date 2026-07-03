@@ -52,6 +52,14 @@ class PendingResponseEdit:
         return self._done.is_set()
 
 
+@dataclass(frozen=True)
+class ResponseEditorResult:
+    success: bool
+    message: str
+    headers: dict[str, str] | None = None
+    body: bytes | None = None
+
+
 class ResponseModifierService:
     def __init__(self, *, interactive_enabled: bool = False, edit_timeout_s: float = 60.0) -> None:
         if edit_timeout_s <= 0:

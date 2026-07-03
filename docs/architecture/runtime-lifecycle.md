@@ -10,11 +10,13 @@ with ProxyApplication(ApplicationOptions(...)) as application:
     application.run()
 ```
 
-`ProxyApplication` lives in `proxyscope.app.application`. It creates config,
-journal, application services, processing runtime, server, and the optional TUI
-adapter. `proxyscope.app.composition` assembles the proxy processing context,
-while `proxyscope.adapters.factory` injects concrete editor, replay, and session
-adapters into the application services.
+`ProxyApplication` lives in `proxyscope.app.application` and owns lifecycle
+coordination: enter, logging setup, server thread start, UI execution, shutdown,
+and cleanup. `proxyscope.app.composition.create_runtime_object_graph()` creates
+the runtime object graph: config, journal, application services, processing
+runtime, server, and optional MITM interceptor. `proxyscope.adapters.factory`
+injects concrete editor, replay, and session adapters into the application
+services.
 
 Runtime settings, policy administration, and configuration persistence are
 constructed separately. No aggregate runtime-config facade participates in the

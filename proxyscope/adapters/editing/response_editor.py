@@ -8,8 +8,7 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from proxyscope.application.policy_administration import PolicyAdministrationService
-from proxyscope.application.response_edits import PendingResponseEdit
+from proxyscope.application.response_edits import PendingResponseEdit, ResponseEditorResult
 
 
 @dataclass(frozen=True)
@@ -22,13 +21,11 @@ class _BodyEditPlan:
 
 def edit_pending_response_with_external_editor(
     pending: PendingResponseEdit,
-    *,
-    policies: PolicyAdministrationService,
-) -> tuple[bool, str]:
+) -> ResponseEditorResult:
     editor = _resolve_editor_command()
     if editor is None:
         pending.keep_original()
-        return False, "No editor found. Set $EDITOR (or install nano/vim/vi)."
+        return ResponseEditorResult(False, "No editor found. Set $EDITOR (or install nano/vim/vi).")
 
     try:
         with tempfile.TemporaryDirectory(prefix="pscope-edit-") as tmp_dir:
@@ -62,18 +59,15 @@ def edit_pending_response_with_external_editor(
             )
 
             pending.apply(headers=edited_headers, body=edited_body)
-            saved_policy_name = _maybe_save_static_response_rule(
-                pending=pending,
+            return ResponseEditorResult(
+                True,
+                f"Applied response edits for {pending.request_url}",
                 headers=edited_headers,
                 body=edited_body,
-                policies=policies,
             )
-            if saved_policy_name is not None:
-                return True, f"Applied response edits and saved static policy {saved_policy_name}."
-            return True, f"Applied response edits for {pending.request_url}"
     except Exception as exc:  # noqa: BLE001
         pending.keep_original()
-        return False, f"Response edit failed ({exc}); kept original response."
+        return ResponseEditorResult(False, f"Response edit failed ({exc}); kept original response.")
 
 
 def _build_body_edit_plan(*, headers: dict[str, str], body: bytes) -> _BodyEditPlan:
@@ -240,41 +234,3 @@ def _remove_header_case_insensitive(headers: dict[str, str], header_name: str) -
     for key in list(headers.keys()):
         if key.lower() == target:
             del headers[key]
-
-
-def _maybe_save_static_response_rule(
-    *,
-    pending: PendingResponseEdit,
-    headers: dict[str, str],
-    body: bytes,
-    policies: PolicyAdministrationService,
-) -> str | None:
-    try:
-        answer = (
-            input(f"[pscope] Save edited response as static policy for {pending.method} {pending.request_url}? [y/N]: ")
-            .strip()
-            .lower()
-        )
-    except EOFError:
-        return None
-    if answer not in {"y", "yes"}:
-        return None
-
-    static_headers = dict(headers)
-    _remove_header_case_insensitive(static_headers, "Transfer-Encoding")
-    static_headers["Content-Length"] = str(len(body))
-
-    try:
-        policy_name = policies.add_static_response(
-            url=pending.request_url,
-            status_code=pending.response.status_code,
-            reason=pending.response.reason,
-            headers=static_headers,
-            body=body,
-            method=pending.method,
-            url_prefix=False,
-        )
-        policies.remove_open_editor(pending.request_url, method=pending.method)
-        return policy_name
-    except ValueError:
-        return None

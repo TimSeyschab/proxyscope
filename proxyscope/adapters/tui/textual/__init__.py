@@ -5,9 +5,7 @@ from typing import Callable, Literal
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
-from textual.screen import ModalScreen
-from textual.widgets import Input, Static
+from textual.widgets import Input
 
 from proxyscope.adapters.tui.components import (
     CommandModal,
@@ -19,11 +17,9 @@ from proxyscope.adapters.tui.components import (
     TrafficViewPane,
 )
 from proxyscope.adapters.tui.components.contracts import ComponentFocus
-from proxyscope.adapters.tui.components.rendering import (
-    plain_text as _plain_text,
-)
 from proxyscope.adapters.tui.models import RuntimeScreenModel
 from proxyscope.adapters.tui.navigation import focus_step_order as _focus_step_order
+from proxyscope.adapters.tui.textual.modals import HelpModal, RequestPolicyPickerModal, RequestPolicySelection
 from proxyscope.adapters.tui.ui_controller import RuntimeUIController
 
 RuntimeContentLayout = Literal["horizontal", "vertical"]
@@ -32,57 +28,6 @@ RuntimeContentLayout = Literal["horizontal", "vertical"]
 @dataclass(frozen=True)
 class RuntimeLayoutPlan:
     content_layout: RuntimeContentLayout
-
-
-class HelpModal(ModalScreen[None]):
-    CSS = """
-    HelpModal {
-        align: center middle;
-    }
-
-    #help-dialog {
-        width: 92;
-        max-width: 90%;
-        max-height: 85%;
-        background: #11161a;
-        border: round #d9a94f;
-        padding: 1 2;
-    }
-
-    #help-title {
-        color: #d9a94f;
-        text-style: bold;
-        padding: 0 0 1 0;
-    }
-
-    #help-body {
-        color: #e7e1d5;
-        padding: 0;
-    }
-
-    #help-footer {
-        color: #a8ada7;
-        padding: 1 0 0 0;
-    }
-    """
-
-    BINDINGS = [
-        Binding("escape", "close", "Close", show=False),
-        Binding("enter", "close", "Close", show=False),
-    ]
-
-    def __init__(self, help_text: str) -> None:
-        super().__init__()
-        self._help_text = help_text
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="help-dialog"):
-            yield Static(_plain_text("HELP"), id="help-title")
-            yield Static(_plain_text(self._help_text), id="help-body")
-            yield Static(_plain_text("Esc or Enter closes this dialog."), id="help-footer")
-
-    def action_close(self) -> None:
-        self.dismiss()
 
 
 def determine_runtime_layout(*, width: int, model: RuntimeScreenModel) -> RuntimeLayoutPlan:
@@ -108,7 +53,7 @@ class RuntimeTextualApp(App[None]):
         Binding("shift+d", "disable_policy", "Disable", show=False, priority=True),
         Binding("shift+e", "enable_policy", "Enable", show=False, priority=True),
         Binding("shift+i", "edit_policy", "Edit Policy", show=False, priority=True),
-        Binding("shift+m", "add_editor_policy", "Editor Rule", show=False, priority=True),
+        Binding("shift+m", "open_policy_picker", "Policy Picker", show=False, priority=True),
         Binding("shift+r", "replay_request", "Replay", show=False, priority=True),
         Binding("shift+t", "toggle_request_follow_top", "Follow Top", show=True, priority=True),
         Binding("shift+v", "toggle_detail_ratio", "Detail Size", show=True, priority=True),
@@ -197,7 +142,7 @@ class RuntimeTextualApp(App[None]):
             "d": self.action_disable_policy,
             "e": self.action_enable_policy,
             "i": self.action_edit_policy,
-            "m": self.action_add_editor_policy,
+            "m": self.action_open_policy_picker,
             "p": self.action_show_policies,
             "r": self.action_replay_request,
             "s": self.action_show_sites,
@@ -286,9 +231,11 @@ class RuntimeTextualApp(App[None]):
         self._controller.edit_selected_policy(suspend_ui=self.suspend)
         self._refresh_screen()
 
-    def action_add_editor_policy(self) -> None:
-        self._controller.add_selected_request_to_editor_policy(suspend_ui=self.suspend)
-        self._refresh_screen()
+    def action_open_policy_picker(self) -> None:
+        self.push_screen(
+            RequestPolicyPickerModal(include_static_response=self._controller.selected_request_has_response()),
+            self._handle_policy_picker_result,
+        )
 
     def action_replay_request(self) -> None:
         self._controller.replay_selected_request(suspend_ui=self.suspend)
@@ -427,6 +374,17 @@ class RuntimeTextualApp(App[None]):
 
     def action_show_command_modal(self) -> None:
         self.push_screen(CommandModal(), self._handle_command_modal_result)
+
+    def _handle_policy_picker_result(self, selection: RequestPolicySelection | None) -> None:
+        if selection is None:
+            self._sync_focus_after_navigation()
+            return
+        self._controller.apply_selected_request_policy_action(
+            target=selection.target,
+            action=selection.action,
+            suspend_ui=self.suspend,
+        )
+        self._refresh_screen()
 
 
 def _shortcut_token_from_key_event(*, key: str, character: str | None) -> str | None:

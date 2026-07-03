@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from textual.widgets import Input
+from textual.widgets import Input, OptionList
 
 from proxyscope.adapters.tui.cli import RuntimeCLI
 from proxyscope.adapters.tui.controller import RuntimeController
@@ -286,6 +286,29 @@ class TestRuntimeUIController(unittest.TestCase):
 
                 self.assertNotIsInstance(app.focused, Input)
                 self.assertEqual(controller.build_screen_model().status_bar.message, "Press ':' for commands.")
+
+        asyncio.run(run_test())
+
+    def test_textual_policy_picker_shortcut_waits_for_selection(self) -> None:
+        async def run_test() -> None:
+            controller = self._controller()
+            app = RuntimeTextualApp(controller)
+
+            async with app.run_test(size=(160, 42)) as pilot:
+                await pilot.press("shift+m")
+                await pilot.pause()
+
+                self.assertIsInstance(app.focused, OptionList)
+                self.assertEqual(controller.build_screen_model().status_bar.message, "Press ':' for commands.")
+
+                await pilot.press("enter")
+                await pilot.pause()
+                self.assertIsInstance(app.focused, OptionList)
+
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertEqual(controller.build_screen_model().status_bar.message, "No request selected.")
 
         asyncio.run(run_test())
 

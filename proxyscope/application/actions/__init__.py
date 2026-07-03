@@ -5,12 +5,12 @@ from proxyscope.application.configuration import RuntimeConfigurationService
 from proxyscope.application.contracts import SuspendUI
 from proxyscope.application.journal import LoggedExchange
 from proxyscope.application.policy_administration import PolicyAdministrationService
-from proxyscope.application.response_edits import ResponseModifierService
+from proxyscope.application.response_edits import PendingResponseEdit, ResponseEditorResult, ResponseModifierService
 from proxyscope.policies.models import OpenEditorAction, PolicyRule
 
 PolicyEditor = Callable[[PolicyRule], tuple[bool, PolicyRule | None, str]]
 ReplayRequest = Callable[..., tuple[bool, str]]
-ResponseEditor = Callable[..., tuple[bool, str]]
+ResponseEditor = Callable[..., ResponseEditorResult]
 
 
 class RuntimePolicyActionService:
@@ -68,6 +68,14 @@ class RuntimePolicyActionService:
         *,
         suspend_ui: SuspendUI | None = None,
     ) -> str:
+        return self.add_response_editor_policy_for_request(entry, suspend_ui=suspend_ui)
+
+    def add_response_editor_policy_for_request(
+        self,
+        entry: LoggedExchange,
+        *,
+        suspend_ui: SuspendUI | None = None,
+    ) -> str:
         target_url = entry_to_url(entry)
         if target_url is None:
             return "Cannot build URL from selected request."
@@ -78,7 +86,6 @@ class RuntimePolicyActionService:
                 target_url,
                 method=entry.request.method,
             )
-            self._configuration.save()
         except ValueError as exc:
             return str(exc)
 
@@ -91,8 +98,54 @@ class RuntimePolicyActionService:
                 break
 
         if created_rule is None:
-            return f"Added editor policy: {normalized}"
-        return self._edit_policy_rule(created_rule.name, created_rule, suspend_ui=suspend_ui)
+            self._configuration.save()
+            return f"Added response editor policy: {normalized}"
+        return self._edit_policy_rule(
+            created_rule.name,
+            created_rule,
+            suspend_ui=suspend_ui,
+            cleanup_on_failure=True,
+        )
+
+    def add_static_response_policy_for_request(
+        self,
+        entry: LoggedExchange,
+        *,
+        suspend_ui: SuspendUI | None = None,
+    ) -> str:
+        target_url = entry_to_url(entry)
+        if target_url is None:
+            return "Cannot build URL from selected request."
+        if entry.response is None:
+            return "Selected request has no response."
+        if entry.response.body is None:
+            return "Selected response body was not captured."
+        if entry.response.body_size is not None and entry.response.body_size != len(entry.response.body):
+            return "Selected response body was not fully captured."
+
+        try:
+            policy_name = self._add_static_response_policy(
+                url=target_url,
+                method=entry.request.method,
+                status_code=entry.response.status_code,
+                reason=entry.response.reason,
+                headers=dict(entry.response.headers),
+                body=entry.response.body,
+            )
+        except ValueError as exc:
+            return str(exc)
+
+        created_rule = self._policies.get_rule(policy_name)
+        if created_rule is None:
+            self._configuration.save()
+            return f"Static response policy saved: {policy_name}"
+        return self._edit_policy_rule(
+            policy_name,
+            created_rule,
+            suspend_ui=suspend_ui,
+            before_save=lambda: self._policies.remove_open_editor(target_url, method=entry.request.method),
+            cleanup_on_failure=True,
+        )
 
     def _edit_policy_by_name(self, name: str, *, suspend_ui: SuspendUI | None) -> str:
         try:
@@ -109,18 +162,48 @@ class RuntimePolicyActionService:
         rule: PolicyRule,
         *,
         suspend_ui: SuspendUI | None,
+        before_save: Callable[[], None] | None = None,
+        cleanup_on_failure: bool = False,
     ) -> str:
         try:
             with _suspend_runtime_ui(suspend_ui):
                 success, edited_rule, message = self._policy_editor(rule)
             if not success or edited_rule is None:
+                if cleanup_on_failure:
+                    self._policies.remove_rule(name)
                 return message
             if self._policies.replace_rule(name, edited_rule):
+                if before_save is not None:
+                    before_save()
                 self._configuration.save()
                 return message
             return f"Policy not found: {name}"
         except Exception as exc:  # noqa: BLE001
+            if cleanup_on_failure:
+                self._policies.remove_rule(name)
             return f"Policy edit failed ({exc})."
+
+    def _add_static_response_policy(
+        self,
+        *,
+        url: str,
+        method: str,
+        status_code: int,
+        reason: str,
+        headers: dict[str, str],
+        body: bytes,
+    ) -> str:
+        static_headers = _static_response_headers(headers, body=body)
+        policy_name = self._policies.add_static_response(
+            url=url,
+            status_code=status_code,
+            reason=reason,
+            headers=static_headers,
+            body=body,
+            method=method,
+            url_prefix=False,
+        )
+        return policy_name
 
 
 class RuntimeReplayActionService:
@@ -164,18 +247,45 @@ class RuntimeResponseEditActionService:
             return None
         try:
             with _suspend_runtime_ui(suspend_ui):
-                success, message = self._response_editor(
-                    pending,
-                    policies=self._policies,
-                )
-            if not success:
+                result = self._response_editor(pending)
+            if not result.success:
                 pending.keep_original()
-            else:
-                self._configuration.save()
-            return message
+                return result.message
+            if result.headers is None or result.body is None:
+                return result.message
+            try:
+                policy_name = self._save_static_response_policy(
+                    pending=pending,
+                    headers=result.headers,
+                    body=result.body,
+                )
+            except ValueError as exc:
+                return f"{result.message}; static policy not saved ({exc})."
+            self._configuration.save()
+            return f"{result.message}; saved static policy {policy_name}."
         except Exception as exc:  # noqa: BLE001
             pending.keep_original()
             return f"Response edit failed ({exc}); kept original response."
+
+    def _save_static_response_policy(
+        self,
+        *,
+        pending: PendingResponseEdit,
+        headers: dict[str, str],
+        body: bytes,
+    ) -> str:
+        static_headers = _static_response_headers(headers, body=body)
+        policy_name = self._policies.add_static_response(
+            url=pending.request_url,
+            status_code=pending.response.status_code,
+            reason=pending.response.reason,
+            headers=static_headers,
+            body=body,
+            method=pending.method,
+            url_prefix=False,
+        )
+        self._policies.remove_open_editor(pending.request_url, method=pending.method)
+        return policy_name
 
 
 def entry_to_url(entry: LoggedExchange) -> str | None:
@@ -199,3 +309,17 @@ def _suspend_runtime_ui(suspend_ui: SuspendUI | None):
     if suspend_ui is not None:
         return suspend_ui()
     return nullcontext()
+
+
+def _remove_header_case_insensitive(headers: dict[str, str], header_name: str) -> None:
+    target = header_name.lower()
+    for key in list(headers.keys()):
+        if key.lower() == target:
+            del headers[key]
+
+
+def _static_response_headers(headers: dict[str, str], *, body: bytes) -> dict[str, str]:
+    static_headers = dict(headers)
+    _remove_header_case_insensitive(static_headers, "Transfer-Encoding")
+    static_headers["Content-Length"] = str(len(body))
+    return static_headers

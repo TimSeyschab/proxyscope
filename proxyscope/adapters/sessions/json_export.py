@@ -60,12 +60,14 @@ def _serialize_exchange(entry: LoggedExchange) -> dict[str, object]:
     request_body = _serialize_request_body(entry.request.body)
     response_payload = None
     if entry.response is not None:
+        response_body = _serialize_message_body(entry.response.body)
         response_payload = {
             "status_code": entry.response.status_code,
             "reason": entry.response.reason,
             "headers": dict(entry.response.headers),
             "body_preview": entry.response.body_preview,
             "body_size": entry.response.body_size,
+            **response_body,
         }
 
     return {
@@ -114,6 +116,7 @@ def _parse_exchange(payload: object) -> LoggedExchange:
             headers=_parse_headers(response_payload.get("headers")),
             body_preview=str(response_payload.get("body_preview", "")),
             body_size=_parse_optional_int(response_payload.get("body_size")),
+            body=_parse_message_body(response_payload),
         )
     return LoggedExchange(
         request_id=int(payload.get("request_id", DEFAULT_RESPONSE_STATUS)),
@@ -158,6 +161,10 @@ def _serialize_har_entry(entry: LoggedExchange) -> dict[str, object]:
 
 
 def _serialize_request_body(body: bytes | None) -> dict[str, object]:
+    return _serialize_message_body(body)
+
+
+def _serialize_message_body(body: bytes | None) -> dict[str, object]:
     if body is None:
         return {}
     if body == b"":
@@ -169,6 +176,10 @@ def _serialize_request_body(body: bytes | None) -> dict[str, object]:
 
 
 def _parse_request_body(payload: dict[str, object]) -> bytes | None:
+    return _parse_message_body(payload)
+
+
+def _parse_message_body(payload: dict[str, object]) -> bytes | None:
     body_base64 = payload.get("body_base64")
     if isinstance(body_base64, str):
         return base64.b64decode(body_base64.encode("ascii"))

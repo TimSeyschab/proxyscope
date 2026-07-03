@@ -5,17 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 
-from proxyscope.adapters.factory import create_default_runtime_application_services
-from proxyscope.adapters.observability.events import RuntimeEventDispatcher
 from proxyscope.adapters.observability.logging import configure_logging
-from proxyscope.app.composition import create_mitm_interceptor, create_proxy_runtime_context
-from proxyscope.application.configuration import RuntimeConfigurationService
-from proxyscope.application.journal import RequestJournal
-from proxyscope.application.policy_administration import PolicyAdministrationService
+from proxyscope.app.composition import RuntimeObjectGraph, create_runtime_object_graph
 from proxyscope.application.response_edits import ResponseModifierService
-from proxyscope.application.runtime_settings import RuntimeSettingsState
-from proxyscope.application.services import RuntimeApplicationServices
-from proxyscope.config.repository import JsonConfigRepository
 from proxyscope.proxy.server import ProxyHTTPServer, create_server
 
 LOGGER = logging.getLogger("pscope.app")
@@ -42,14 +34,7 @@ class ProxyApplication:
     ) -> None:
         self.options = options
         self._server_factory = server_factory
-        self._settings: RuntimeSettingsState | None = None
-        self._policies: PolicyAdministrationService | None = None
-        self._configuration: RuntimeConfigurationService | None = None
-        self._request_journal: RequestJournal | None = None
-        self._response_modifier: ResponseModifierService | None = None
-        self._runtime_events: RuntimeEventDispatcher | None = None
-        self._application_services: RuntimeApplicationServices | None = None
-        self._server: ProxyHTTPServer | None = None
+        self._runtime_graph: RuntimeObjectGraph | None = None
         self._server_thread: threading.Thread | None = None
         self._runtime_ui: logging.Handler | None = None
         self._shutdown_event = threading.Event()
@@ -64,15 +49,15 @@ class ProxyApplication:
 
     @property
     def server(self) -> ProxyHTTPServer:
-        if self._server is None:
+        if self._runtime_graph is None:
             raise RuntimeError("Application has not been entered.")
-        return self._server
+        return self._runtime_graph.server
 
     @property
     def response_modifier(self) -> ResponseModifierService:
-        if self._response_modifier is None:
+        if self._runtime_graph is None:
             raise RuntimeError("Application has not been entered.")
-        return self._response_modifier
+        return self._runtime_graph.response_modifier
 
     @property
     def server_thread(self) -> threading.Thread:
@@ -127,20 +112,20 @@ class ProxyApplication:
             self._shutdown_complete = True
 
         self._shutdown_event.set()
-        server = self._server
+        server = None if self._runtime_graph is None else self._runtime_graph.server
         thread = self._server_thread
         self._stop_accepting_requests()
         if server is not None:
             server.close_all_active_tunnels()
-        if self._response_modifier is not None:
-            self._response_modifier.set_interactive_enabled(False)
-            self._response_modifier.cancel_pending_edits()
+        if self._runtime_graph is not None:
+            self._runtime_graph.response_modifier.set_interactive_enabled(False)
+            self._runtime_graph.response_modifier.cancel_pending_edits()
         if server is not None:
             server.server_close()
         if thread is not None and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=self.options.thread_join_timeout_s)
-        if self._runtime_events is not None:
-            self._runtime_events.set_observer(None)
+        if self._runtime_graph is not None:
+            self._runtime_graph.runtime_events.set_observer(None)
         self._restore_logging()
 
     def close_active_tunnels(self) -> None:
@@ -148,79 +133,33 @@ class ProxyApplication:
         LOGGER.info("Closed %d active SSL tunnel(s) after cache setting change.", closed)
 
     def _compose(self) -> None:
-        repository = JsonConfigRepository()
-        document = repository.load(Path(self.options.config_path)) if self.options.config_path else None
-        settings = RuntimeSettingsState(settings=None if document is None else document.settings)
-        policies = PolicyAdministrationService(rules=() if document is None else document.policies)
-        configuration = RuntimeConfigurationService(
-            settings=settings,
-            policies=policies,
-            repository=repository,
-            path=self.options.config_path,
+        self._runtime_graph = create_runtime_object_graph(
+            host=self.options.host,
+            port=self.options.port,
+            config_path=self.options.config_path,
+            mitm_enabled=self.options.mitm_enabled,
+            certs_dir=self.options.certs_dir,
+            edit_timeout_s=self.options.edit_timeout_s,
+            server_factory=self._server_factory,
         )
-        if self.options.mitm_enabled is not None:
-            settings.set_mitm_enabled(self.options.mitm_enabled)
-        if self.options.certs_dir is not None:
-            settings.set_mitm_certs_dir(self.options.certs_dir)
-
-        request_journal = RequestJournal()
-        response_modifier = ResponseModifierService(edit_timeout_s=self.options.edit_timeout_s)
-        runtime_events = RuntimeEventDispatcher()
-        runtime_context = create_proxy_runtime_context(
-            settings=settings,
-            policies=policies,
-            request_journal=request_journal,
-            response_modifier=response_modifier,
-            runtime_events=runtime_events,
+        self._server_thread = threading.Thread(
+            target=self._runtime_graph.server.serve_forever, name="proxyscope-server"
         )
-        services = create_default_runtime_application_services(
-            settings=settings,
-            policies=policies,
-            configuration=configuration,
-            request_journal=request_journal,
-            response_modifier=response_modifier,
-            proxy_base_url=f"http://{self.options.host}:{self.options.port}",
-        )
-        server = self._server_factory(
-            self.options.host,
-            self.options.port,
-            runtime_context=runtime_context,
-            mitm_interceptor=create_mitm_interceptor(
-                runtime_context=runtime_context,
-                enabled=settings.mitm_enabled,
-                ca_root=settings.mitm_certs_dir,
-            ),
-        )
-        self._settings = settings
-        self._policies = policies
-        self._configuration = configuration
-        self._request_journal = request_journal
-        self._response_modifier = response_modifier
-        self._runtime_events = runtime_events
-        self._application_services = services
-        self._server = server
-        self._server_thread = threading.Thread(target=server.serve_forever, name="proxyscope-server")
 
     def _configure_logging(self) -> None:
         root_logger = logging.getLogger()
         self._previous_root_handlers = list(root_logger.handlers)
         self._previous_root_level = root_logger.level
-        assert self._settings is not None
-        configure_logging(level=self._settings.log_level)
+        assert self._runtime_graph is not None
+        configure_logging(level=self._runtime_graph.settings.log_level)
         self._logging_configured = True
 
     def _run_ui(self) -> None:
         from proxyscope.adapters.tui.cli import RuntimeCLI
 
-        assert self._settings is not None
-        assert self._policies is not None
-        assert self._configuration is not None
-        assert self._request_journal is not None
-        assert self._response_modifier is not None
-        assert self._runtime_events is not None
-        assert self._application_services is not None
+        assert self._runtime_graph is not None
         runtime_ui = RuntimeCLI(
-            application_services=self._application_services,
+            application_services=self._runtime_graph.application_services,
         )
         runtime_ui.setFormatter(
             logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%H:%M:%S")
@@ -229,8 +168,8 @@ class ProxyApplication:
         for handler in list(root_logger.handlers):
             root_logger.removeHandler(handler)
         root_logger.addHandler(runtime_ui)
-        root_logger.setLevel(self._settings.log_level)
-        self._runtime_events.set_observer(runtime_ui)
+        root_logger.setLevel(self._runtime_graph.settings.log_level)
+        self._runtime_graph.runtime_events.set_observer(runtime_ui)
         self._runtime_ui = runtime_ui
         runtime_ui.run(shutdown_server=self.request_shutdown, on_cache_toggle=self.close_active_tunnels)
 
@@ -243,7 +182,7 @@ class ProxyApplication:
             if self._server_shutdown_requested:
                 return
             self._server_shutdown_requested = True
-        server = self._server
+        server = None if self._runtime_graph is None else self._runtime_graph.server
         thread = self._server_thread
         if server is not None and thread is not None and thread.is_alive():
             server.shutdown()

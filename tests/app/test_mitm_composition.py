@@ -1,7 +1,12 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
-from proxyscope.app.composition import create_mitm_interceptor, create_proxy_runtime_context
+from proxyscope.app.composition import (
+    create_mitm_interceptor,
+    create_proxy_runtime_context,
+    create_runtime_object_graph,
+)
 from proxyscope.application.journal import RequestJournal
 from proxyscope.mitm.certificates import MitmCertificateError
 from proxyscope.mitm.tunnel import MitmTLSInterceptor
@@ -70,6 +75,29 @@ class TestMitmComposition(unittest.TestCase):
         self.assertIsInstance(interceptor, MitmTLSInterceptor)
         ca_factory.assert_called_once_with("custom-certs")
         fake_ca.ensure_ca_material.assert_called_once_with()
+
+    def test_create_runtime_object_graph_composes_lifecycle_dependencies(self) -> None:
+        server = Mock()
+        server.server_address = ("127.0.0.1", 8080)
+        server_factory = Mock(return_value=server)
+
+        graph = create_runtime_object_graph(
+            host="127.0.0.1",
+            port=8080,
+            config_path=None,
+            mitm_enabled=False,
+            certs_dir="custom-certs",
+            edit_timeout_s=3.0,
+            server_factory=server_factory,
+        )
+
+        self.assertIs(graph.server, server)
+        self.assertIs(graph.runtime_context.cache_policy, graph.settings)
+        self.assertEqual(graph.settings.mitm_certs_dir, Path("custom-certs"))
+        self.assertFalse(graph.settings.mitm_enabled)
+        server_factory.assert_called_once()
+        self.assertIs(server_factory.call_args.kwargs["runtime_context"], graph.runtime_context)
+        self.assertIsNone(server_factory.call_args.kwargs["mitm_interceptor"])
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ class TestRuntimeExporting(unittest.TestCase):
             entry = payload["entries"][0]
             self.assertEqual(entry["request"]["body_text"], '{"ok":true}')
             self.assertEqual(entry["response"]["body_size"], 16)
+            self.assertEqual(entry["response"]["body_text"], '{"created":true}')
 
     def test_export_har_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -76,6 +77,7 @@ class TestRuntimeExporting(unittest.TestCase):
             self.assertEqual(entry.request.body, b'{"ok":true}')
             assert entry.response is not None
             self.assertEqual(entry.response.status_code, 201)
+            self.assertEqual(entry.response.body, b'{"created":true}')
 
 
 if __name__ == "__main__":

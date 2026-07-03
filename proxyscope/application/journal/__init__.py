@@ -21,6 +21,7 @@ class LoggedResponseMessage:
     headers: tuple[tuple[str, str], ...]
     body_preview: str
     body_size: int | None
+    body: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,7 @@ class RequestJournal:
                         headers=tuple(headers.items()),
                         body_preview=_body_preview(body, total_bytes=body_size),
                         body_size=body_size if body_size is not None else (len(body) if body is not None else None),
+                        body=body,
                     ),
                 )
                 self._entries[index] = updated

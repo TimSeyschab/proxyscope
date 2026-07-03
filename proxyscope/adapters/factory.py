@@ -7,7 +7,11 @@ from proxyscope.application.journal import RequestJournal
 from proxyscope.application.policy_administration import PolicyAdministrationService
 from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.application.runtime_settings import RuntimeSettingsState
-from proxyscope.application.services import RuntimeApplicationServices, create_runtime_application_services
+from proxyscope.application.services import (
+    RuntimeApplicationAdapters,
+    RuntimeApplicationServices,
+    create_runtime_application_services,
+)
 
 
 def create_default_runtime_application_services(
@@ -26,9 +30,11 @@ def create_default_runtime_application_services(
         request_journal=request_journal,
         response_modifier=response_modifier,
         proxy_base_url=proxy_base_url,
-        policy_editor=edit_policy_rule_with_external_editor,
-        replay_request=edit_and_resend_logged_request,
-        response_editor=edit_pending_response_with_external_editor,
-        export_entries=export_entries,
-        load_entries=load_entries_from_json,
+        adapters=RuntimeApplicationAdapters(
+            policy_editor=edit_policy_rule_with_external_editor,
+            replay_request=edit_and_resend_logged_request,
+            response_editor=edit_pending_response_with_external_editor,
+            export_entries=export_entries,
+            load_entries=load_entries_from_json,
+        ),
     )

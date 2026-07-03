@@ -5,6 +5,7 @@ from proxyscope.adapters.tui.components.contracts import ComponentFocus
 from proxyscope.adapters.tui.controller import RuntimeController
 from proxyscope.adapters.tui.models import DetailTab, RuntimeScreenModel, RuntimeView
 from proxyscope.adapters.tui.ui_controller import SuspendUI
+from proxyscope.application.contracts import RequestPolicyAction, RequestPolicyTarget
 from proxyscope.application.services import RuntimeApplicationServices
 
 
@@ -78,6 +79,22 @@ class RuntimeCLI(logging.Handler):
 
     def add_selected_request_to_editor_policy(self, *, suspend_ui: SuspendUI | None = None) -> None:
         self._controller.add_selected_request_to_editor_policy(suspend_ui=suspend_ui)
+
+    def selected_request_has_response(self) -> bool:
+        return self._controller.selected_request_has_response()
+
+    def apply_selected_request_policy_action(
+        self,
+        *,
+        target: RequestPolicyTarget,
+        action: RequestPolicyAction,
+        suspend_ui: SuspendUI | None = None,
+    ) -> None:
+        self._controller.apply_selected_request_policy_action(
+            target=target,
+            action=action,
+            suspend_ui=suspend_ui,
+        )
 
     def replay_selected_request(self, *, suspend_ui: SuspendUI | None = None) -> None:
         self._controller.replay_selected_request(suspend_ui=suspend_ui)

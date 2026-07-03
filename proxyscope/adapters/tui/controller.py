@@ -7,6 +7,7 @@ from proxyscope.adapters.tui.presenter import build_runtime_screen_model
 from proxyscope.adapters.tui.state import RuntimeUIViewState
 from proxyscope.adapters.tui.ui_controller import SuspendUI
 from proxyscope.application.commands import create_runtime_command_registry
+from proxyscope.application.contracts import RequestPolicyAction, RequestPolicyTarget
 from proxyscope.application.services import RuntimeApplicationServices
 
 REQUEST_LIST_WINDOW_SIZE = 250
@@ -127,14 +128,43 @@ class RuntimeController:
         )
 
     def add_selected_request_to_editor_policy(self, *, suspend_ui: SuspendUI | None = None) -> None:
+        self.apply_selected_request_policy_action(
+            target="response",
+            action="open_editor_policy",
+            suspend_ui=suspend_ui,
+        )
+
+    def selected_request_has_response(self) -> bool:
+        selected = self._ui_navigation.selected_request(self._services.requests.list_entries())
+        return selected is not None and selected.response is not None
+
+    def apply_selected_request_policy_action(
+        self,
+        *,
+        target: RequestPolicyTarget,
+        action: RequestPolicyAction,
+        suspend_ui: SuspendUI | None = None,
+    ) -> None:
         selected = self._ui_navigation.selected_request(self._services.requests.list_entries())
         if selected is None:
             self._view_state.status_message = "No request selected."
             return
-        self._view_state.status_message = self._services.policies.add_request_to_editor_policy(
-            selected,
-            suspend_ui=suspend_ui,
-        )
+        if target == "request":
+            self._view_state.status_message = "Request policies are not available yet."
+            return
+        if action == "open_editor_policy":
+            self._view_state.status_message = self._services.policies.add_response_editor_policy_for_request(
+                selected,
+                suspend_ui=suspend_ui,
+            )
+            return
+        if action == "static_response_policy":
+            self._view_state.status_message = self._services.policies.add_static_response_policy_for_request(
+                selected,
+                suspend_ui=suspend_ui,
+            )
+            return
+        self._view_state.status_message = "Policy action is not available."
 
     def replay_selected_request(self, *, suspend_ui: SuspendUI | None = None) -> None:
         selected = self._ui_navigation.selected_request(self._services.requests.list_entries())
@@ -193,7 +223,7 @@ class RuntimeController:
             "  Shift+D                     Disable the selected policy (Policies tab).\n"
             "  Shift+E                     Enable the selected policy (Policies tab).\n"
             "  Shift+I                     Edit the selected policy (Policies tab).\n"
-            "  Shift+M                     Add and edit selected request as editor policy.\n"
+            "  Shift+M                     Open request policy picker.\n"
             "  Shift+R                     Replay the selected request after editing.\n"
             "  Shift+T                     Toggle following the newest request at the top.\n"
             "  Shift+X                     Remove the selected policy (Policies tab).\n"

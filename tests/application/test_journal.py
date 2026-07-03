@@ -39,6 +39,7 @@ class TestRequestJournal(unittest.TestCase):
         self.assertEqual(entry.response.status_code, 201)
         self.assertEqual(entry.response.reason, "Created")
         self.assertEqual(entry.response.body_preview, "ok")
+        self.assertEqual(entry.response.body, b"ok")
 
     def test_caps_history(self) -> None:
         journal = RequestJournal(max_entries=2)
