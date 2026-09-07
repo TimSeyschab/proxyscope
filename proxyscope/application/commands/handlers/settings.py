@@ -161,6 +161,14 @@ class SettingsCommandHandler:
                 handled=True,
                 status_message="MITM enabled in config (restart server to apply).",
             )
+        if action == "spa":
+            self._settings.set_mitm_enabled(True)
+            self._settings.set_cache_invalidation_enabled(True)
+            self._configuration.save()
+            return CommandExecutionResult(
+                handled=True,
+                status_message="MITM SPA profile enabled: MITM on, cache invalidation on (restart server to apply).",
+            )
         if action == "off":
             self._settings.set_mitm_enabled(False)
             self._configuration.save()
@@ -184,7 +192,7 @@ class SettingsCommandHandler:
 
         return CommandExecutionResult(
             handled=True,
-            status_message="Usage: mitm [show|on|off|certs-dir <path>]",
+            status_message="Usage: mitm [show|on|off|spa|certs-dir <path>]",
         )
 
 

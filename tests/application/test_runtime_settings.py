@@ -1,13 +1,25 @@
 import logging
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from proxyscope.application.configuration import RuntimeSettings
 from proxyscope.application.runtime_settings import RuntimeSettingsState
-from proxyscope.config.settings import RuntimeSettings
 from tests.support.runtime_context import RuntimeTestContext, normalize_whitelist_entry
 
 
 class TestRuntimeSettingsState(unittest.TestCase):
+    def test_parallel_whitelist_changes_preserve_all_entries(self) -> None:
+        state = RuntimeSettingsState()
+        hosts = [f"host-{index}.example.com" for index in range(200)]
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(state.add_whitelist_entry, hosts))
+        self.assertEqual(set(state.whitelist_entries()), set(hosts))
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            removed = list(executor.map(state.remove_whitelist_entry, hosts[::2]))
+        self.assertTrue(all(removed))
+        self.assertEqual(set(state.whitelist_entries()), set(hosts[1::2]))
+
     def test_mutations_update_snapshot(self) -> None:
         state = RuntimeSettingsState()
 

@@ -44,6 +44,18 @@ class TestSettingsCommandHandler(unittest.TestCase):
         self.assertTrue(config.cache_invalidation_enabled)
         self.assertEqual(called["count"], 1)
 
+    def test_mitm_spa_profile_enables_mitm_and_cache_invalidation(self) -> None:
+        config = RuntimeTestContext()
+        config.set_mitm_enabled(False)
+        config.set_cache_invalidation_enabled(False)
+        handler = settings_handler(config)
+
+        result = handler.execute(["mitm", "spa"], on_cache_toggle=None)
+
+        self.assertTrue(result.handled)
+        self.assertTrue(config.mitm_enabled)
+        self.assertTrue(config.cache_invalidation_enabled)
+
 
 if __name__ == "__main__":
     unittest.main()

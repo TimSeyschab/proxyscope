@@ -1,16 +1,15 @@
 import base64
 import json
-import os
-import shlex
-import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import TypedDict
 
 import requests
 
+from proxyscope.adapters.editing.external_editor import resolve_editor_command as _resolve_editor_command
+from proxyscope.adapters.editing.external_editor import run_editor as _run_editor
 from proxyscope.application.journal import LoggedExchange
+from proxyscope.application.processing.headers import remove_header as _remove_header_case_insensitive
 
 
 class ReplayPayload(TypedDict):
@@ -134,27 +133,3 @@ def _sanitize_replay_headers(headers: dict[str, str]) -> dict[str, str]:
         _remove_header_case_insensitive(sanitized, name)
     return sanitized
 
-
-def _remove_header_case_insensitive(headers: dict[str, str], header_name: str) -> None:
-    target = header_name.lower()
-    for key in list(headers.keys()):
-        if key.lower() == target:
-            del headers[key]
-
-
-def _resolve_editor_command() -> str | None:
-    env_editor = os.environ.get("EDITOR")
-    if env_editor:
-        parts = shlex.split(env_editor)
-        if parts and shutil.which(parts[0]) is not None:
-            return env_editor
-
-    for candidate in ("nano", "vim", "vi"):
-        if shutil.which(candidate) is not None:
-            return candidate
-    return None
-
-
-def _run_editor(editor: str, file_path: Path) -> None:
-    cmd = shlex.split(editor) + [str(file_path)]
-    subprocess.run(cmd, check=True)

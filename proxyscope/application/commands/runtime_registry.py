@@ -1,37 +1,32 @@
 from __future__ import annotations
 
-from itertools import chain
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
 
 from proxyscope.application.commands.registry import CommandDefinition, CommandExecutionResult, CommandRegistry
+from proxyscope.application.components import (
+    CORE_COMPONENT_ID,
+    ComponentContext,
+    ComponentContribution,
+)
+from proxyscope.contracts.components import ComponentController
 
-if TYPE_CHECKING:
-    from proxyscope.application.services import RuntimeApplicationServices
 
-
-def create_runtime_command_registry(
-    services: RuntimeApplicationServices,
+def create_core_runtime_component(
+    context: ComponentContext,
     *,
+    command_registry: CommandRegistry,
     request_shutdown: Callable[[], None] | None,
-    on_cache_toggle: Callable[[], None] | None,
-    on_schedule_policy_edit: Callable[[str], None],
-) -> CommandRegistry:
-    registry = CommandRegistry()
-    command_groups = (
-        _help_commands(registry),
-        _request_commands(services),
-        _session_commands(services),
-        _runtime_subcommands(
-            services,
-            on_cache_toggle=on_cache_toggle,
-            on_schedule_policy_edit=on_schedule_policy_edit,
+) -> ComponentContribution:
+    return ComponentContribution(
+        component_id=CORE_COMPONENT_ID,
+        display_name="Core runtime",
+        commands=(
+            *_help_commands(command_registry),
+            *context.commands,
+            *_shutdown_commands(request_shutdown),
+            *_component_commands(context.component_manager),
         ),
-        _shutdown_commands(request_shutdown),
     )
-
-    for command in chain.from_iterable(command_groups):
-        registry.register(command)
-    return registry
 
 
 def _help_commands(registry: CommandRegistry) -> tuple[CommandDefinition, ...]:
@@ -44,91 +39,6 @@ def _help_commands(registry: CommandRegistry) -> tuple[CommandDefinition, ...]:
             usage="help",
         ),
     )
-
-
-def _request_commands(services: RuntimeApplicationServices) -> tuple[CommandDefinition, ...]:
-    return (
-        CommandDefinition(
-            "clear",
-            lambda _args: CommandExecutionResult(services.requests.clear(), requests_changed=True),
-            "Clear the captured request list.",
-        ),
-        CommandDefinition(
-            "sites",
-            lambda _args: CommandExecutionResult(services.requests.top_sites_summary()),
-            "Show the busiest hosts.",
-        ),
-        CommandDefinition(
-            "filter",
-            lambda args: CommandExecutionResult(services.requests.apply_filter(args), requests_changed=True),
-            "Filter requests by host, method, status, or text.",
-            usage="filter ...",
-        ),
-        CommandDefinition(
-            "find",
-            lambda args: CommandExecutionResult(services.requests.find(args), requests_changed=True),
-            "Shortcut for full-text request filtering.",
-            usage="find <text>",
-        ),
-    )
-
-
-def _session_commands(services: RuntimeApplicationServices) -> tuple[CommandDefinition, ...]:
-    return (
-        CommandDefinition(
-            "export",
-            lambda args: CommandExecutionResult(services.sessions.export(args)),
-            "Export the current request list.",
-            usage="export <json|har> <path>",
-        ),
-        CommandDefinition(
-            "session",
-            lambda args: CommandExecutionResult(
-                services.sessions.session(args),
-                requests_changed=bool(args and args[0].lower() == "load"),
-            ),
-            "Save or load a captured session.",
-            usage="session <save|load> <path>",
-        ),
-    )
-
-
-def _runtime_subcommands(
-    services: RuntimeApplicationServices,
-    *,
-    on_cache_toggle: Callable[[], None] | None,
-    on_schedule_policy_edit: Callable[[str], None],
-) -> tuple[CommandDefinition, ...]:
-    def runtime_command(name: str, arguments: list[str]) -> CommandExecutionResult:
-        result = services.runtime_commands.execute_parts(
-            [name, *arguments],
-            on_cache_toggle=on_cache_toggle,
-            on_schedule_policy_edit=on_schedule_policy_edit,
-        )
-        return CommandExecutionResult(
-            status_message=result.status_message,
-            updated_log_level=result.updated_log_level,
-        )
-
-    commands: list[CommandDefinition] = []
-    for name, aliases, usage, help_text in (
-        ("loglevel", (), "loglevel <LEVEL>", "Show or change the runtime log level."),
-        ("mitm", (), "mitm ...", "Show or update MITM settings."),
-        ("whitelist", ("wl",), "whitelist ...", "Inspect or change the logging whitelist."),
-        ("cache", (), "cache ...", "Inspect or toggle cache invalidation."),
-        ("config", (), "config ...", "Show, save, or reload runtime config."),
-        ("policy", ("pol",), "policy ...", "Manage editor and static-response rules."),
-    ):
-        commands.append(
-            CommandDefinition(
-                name,
-                lambda args, command_name=name: runtime_command(command_name, args),
-                help_text,
-                aliases=aliases,
-                usage=usage,
-            )
-        )
-    return tuple(commands)
 
 
 def _shutdown_commands(request_shutdown: Callable[[], None] | None) -> tuple[CommandDefinition, ...]:
@@ -144,5 +54,36 @@ def _shutdown_commands(request_shutdown: Callable[[], None] | None) -> tuple[Com
             "Stop the proxy.",
             aliases=("exit", "q"),
             usage="quit",
+        ),
+    )
+
+
+def _component_commands(component_manager: ComponentController | None) -> tuple[CommandDefinition, ...]:
+    def handle(arguments: list[str]) -> CommandExecutionResult:
+        if component_manager is None:
+            return CommandExecutionResult("Component manager is unavailable.")
+        if not arguments or arguments[0] == "list":
+            statuses = component_manager.list_statuses()
+            return CommandExecutionResult("Components: " + ", ".join(f"{name} ({status})" for name, status in statuses))
+        if len(arguments) != 2 or arguments[0] not in {"enable", "disable", "describe"}:
+            return CommandExecutionResult("Usage: component <list|enable|disable|describe> [id]")
+        action, component_id = arguments
+        try:
+            if action == "describe":
+                return CommandExecutionResult(component_manager.describe(component_id))
+            if action == "enable":
+                component_manager.activate(component_id)
+                return CommandExecutionResult(f"Component enabled: {component_id}")
+            component_manager.deactivate(component_id)
+            return CommandExecutionResult(f"Component disabled: {component_id}")
+        except ValueError as exc:
+            return CommandExecutionResult(str(exc))
+
+    return (
+        CommandDefinition(
+            "component",
+            handle,
+            "List, describe, enable, or disable components.",
+            usage="component <list|enable|disable|describe> [id]",
         ),
     )

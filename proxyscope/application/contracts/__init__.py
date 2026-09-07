@@ -1,95 +1,13 @@
-from collections import Counter
-from contextlib import AbstractContextManager
-from typing import Callable, Literal, Protocol, runtime_checkable
+"""Application-layer ports used by adapters and runtime services."""
 
-from proxyscope.application.journal import LoggedExchange
-from proxyscope.application.requests import RequestWindow
-from proxyscope.application.runtime_view import RuntimePolicyListItem, RuntimeStatusSnapshot
+from .ports import (
+    RequestUseCases,
+    SessionUseCases,
+    SettingsUseCases,
+    SuspendUI,
+)
 
-SuspendUI = Callable[[], AbstractContextManager[None]]
-RequestPolicyTarget = Literal["request", "response"]
-RequestPolicyAction = Literal["open_editor_policy", "static_response_policy"]
-
-
-@runtime_checkable
-class RequestUseCases(Protocol):
-    @property
-    def filter_summary(self) -> str: ...
-
-    def list_entries(self) -> list[LoggedExchange]: ...
-
-    def list_all_entries(self) -> list[LoggedExchange]: ...
-
-    def list_window(self, *, cursor: int, limit: int) -> RequestWindow: ...
-
-    def clear(self) -> str: ...
-
-    def apply_filter(self, arguments: list[str]) -> str: ...
-
-    def find(self, arguments: list[str]) -> str: ...
-
-    def record_site_visit(self, host: str) -> None: ...
-
-    def site_counter(self) -> Counter[str]: ...
-
-    def site_names(self) -> list[str]: ...
-
-    def top_sites_summary(self, *, limit: int = 5) -> str: ...
-
-
-@runtime_checkable
-class SessionUseCases(Protocol):
-    def export(self, arguments: list[str]) -> str: ...
-
-    def session(self, arguments: list[str]) -> str: ...
-
-
-@runtime_checkable
-class SettingsUseCases(Protocol):
-    def add_whitelist_entry(self, value: str) -> str: ...
-
-    def remove_whitelist_entry(self, value: str) -> str: ...
-
-
-@runtime_checkable
-class PolicyUseCases(Protocol):
-    @property
-    def pending_edit_name(self) -> str | None: ...
-
-    def schedule_edit(self, name: str) -> None: ...
-
-    def set_enabled(self, name: str | None, *, enabled: bool) -> str: ...
-
-    def remove(self, name: str | None) -> str: ...
-
-    def edit(self, name: str | None, *, suspend_ui: SuspendUI | None = None) -> str: ...
-
-    def process_pending_edit(self, *, suspend_ui: SuspendUI | None = None) -> str | None: ...
-
-    def add_request_to_editor_policy(
-        self,
-        entry: LoggedExchange,
-        *,
-        suspend_ui: SuspendUI | None = None,
-    ) -> str: ...
-
-    def add_response_editor_policy_for_request(
-        self,
-        entry: LoggedExchange,
-        *,
-        suspend_ui: SuspendUI | None = None,
-    ) -> str: ...
-
-    def add_static_response_policy_for_request(
-        self,
-        entry: LoggedExchange,
-        *,
-        suspend_ui: SuspendUI | None = None,
-    ) -> str: ...
-
-
-@runtime_checkable
-class RuntimeViewUseCases(Protocol):
-    def status(self) -> RuntimeStatusSnapshot: ...
-
-    def policy_items(self) -> list[RuntimePolicyListItem]: ...
+__all__ = [
+    "RequestUseCases",
+    "SessionUseCases", "SettingsUseCases", "SuspendUI",
+]

@@ -1,13 +1,13 @@
 import gzip
-import os
-import shlex
-import shutil
-import subprocess
 import tempfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from proxyscope.adapters.editing.external_editor import resolve_editor_command as _resolve_editor_command
+from proxyscope.adapters.editing.external_editor import run_editor as _run_editor
+from proxyscope.application.processing.headers import header_value as _header_value_case_insensitive
+from proxyscope.application.processing.headers import remove_header as _remove_header_case_insensitive
 from proxyscope.application.response_edits import PendingResponseEdit, ResponseEditorResult
 
 
@@ -120,9 +120,6 @@ def _read_edited_payload(
     return edited_headers, body_file.read_bytes()
 
 
-def _run_editor(editor: str, file_path: Path) -> None:
-    cmd = shlex.split(editor) + [str(file_path)]
-    subprocess.run(cmd, check=True)
 
 
 def _parse_header_file(path: Path) -> dict[str, str]:
@@ -140,17 +137,6 @@ def _parse_header_file(path: Path) -> dict[str, str]:
     return headers
 
 
-def _resolve_editor_command() -> str | None:
-    env_editor = os.environ.get("EDITOR")
-    if env_editor:
-        parts = shlex.split(env_editor)
-        if parts and shutil.which(parts[0]) is not None:
-            return env_editor
-
-    for candidate in ("nano", "vim", "vi"):
-        if shutil.which(candidate) is not None:
-            return candidate
-    return None
 
 
 def _is_textual_response_body(*, headers: dict[str, str], body: bytes) -> tuple[bool, str]:
@@ -192,12 +178,6 @@ def _extract_charset(content_type: str) -> str | None:
     return None
 
 
-def _header_value_case_insensitive(headers: dict[str, str], header_name: str) -> str:
-    target = header_name.lower()
-    for key, value in headers.items():
-        if key.lower() == target:
-            return value
-    return ""
 
 
 def _decode_content_encoded_body(body: bytes, content_encoding: str) -> bytes | None:
@@ -228,9 +208,3 @@ def _decode_content_encoded_body(body: bytes, content_encoding: str) -> bytes | 
             return None
     return None
 
-
-def _remove_header_case_insensitive(headers: dict[str, str], header_name: str) -> None:
-    target = header_name.lower()
-    for key in list(headers.keys()):
-        if key.lower() == target:
-            del headers[key]

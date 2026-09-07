@@ -3,12 +3,12 @@ from threading import Event
 from unittest.mock import patch
 
 from proxyscope.adapters.editing.response_editor import edit_pending_response_with_external_editor
+from proxyscope.application.processing.models import ExchangeResponse
 from proxyscope.application.response_edits import PendingResponseEdit
-from proxyscope.processing.models import ExchangeResponse
 
 
 class TestResponseEditing(unittest.TestCase):
-    def test_successful_edit_returns_edited_payload_without_policy_prompt(self) -> None:
+    def test_successful_edit_returns_edited_payload_without_extra_prompt(self) -> None:
         pending = PendingResponseEdit(
             request_url="https://example.com/edited",
             method="GET",

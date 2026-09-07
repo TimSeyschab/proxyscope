@@ -1,217 +1,144 @@
 # proxyscope
 
-`proxyscope` is an interactive HTTP/HTTPS debugging proxy with a terminal UI.  
-It supports request/response inspection, response editing, replay, and both static and editor-based policy rules.
+`proxyscope` is an HTTP/HTTPS debugging proxy with shared traffic processing
+and optional runtime components.
 
-## Features
+## Capabilities
 
-- HTTP forward proxy and HTTPS via `CONNECT`
-- Optional TLS interception (MITM) with a local CA
-- Runtime control directly in the TUI
-- Request/response log with details, filters, export (`json`, `har`), and session persistence
-- Policy type `open_editor` (manually edit responses)
-- Policy type `static_response` (serve static responses)
+- HTTP forwarding, HTTPS tunnels, and optional TLS interception with a local CA.
+- Traffic rules for static responses, header changes, and body rewrites.
+- Mock scenarios backed by the shared traffic-rule engine.
+- Application services for captured traffic, response editing, replay, and session export.
+- Runtime events with optional persistent history.
 
-## Requirements
+Interactive editing and command dispatch require an integrating frontend; the
+CLI does not expose an interactive command prompt.
 
-- Python `>=3.13`
-- Poetry `2.x` (for development)
+## Install And Run
 
-## Installation
-
-From the repository (recommended for development):
+Development requires Python 3.13 or newer (below 4.0) and Poetry 2.x.
+From the repository root:
 
 ```bash
-git clone <repo-url>
-cd proxyscope
 poetry install
-```
-
-Install from PyPI:
-
-```bash
-pip install proxyscope
-```
-
-## Start
-
-Default start:
-
-```bash
 poetry run proxyscope --host 127.0.0.1 --port 8080
 ```
 
-With a static configuration file:
+For available startup options, use the CLI help:
+
+```bash
+poetry run proxyscope --help
+```
+
+Point a client at the proxy:
+
+```bash
+curl -x http://127.0.0.1:8080 http://example.com/
+```
+
+Stop the CLI with Ctrl+C.
+
+Enable the read-only terminal view in the runtime configuration, then start
+the proxy normally:
 
 ```bash
 poetry run proxyscope --config ./runtime-config.json
 ```
 
-Without TUI:
+The TUI is an optional read-only runtime component. Add `tui` to
+`components.enabled` to activate it. It projects captured
+exchanges from the journal and runtime notifications from the event bus; it
+does not read configuration or traffic-rule services directly.
+
+## Configuration
+
+Load a JSON runtime configuration with `--config`:
 
 ```bash
-poetry run proxyscope --no-ui
+poetry run proxyscope --config ./runtime-config.json
 ```
 
-Available CLI options:
-
-- `--host <ip-or-hostname>`
-- `--port <port>`
-- `--config <path>`
-- `--mitm on|off`
-- `--certs-dir <path>`
-- `--no-ui`
-
-## Use Proxy With A Client
-
-Example with `curl`:
-
-```bash
-curl -x http://127.0.0.1:8080 http://httpbin.org/get
-curl -x http://127.0.0.1:8080 https://httpbin.org/get
-```
-
-## Screenshots
-
-### Overview
-
-![Runtime overview](docs/screenshots/01-overview.svg)
-
-### Request Detail
-
-![Request detail view](docs/screenshots/02-request-detail.svg)
-
-### Policies View
-
-![Policies sidebar](docs/screenshots/03-policies.svg)
-
-Regenerate screenshots:
-
-```bash
-poetry run python scripts/generate_readme_screenshots.py
-```
-
-## Runtime Commands (TUI)
-
-- `help`, `?`
-- `clear`
-- `sites`
-- `loglevel <DEBUG|INFO|WARNING|ERROR>`
-- `filter [show|clear|host|method|status|text] ...`
-- `find <text>`
-- `find clear`
-- `export <json|har> <path>`
-- `session <save|load> <path>`
-- `mitm [show|on|off|certs-dir <path>]`
-- `whitelist [show|add|remove|clear] ...`
-- `cache [show|on|off|toggle]`
-- `config [show|save [path]|reload]`
-- `policy [show|add-editor|add-editor-prefix|remove-editor|clear-editor|add-static|add-static-prefix|set-priority|edit|remove|enable|disable] ...`
-- `quit`, `exit`, `q`
-
-## Keyboard Shortcuts (TUI)
-
-- `:`: Open command prompt
-- `Enter`: Open request detail, open selected policy in the editor, or submit the command prompt
-- `Tab` / `Shift+Tab`: Cycle focus through panes in the current view
-- `Shift+1`: Open Requests view
-- `Shift+2`: Open Sites/Policies view
-- `Shift+S`: Open Sites tab
-- `Shift+P`: Open Policies tab
-- `Shift+B`: Close request detail
-- `Shift+V`: Toggle request detail width between 1/3 and 1/2
-- `Shift+M`: Create an editor policy from the selected request
-- `Shift+R`: Edit and resend the selected request
-- `Shift+T`: Follow the newest request at the top
-- `Shift+A` / `Shift+U`: Add/remove selected site to/from whitelist
-- `Shift+D` / `Shift+E`: Disable/enable selected policy
-- `Shift+I`: Open selected policy in external editor
-- `Shift+X`: Remove selected policy
-
-## Static Configuration (`runtime-config.json`)
-
-The file can be loaded at startup via `--config`.  
-If a `config_path` is attached, many runtime changes are automatically persisted to this file.
-
-Example:
+A minimal configuration is:
 
 ```json
 {
   "schema_version": 1,
-  "settings": {
-    "log_level": "INFO",
-    "log_whitelist": ["api.example.com", "service.internal"],
-    "cache_invalidation_enabled": true,
-    "mitm_enabled": true,
-    "mitm_certs_dir": "certs"
-  },
-  "policy_shortcuts": [
-    {
-      "name": "health-static",
-      "match": "GET https://service.internal/health",
-      "priority": 20,
-      "respond": {
-        "status": 200,
-        "headers": {
-          "Cache-Control": "no-store"
-        },
-        "json": {
-          "status": "ok",
-          "source": "proxyscope"
-        }
-      }
-    },
-    {
-      "name": "edit-login-response",
-      "match": "POST https://api.example.com/v1/login*",
-      "priority": 10,
-      "action": "open_editor"
-    }
-  ]
+  "settings": {}
 }
 ```
 
-`policy_shortcuts` is intended for demos and replay setups. A trailing `*`
-creates a prefix match. Static responses support `respond.body` or
-`respond.json`. When the config is saved, shortcuts are converted to the
-canonical typed `policies` format.
+Ready-to-run files are available as
+[minimal configuration](examples/runtime-config.minimal.json) and
+[complete configuration](examples/runtime-config.maximal.json).
 
-Files without `schema_version` use the previous format and are migrated
-automatically when next saved.
+Only the current configuration format is supported; there is no automatic legacy
+migration. Static responses belong to traffic rules. Mock scenarios define their
+own static responses, which the mockserver projects to runtime traffic rules.
 
-Start with file:
+`traffic_rules` and `event_store` are global runtime concerns and therefore
+live at the configuration root. `components` only contains activation and
+component-owned configuration payloads.
 
-```bash
-poetry run proxyscope --config ./runtime-config.json
+The [configuration package](proxyscope/application/configuration) defines the
+runtime validation, defaults, and persistence. The machine-readable
+[JSON Schema](schemas/runtime-config.schema.json) describes the canonical file
+format. `components.configurations` reserves a JSON-object payload for each
+component; each component owns the syntax of its own payload. Mockserver
+scenarios belong in `components.configurations.mockserver`, as described by its
+[component schema](proxyscope/components/mockserver/config.schema.json). See the
+[traffic-rule tests](tests/application/traffic_rules/test_traffic_rule_service.py)
+for executable examples. Changes made through services that save configuration
+are persisted when a configuration path is attached.
+
+For example, a mockserver scenario is configured as:
+
+```json
+{
+  "components": {
+    "configurations": {
+      "mockserver": {
+        "scenarios": [
+          {
+            "id": "offline",
+            "name": "Offline API",
+            "enabled": false,
+            "responses": [
+              {"id": "health", "method": "GET", "url": "https://api.example.test/health", "status": 503, "body": "offline"}
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
 ```
 
-## MITM / Certificates
+## HTTPS Interception
 
-On startup, proxyscope automatically creates missing CA files under `<mitm_certs_dir>/ca`.  
-For HTTPS interception, the root certificate `<mitm_certs_dir>/ca/mitm-ca.crt` must be trusted by your client/browser.
+For TLS interception, the client must trust the generated root certificate at
+`<mitm_certs_dir>/ca/mitm-ca.crt`. Certificate material is created when MITM is
+initialized. Use `--mitm off` to run HTTPS tunnels without interception.
 
-## Tests
+## Architecture
+
+See [Architecture](docs/architecture/README.md) for module responsibilities,
+dependency boundaries, request processing, and component integration.
+
+## Development Checks
+
+The test suite contains both unittest-style and pytest-style tests; use pytest
+to run the complete suite. If pytest is missing from the Poetry environment,
+install it there with `poetry run python -m pip install pytest`.
 
 ```bash
-poetry run python -m unittest discover -s tests -p "test_*.py" -v
-```
-
-## Architecture And Quality Checks
-
-The current architecture, module boundaries, and refactoring roadmap are
-documented under [`docs/architecture/`](docs/architecture/README.md).
-
-Run the local quality gates:
-
-```bash
-poetry check
-poetry run ruff format --check proxyscope tests scripts
+poetry run python -m pytest tests
 poetry run ruff check proxyscope tests scripts
 poetry run pyright
-poetry run coverage run -m unittest discover -s tests -p "test_*.py"
-poetry run coverage report
-poetry build
 ```
+
+Architecture boundaries are checked in
+[tests/architecture](tests/architecture). The
+[CI workflow](.github/workflows/ci.yml) defines the automation currently in use.
 
 ## License
 

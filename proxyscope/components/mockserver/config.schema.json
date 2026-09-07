@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxyscope.dev/components/mockserver/config.schema.json",
+  "title": "proxyscope mockserver component configuration",
+  "description": "The value of components.configurations.mockserver in a proxyscope runtime configuration.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "scenarios": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/scenario"}
+    }
+  },
+  "$defs": {
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "enabled": {"type": "boolean"},
+        "responses": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/response"}
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "method", "url"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "method": {"type": "string", "minLength": 1},
+        "url": {"type": "string", "minLength": 1},
+        "status": {"type": "integer", "minimum": 100, "maximum": 599},
+        "reason": {"type": "string", "minLength": 1},
+        "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+        "body": {"type": "string"}
+      }
+    }
+  }
+}

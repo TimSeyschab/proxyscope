@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxyscope.dev/schemas/runtime-config.schema.json",
+  "title": "proxyscope runtime configuration",
+  "description": "Configuration format accepted by proxyscope schema version 1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "settings"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "settings": {"$ref": "#/$defs/settings"},
+    "event_store": {"$ref": "#/$defs/event_store"},
+    "traffic_rules": {"type": "array", "items": {"$ref": "#/$defs/traffic_rule"}},
+    "components": {"$ref": "#/$defs/components"}
+  },
+  "$defs": {
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "log_level": {"enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
+        "log_whitelist": {"type": "array", "items": {"type": "string"}},
+        "cache_invalidation_enabled": {"type": "boolean"},
+        "mitm_enabled": {"type": "boolean"},
+        "mitm_certs_dir": {"type": "string", "minLength": 1}
+      }
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/component_id"}
+        },
+        "configurations": {
+          "description": "Component-owned JSON objects. Each component validates its own payload.",
+          "type": "object",
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9_-]*$": {"type": "object"}
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "component_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+    "event_store": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "path": {"type": "string", "minLength": 1},
+        "max_body_bytes": {"type": "integer", "minimum": 1},
+        "max_events": {"type": ["integer", "null"], "minimum": 1},
+        "max_age_days": {"type": ["integer", "null"], "minimum": 1},
+        "max_storage_bytes": {"type": ["integer", "null"], "minimum": 1},
+        "queue_size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "traffic_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "phase", "action"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "enabled": {"type": "boolean"},
+        "priority": {"type": "integer"},
+        "phase": {"enum": ["request", "respond", "response"]},
+        "match": {"$ref": "#/$defs/traffic_match"},
+        "action": {"$ref": "#/$defs/traffic_action"}
+      }
+    },
+    "traffic_match": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "methods": {"type": "array", "items": {"type": "string"}},
+        "url": {"type": ["string", "null"]},
+        "prefix": {"type": "boolean"},
+        "regex": {"type": "boolean"},
+        "host": {"type": ["string", "null"]},
+        "status": {"type": ["integer", "null"]},
+        "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+        "content_type": {"type": ["string", "null"]}
+      }
+    },
+    "traffic_action": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["type"], "properties": {"type": {"const": "open_editor"}}},
+        {"type": "object", "additionalProperties": false, "required": ["type"], "properties": {"type": {"const": "respond"}, "status": {"type": "integer"}, "reason": {"type": "string"}, "headers": {"type": "object", "additionalProperties": {"type": "string"}}, "body_base64": {"type": "string", "contentEncoding": "base64"}}},
+        {"type": "object", "additionalProperties": false, "required": ["type", "pattern"], "properties": {"type": {"const": "rewrite_body"}, "pattern": {"type": "string", "minLength": 1, "maxLength": 512}, "replacement": {"type": "string", "maxLength": 8192}, "flags": {"type": "integer"}, "max_matches": {"type": "integer", "minimum": 1, "maximum": 1000}, "allow_compressed": {"type": "boolean"}}},
+        {"type": "object", "additionalProperties": false, "required": ["type", "name", "value"], "properties": {"type": {"enum": ["set_header", "replace_header"]}, "name": {"type": "string", "minLength": 1}, "value": {"type": "string"}}},
+        {"type": "object", "additionalProperties": false, "required": ["type", "name"], "properties": {"type": {"const": "remove_header"}, "name": {"type": "string", "minLength": 1}}}
+      ]
+    }
+  }
+}

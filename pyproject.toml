@@ -30,10 +30,11 @@ dependencies = [
 'Issue Tracker' = 'https://github.com/TimSeyschab/proxyscope/issues'
 
 [project.scripts]
-proxyscope = "proxyscope.app.main:main"
+proxyscope = "proxyscope.bootstrap.cli:main"
 
 [tool.poetry]
 packages = [{ include = "proxyscope" }]
+include = ["schemas/runtime-config.schema.json", "proxyscope/components/mockserver/config.schema.json"]
 
 
 [build-system]
@@ -42,9 +43,11 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
+    "pytest (>=8.0.0,<10.0.0)",
     "ruff (>=0.15.16,<0.16.0)",
     "pyright (>=1.1.410,<2.0.0)",
-    "coverage (>=7.14.1,<8.0.0)"
+    "coverage (>=7.14.1,<8.0.0)",
+    "jsonschema (>=4.25.0,<5.0.0)"
 ]
 
 [tool.ruff]
@@ -60,6 +63,10 @@ pythonVersion = "3.13"
 typeCheckingMode = "basic"
 reportMissingImports = false
 reportMissingModuleSource = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["backup"]
 
 [tool.coverage.run]
 source = ["proxyscope"]

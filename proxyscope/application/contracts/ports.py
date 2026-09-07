@@ -1,0 +1,49 @@
+from collections import Counter
+from contextlib import AbstractContextManager
+from typing import Callable, Protocol, runtime_checkable
+
+from proxyscope.application.journal import LoggedExchange
+from proxyscope.application.requests import RequestWindow
+
+SuspendUI = Callable[[], AbstractContextManager[None]]
+
+
+@runtime_checkable
+class RequestUseCases(Protocol):
+    @property
+    def filter_summary(self) -> str: ...
+
+    def list_entries(self) -> list[LoggedExchange]: ...
+
+    def list_all_entries(self) -> list[LoggedExchange]: ...
+
+    def list_window(self, *, cursor: int, limit: int) -> RequestWindow: ...
+
+    def clear(self) -> str: ...
+
+    def apply_filter(self, arguments: list[str]) -> str: ...
+
+    def find(self, arguments: list[str]) -> str: ...
+
+    def record_site_visit(self, host: str) -> None: ...
+
+    def site_counter(self) -> Counter[str]: ...
+
+    def site_names(self) -> list[str]: ...
+
+    def top_sites_summary(self, *, limit: int = 5) -> str: ...
+
+
+@runtime_checkable
+class SessionUseCases(Protocol):
+    def export(self, arguments: list[str]) -> str: ...
+
+    def session(self, arguments: list[str]) -> str: ...
+
+
+@runtime_checkable
+class SettingsUseCases(Protocol):
+    def add_whitelist_entry(self, value: str) -> str: ...
+
+    def remove_whitelist_entry(self, value: str) -> str: ...
+

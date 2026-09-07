@@ -1,0 +1,251 @@
+from typing import Callable
+
+from proxyscope.adapters.tui.components.contracts import ComponentFocus
+from proxyscope.adapters.tui.models import DetailTab, RuntimeScreenModel, RuntimeView
+from proxyscope.adapters.tui.navigation import RuntimeUINavigationService
+from proxyscope.adapters.tui.presenter import build_runtime_screen_model
+from proxyscope.adapters.tui.state import RuntimeUIViewState
+from proxyscope.adapters.tui.ui_controller import SuspendUI
+from proxyscope.application.commands import CommandRegistry
+from proxyscope.application.contracts import RequestPolicyAction, RequestPolicyTarget
+from proxyscope.application.services import RuntimeApplicationServices
+from proxyscope.application.shortcuts import ShortcutRegistry
+
+REQUEST_LIST_WINDOW_SIZE = 250
+
+
+class RuntimeController:
+    def __init__(
+        self,
+        *,
+        application_services: RuntimeApplicationServices,
+        command_registry: CommandRegistry,
+        shortcut_registry: ShortcutRegistry,
+        on_log_level_change: Callable[[int], None] | None = None,
+    ) -> None:
+        self._on_log_level_change = on_log_level_change
+        self._view_state = RuntimeUIViewState()
+        self._ui_navigation = RuntimeUINavigationService(self._view_state)
+        self._services = application_services
+        self._command_registry = command_registry
+        self._shortcut_registry = shortcut_registry
+
+    @property
+    def should_exit(self) -> bool:
+        return self._view_state.should_exit
+
+    @property
+    def shortcut_registry(self) -> ShortcutRegistry:
+        return self._shortcut_registry
+
+    def set_status_message(self, message: str) -> None:
+        self._view_state.status_message = message
+
+    def set_active_focus(self, focus: ComponentFocus) -> None:
+        self._ui_navigation.set_active_focus(focus)
+
+    def switch_view(self, view: RuntimeView) -> None:
+        self._ui_navigation.switch_view(view)
+
+    def select_request(self, cursor: int) -> None:
+        if self._view_state.request_follow_top and cursor != 0:
+            self._view_state.request_follow_top = False
+        self._ui_navigation.select_request(self._services.requests.list_entries(), cursor)
+
+    def toggle_request_follow_top(self) -> None:
+        self._view_state.request_follow_top = not self._view_state.request_follow_top
+        if self._view_state.request_follow_top:
+            self._ui_navigation.select_request(self._services.requests.list_entries(), 0)
+            self._view_state.status_message = "Request list follows the newest request."
+            return
+        self._view_state.status_message = "Request list keeps the selected request stable."
+
+    def open_selected_request_detail(self) -> None:
+        if not self._ui_navigation.open_selected_request_detail(self._services.requests.list_entries()):
+            self._view_state.status_message = "No requests available."
+
+    def select_detail_tab(self, tab: DetailTab) -> None:
+        self._ui_navigation.select_detail_tab(tab)
+
+    def toggle_detail_ratio(self) -> None:
+        self._ui_navigation.toggle_detail_ratio()
+        ratio = self._view_state.detail_ratio
+        ratio_text = "1/2" if ratio == "half" else "1/3"
+        self._view_state.status_message = f"Detail width set to {ratio_text}."
+
+    def select_aux_tab(self, tab_key: str) -> None:
+        self._ui_navigation.select_aux_tab(tab_key)
+
+    def select_aux_item(self, cursor: int) -> None:
+        self._ui_navigation.select_aux_item(cursor)
+
+    def go_back(self) -> None:
+        if not self._ui_navigation.go_back():
+            self._view_state.status_message = "Nothing to close."
+
+    def add_selected_site_to_whitelist(self) -> None:
+        selected = self._selected_site()
+        if not selected:
+            self._view_state.status_message = "No site selected."
+            return
+        self._view_state.status_message = self._services.settings.add_whitelist_entry(selected)
+
+    def remove_selected_site_from_whitelist(self) -> None:
+        selected = self._selected_site()
+        if not selected:
+            self._view_state.status_message = "No site selected."
+            return
+        self._view_state.status_message = self._services.settings.remove_whitelist_entry(selected)
+
+    def enable_selected_policy(self) -> None:
+        if not self._ensure_policy_tab_active():
+            return
+        self._view_state.status_message = self._services.policies.set_enabled(
+            self._selected_policy_name(),
+            enabled=True,
+        )
+
+    def disable_selected_policy(self) -> None:
+        if not self._ensure_policy_tab_active():
+            return
+        self._view_state.status_message = self._services.policies.set_enabled(
+            self._selected_policy_name(),
+            enabled=False,
+        )
+
+    def remove_selected_policy(self) -> None:
+        if not self._ensure_policy_tab_active():
+            return
+        self._view_state.status_message = self._services.policies.remove(self._selected_policy_name())
+
+    def edit_selected_policy(self, *, suspend_ui: SuspendUI | None = None) -> None:
+        if not self._ensure_policy_tab_active():
+            return
+        self._view_state.status_message = self._services.policies.edit(
+            self._selected_policy_name(),
+            suspend_ui=suspend_ui,
+        )
+
+    def add_selected_request_to_editor_policy(self, *, suspend_ui: SuspendUI | None = None) -> None:
+        self.apply_selected_request_policy_action(
+            target="response",
+            action="open_editor_policy",
+            suspend_ui=suspend_ui,
+        )
+
+    def selected_request_has_response(self) -> bool:
+        selected = self._ui_navigation.selected_request(self._services.requests.list_entries())
+        return selected is not None and selected.response is not None
+
+    def apply_selected_request_policy_action(
+        self,
+        *,
+        target: RequestPolicyTarget,
+        action: RequestPolicyAction,
+        suspend_ui: SuspendUI | None = None,
+    ) -> None:
+        selected = self._ui_navigation.selected_request(self._services.requests.list_entries())
+        if selected is None:
+            self._view_state.status_message = "No request selected."
+            return
+        if target == "request":
+            self._view_state.status_message = "Request policies are not available yet."
+            return
+        if action == "open_editor_policy":
+            self._view_state.status_message = self._services.policies.add_response_editor_policy_for_request(
+                selected,
+                suspend_ui=suspend_ui,
+            )
+            return
+        if action == "static_response_policy":
+            self._view_state.status_message = self._services.policies.add_static_response_policy_for_request(
+                selected,
+                suspend_ui=suspend_ui,
+            )
+            return
+        self._view_state.status_message = "Policy action is not available."
+
+    def replay_selected_request(self, *, suspend_ui: SuspendUI | None = None) -> None:
+        selected = self._ui_navigation.selected_request(self._services.requests.list_entries())
+        if selected is None:
+            self._view_state.status_message = "No request selected."
+            return
+        self._view_state.status_message = self._services.replay.replay(selected, suspend_ui=suspend_ui)
+
+    def process_pending_actions(self, *, suspend_ui: SuspendUI | None = None) -> None:
+        message = self._services.policies.process_pending_edit(suspend_ui=suspend_ui)
+        if message is not None:
+            self._view_state.status_message = message
+        message = self._services.response_edits.process_pending_edit(suspend_ui=suspend_ui)
+        if message is not None:
+            self._view_state.status_message = message
+
+    def record_site_visit(self, host: str) -> None:
+        self._services.requests.record_site_visit(host)
+
+    def execute_command(self, command: str) -> bool:
+        normalized = command.strip()
+        if not normalized:
+            return False
+
+        result = self._command_registry.dispatch(normalized)
+        if result is None:
+            self._view_state.status_message = f"Unknown command: {command}"
+            return False
+        if result.requests_changed:
+            self._reset_request_view_after_filter_change()
+        if result.updated_log_level is not None and self._on_log_level_change is not None:
+            self._on_log_level_change(result.updated_log_level)
+        self._view_state.status_message = result.status_message
+        self._view_state.should_exit = result.should_exit
+        return result.should_exit
+
+    def execute_shortcut_command(self, command: str) -> str | None:
+        result = self._command_registry.dispatch(command)
+        if result is None:
+            return None
+        return result.ui_action
+
+    def is_help_command(self, command: str) -> bool:
+        return self._command_registry.contains(command, command_name="help")
+
+    def build_help_text(self) -> str:
+        return self._command_registry.build_help_text() + "\n\n" + self._shortcut_registry.build_help_text()
+
+    def _reset_request_view_after_filter_change(self) -> None:
+        self._ui_navigation.reset_request_view(has_entries=bool(self._services.requests.list_entries()))
+
+    def _ordered_policy_items(self) -> list[tuple[str, str]]:
+        return [(item.name, item.description) for item in self._services.runtime_view.policy_items()]
+
+    def _selected_site(self) -> str | None:
+        return self._ui_navigation.selected_site(self._services.requests.site_names())
+
+    def _selected_policy_name(self) -> str | None:
+        policy_names = [name for name, _description in self._ordered_policy_items()]
+        return self._ui_navigation.selected_policy_name(policy_names)
+
+    def _ensure_policy_tab_active(self) -> bool:
+        if self._ui_navigation.is_policy_tab_active():
+            return True
+        self._view_state.status_message = "Open Policies tab first (Shift+2, Shift+P)."
+        return False
+
+    def build_screen_model(self) -> "RuntimeScreenModel":
+        entries = self._services.requests.list_entries()
+        self._ui_navigation.sync_request_selection(entries, follow_top=self._view_state.request_follow_top)
+        request_window = self._services.requests.list_window(
+            cursor=self._view_state.request_cursor,
+            limit=REQUEST_LIST_WINDOW_SIZE,
+        )
+
+        policy_items = [description for _name, description in self._ordered_policy_items()]
+        self._ui_navigation.clamp_policy_cursor(len(policy_items))
+
+        return build_runtime_screen_model(
+            state=self._view_state,
+            runtime_status=self._services.runtime_view.status(),
+            request_window=request_window,
+            site_counter=self._services.requests.site_counter(),
+            policy_items=policy_items,
+        )

@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from threading import RLock
 
-from proxyscope.config.settings import RuntimeSettings, normalize_whitelist_entry
+from proxyscope.application.configuration.models import RuntimeSettings, normalize_whitelist_entry
 
 
 class RuntimeSettingsState:
@@ -58,17 +58,19 @@ class RuntimeSettingsState:
 
     def add_whitelist_entry(self, value: str) -> str:
         normalized_host = normalize_whitelist_entry(value)
-        entries = tuple(sorted(set(self.snapshot.log_whitelist) | {normalized_host}))
-        self._replace(log_whitelist=entries)
+        with self._lock:
+            entries = tuple(sorted(set(self._settings.log_whitelist) | {normalized_host}))
+            self._replace(log_whitelist=entries)
         return normalized_host
 
     def remove_whitelist_entry(self, value: str) -> bool:
         normalized_host = normalize_whitelist_entry(value)
-        entries = set(self.snapshot.log_whitelist)
-        if normalized_host not in entries:
-            return False
-        entries.remove(normalized_host)
-        self._replace(log_whitelist=tuple(sorted(entries)))
+        with self._lock:
+            entries = set(self._settings.log_whitelist)
+            if normalized_host not in entries:
+                return False
+            entries.remove(normalized_host)
+            self._replace(log_whitelist=tuple(sorted(entries)))
         return True
 
     def clear_whitelist(self) -> None:
@@ -91,7 +93,8 @@ class RuntimeSettingsState:
         return enabled
 
     def toggle_cache_invalidation(self) -> bool:
-        return self.set_cache_invalidation_enabled(not self.cache_invalidation_enabled)
+        with self._lock:
+            return self.set_cache_invalidation_enabled(not self._settings.cache_invalidation_enabled)
 
     @property
     def mitm_enabled(self) -> bool:

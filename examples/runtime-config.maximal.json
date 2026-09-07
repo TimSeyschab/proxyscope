@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "settings": {
+    "log_level": "INFO",
+    "log_whitelist": ["api.example.test"],
+    "cache_invalidation_enabled": true,
+    "mitm_enabled": true,
+    "mitm_certs_dir": "certs"
+  },
+  "event_store": {
+    "enabled": true,
+    "path": ".proxyscope/events.sqlite3",
+    "max_body_bytes": 8192,
+    "max_events": 10000,
+    "max_age_days": 30,
+    "max_storage_bytes": 104857600,
+    "queue_size": 256
+  },
+  "traffic_rules": [
+    {
+      "id": "local-health",
+      "name": "Local health response",
+      "enabled": true,
+      "priority": 100,
+      "phase": "respond",
+      "match": {
+        "methods": ["GET"],
+        "url": "https://api.example.test/health"
+      },
+      "action": {
+        "type": "respond",
+        "status": 200,
+        "reason": "OK",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body_base64": "eyJzdGF0dXMiOiAib2sifQ=="
+      }
+    },
+    {
+      "id": "request-header",
+      "name": "Add request trace header",
+      "enabled": true,
+      "priority": 10,
+      "phase": "request",
+      "match": {
+        "host": "api.example.test"
+      },
+      "action": {
+        "type": "set_header",
+        "name": "X-Proxy-Trace",
+        "value": "proxyscope"
+      }
+    },
+    {
+      "id": "response-rewrite",
+      "name": "Rewrite response marker",
+      "enabled": true,
+      "priority": 10,
+      "phase": "response",
+      "match": {
+        "content_type": "application/json"
+      },
+      "action": {
+        "type": "rewrite_body",
+        "pattern": "\"internal\"",
+        "replacement": "\"public\"",
+        "flags": 0,
+        "max_matches": 100,
+        "allow_compressed": false
+      }
+    },
+    {
+      "id": "response-header",
+      "name": "Add response source header",
+      "enabled": true,
+      "priority": 5,
+      "phase": "response",
+      "match": {
+        "status": 200
+      },
+      "action": {
+        "type": "set_header",
+        "name": "X-Response-Source",
+        "value": "proxyscope"
+      }
+    },
+    {
+      "id": "edit-profile",
+      "name": "Open response editor for profile",
+      "enabled": false,
+      "priority": 0,
+      "phase": "response",
+      "match": {
+        "methods": ["GET"],
+        "url": "https://api.example.test/profile"
+      },
+      "action": {
+        "type": "open_editor"
+      }
+    }
+  ],
+  "components": {
+    "enabled": ["core", "mockserver", "tui"],
+    "configurations": {
+      "mockserver": {
+        "scenarios": [
+          {
+            "id": "offline",
+            "name": "Offline API",
+            "enabled": true,
+            "responses": [
+              {
+                "id": "catalog",
+                "method": "GET",
+                "url": "https://api.example.test/catalog",
+                "status": 503,
+                "reason": "Service Unavailable",
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Retry-After": "60"
+                },
+                "body": "{\"error\": \"offline\"}"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -20,9 +20,9 @@ class ModuleGroup:
 
 MODULE_GROUPS = (
     ModuleGroup(
-        key="app",
-        prefixes=("proxyscope.app",),
-        label="proxyscope.app",
+        key="bootstrap",
+        prefixes=("proxyscope.bootstrap",),
+        label="proxyscope.bootstrap",
         description="Executable entry point, lifecycle coordination, runtime object graph creation, and composition.",
         debt=(
             "Lifecycle orchestration is now separated from object graph creation. The remaining risk is that "
@@ -233,8 +233,8 @@ def _render_import_graph(edges: set[tuple[str, str]]) -> list[str]:
 def _runtime_composition_graph() -> list[str]:
     return [
         "flowchart TD",
-        '    app_main["proxyscope.app.main<br/>CLI parsing"]',
-        '    app_lifecycle["ProxyApplication<br/>lifecycle and shutdown"]',
+        '    bootstrap_cli["proxyscope.bootstrap.cli<br/>CLI parsing"]',
+        '    bootstrap_lifecycle["ProxyApplication<br/>lifecycle and shutdown"]',
         '    runtime_graph["RuntimeObjectGraph<br/>explicit composed dependencies"]',
         '    config_repo["JsonConfigRepository<br/>ConfigDocument"]',
         '    runtime_state["RuntimeSettingsState<br/>PolicyAdministrationService<br/>RequestJournal<br/>ResponseModifierService"]',
@@ -243,8 +243,8 @@ def _runtime_composition_graph() -> list[str]:
         '    proxy_server["ProxyHTTPServer<br/>plain HTTP and CONNECT"]',
         '    mitm_adapter["MitmTLSInterceptor<br/>optional TLS interception"]',
         '    tui_adapter["RuntimeCLI / Textual<br/>optional UI adapter"]',
-        "    app_main --> app_lifecycle",
-        "    app_lifecycle --> runtime_graph",
+        "    bootstrap_cli --> bootstrap_lifecycle",
+        "    bootstrap_lifecycle --> runtime_graph",
         "    runtime_graph --> config_repo",
         "    runtime_graph --> runtime_state",
         "    runtime_state --> app_services",
@@ -253,7 +253,7 @@ def _runtime_composition_graph() -> list[str]:
         "    proxy_context --> mitm_adapter",
         "    app_services --> tui_adapter",
         "    runtime_graph --> proxy_server",
-        "    app_lifecycle --> tui_adapter",
+        "    bootstrap_lifecycle --> tui_adapter",
     ]
 
 
