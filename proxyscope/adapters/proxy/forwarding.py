@@ -7,6 +7,7 @@ from proxyscope.application.processing.ports import (
     STREAM_CHUNK_SIZE,
     ForwardRequest,
     ForwardResponse,
+    UpstreamForwardingError,
     capture_body_preview,
 )
 
@@ -16,6 +17,7 @@ __all__ = [
     "ForwardRequest",
     "ForwardResponse",
     "UpstreamForwarder",
+    "UpstreamForwardingError",
     "capture_body_preview",
     "resolve_target_url",
 ]

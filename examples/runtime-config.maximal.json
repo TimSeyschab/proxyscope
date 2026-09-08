@@ -2,9 +2,11 @@
   "schema_version": 1,
   "settings": {
     "log_level": "INFO",
-    "log_whitelist": ["api.example.test"],
+    "log_whitelist": [
+      "api.example.test"
+    ],
     "cache_invalidation_enabled": true,
-    "mitm_enabled": true,
+    "mitm_enabled": false,
     "mitm_certs_dir": "certs"
   },
   "event_store": {
@@ -24,8 +26,16 @@
       "priority": 100,
       "phase": "respond",
       "match": {
-        "methods": ["GET"],
-        "url": "https://api.example.test/health"
+        "methods": [
+          "GET"
+        ],
+        "url": "https://api.example.test/health",
+        "prefix": false,
+        "regex": false,
+        "host": null,
+        "status": null,
+        "headers": {},
+        "content_type": null
       },
       "action": {
         "type": "respond",
@@ -44,7 +54,14 @@
       "priority": 10,
       "phase": "request",
       "match": {
-        "host": "api.example.test"
+        "methods": [],
+        "url": null,
+        "prefix": false,
+        "regex": false,
+        "host": "api.example.test",
+        "status": null,
+        "headers": {},
+        "content_type": null
       },
       "action": {
         "type": "set_header",
@@ -59,6 +76,13 @@
       "priority": 10,
       "phase": "response",
       "match": {
+        "methods": [],
+        "url": null,
+        "prefix": false,
+        "regex": false,
+        "host": null,
+        "status": null,
+        "headers": {},
         "content_type": "application/json"
       },
       "action": {
@@ -77,7 +101,14 @@
       "priority": 5,
       "phase": "response",
       "match": {
-        "status": 200
+        "methods": [],
+        "url": null,
+        "prefix": false,
+        "regex": false,
+        "host": null,
+        "status": 200,
+        "headers": {},
+        "content_type": null
       },
       "action": {
         "type": "set_header",
@@ -92,8 +123,16 @@
       "priority": 0,
       "phase": "response",
       "match": {
-        "methods": ["GET"],
-        "url": "https://api.example.test/profile"
+        "methods": [
+          "GET"
+        ],
+        "url": "https://api.example.test/profile",
+        "prefix": false,
+        "regex": false,
+        "host": null,
+        "status": null,
+        "headers": {},
+        "content_type": null
       },
       "action": {
         "type": "open_editor"
@@ -101,7 +140,11 @@
     }
   ],
   "components": {
-    "enabled": ["core", "mockserver", "tui"],
+    "enabled": [
+      "core",
+      "mockserver",
+      "tui"
+    ],
     "configurations": {
       "mockserver": {
         "scenarios": [

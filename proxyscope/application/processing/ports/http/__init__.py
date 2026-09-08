@@ -7,6 +7,7 @@ from proxyscope.application.processing.ports.http.forwarding import (
     ForwardResponse,
     ForwardResponseStream,
     StreamingForwarder,
+    UpstreamForwardingError,
     capture_body_preview,
 )
 from proxyscope.application.processing.ports.http.response import ResponseTransformer
@@ -22,6 +23,7 @@ __all__ = [
     "ForwardResponseStream",
     "Forwarder",
     "TrafficRuleEvaluator",
+    "UpstreamForwardingError",
     "ResponseTransformer",
     "StaticResponse",
     "StreamingForwarder",

@@ -7,7 +7,7 @@ import unittest
 
 from proxyscope.adapters.proxy.server import create_server
 from proxyscope.application.journal import RequestJournal
-from proxyscope.application.processing.ports import ForwardRequest, ForwardResponse
+from proxyscope.application.processing.ports import ForwardRequest, ForwardResponse, UpstreamForwardingError
 from proxyscope.application.response_edits import ResponseModifierService
 from proxyscope.bootstrap.composition import create_proxy_runtime_context
 from tests.support.runtime_context import RuntimeTestContext, processing_dependencies
@@ -267,6 +267,29 @@ class TestRequestLoggingServer(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(data, b'{"source":"rule"}')
         self.assertEqual(forwarder.calls, 0)
+
+    def test_upstream_connection_error_returns_502(self) -> None:
+        class FailingForwarder:
+            def forward(self, _request: ForwardRequest) -> ForwardResponse:
+                raise UpstreamForwardingError("unreachable")
+
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            runtime_context=self.runtime_context,
+            forwarder=FailingForwarder(),
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+
+        status, data = self._request("GET", "http://example.test/health", headers={"Host": "example.test"})
+
+        self.assertEqual(status, 502)
+        self.assertEqual(data, b"Upstream connection failed.\n")
 
     def test_static_response_rule_skips_editor_modifier(self) -> None:
         self.server.shutdown()

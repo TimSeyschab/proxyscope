@@ -22,6 +22,7 @@ class CapturedResponse:
     headers: tuple[tuple[str, str], ...]
     body: bytes | None
     body_size: int | None
+    start_line: str = ""
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,15 @@ class CapturedExchange:
     method: str
     url: str | None
     response: CapturedResponse | None
+    path: str = ""
+    start_line: str = ""
+    headers: tuple[tuple[str, str], ...] = ()
+    body: bytes | None = None
+    client_ip: str = ""
+    target_host: str | None = None
+    target_port: int | None = None
+    protocol: str = "http"
+    duration_ms: float | None = None
 
 
 class ComponentJournal(Protocol):

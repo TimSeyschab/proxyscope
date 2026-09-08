@@ -29,7 +29,17 @@ def _capture(entry: LoggedExchange) -> CapturedExchange:
             headers=response.headers,
             body=response.body,
             body_size=response.body_size,
+            start_line=response.start_line,
         ),
+        path=entry.request.path,
+        start_line=entry.request.start_line,
+        headers=entry.request.headers,
+        body=entry.request.body,
+        client_ip=entry.client_ip,
+        target_host=entry.target_host,
+        target_port=entry.target_port,
+        protocol=entry.protocol,
+        duration_ms=entry.duration_ms,
     )
 
 

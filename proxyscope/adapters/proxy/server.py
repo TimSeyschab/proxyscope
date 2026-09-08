@@ -22,6 +22,7 @@ from proxyscope.application.processing.ports import (
     ForwardRequest,
     ForwardResponse,
     StreamingForwarder,
+    UpstreamForwardingError,
     capture_body_preview,
 )
 from proxyscope.application.proxy.runtime import ProxyRuntimeContext
@@ -233,25 +234,40 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
             headers=exchange.request.headers,
             body=exchange.request.body,
         )
-        if exchange.static_response is not None:
+        try:
+            if exchange.static_response is not None:
+                forward_response = server.runtime_context.exchange_pipeline.process_response(
+                    exchange,
+                    exchange.static_response,
+                )
+            elif isinstance(server.forwarder, StreamingForwarder) and not exchange.requires_buffered_response:
+                forward_response = self._forward_upstream_streaming(
+                    server.forwarder,
+                    forward_request,
+                    send_body=send_body,
+                )
+                server.runtime_context.exchange_pipeline.process_response(
+                    exchange,
+                    forward_response,
+                )
+                return
+            else:
+                forward_response = server.forwarder.forward(forward_request)
+                forward_response = server.runtime_context.exchange_pipeline.process_response(exchange, forward_response)
+        except UpstreamForwardingError:
+            body = b"Upstream connection failed.\n"
             forward_response = server.runtime_context.exchange_pipeline.process_response(
                 exchange,
-                exchange.static_response,
+                ForwardResponse(
+                    status_code=502,
+                    reason="Bad Gateway",
+                    headers={
+                        "Content-Type": "text/plain; charset=utf-8",
+                        "Content-Length": str(len(body)),
+                    },
+                    body=body,
+                ),
             )
-        elif isinstance(server.forwarder, StreamingForwarder) and not exchange.requires_buffered_response:
-            forward_response = self._forward_upstream_streaming(
-                server.forwarder,
-                forward_request,
-                send_body=send_body,
-            )
-            server.runtime_context.exchange_pipeline.process_response(
-                exchange,
-                forward_response,
-            )
-            return
-        else:
-            forward_response = server.forwarder.forward(forward_request)
-            forward_response = server.runtime_context.exchange_pipeline.process_response(exchange, forward_response)
         write_forward_response(self, forward_response, send_body=send_body)
 
     def do_GET(self) -> None:

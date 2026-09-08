@@ -56,7 +56,7 @@ TabPane {
     background: #101315;
 }
 
-#overview-content {
+#traffic-view {
     height: 1fr;
     margin: 0;
     padding: 0;
@@ -69,21 +69,51 @@ TabPane {
     padding: 0 1;
 }
 
-#exchanges,
-#events {
+.pane-title {
+    color: #9eb6bd;
+    text-style: bold;
+    padding: 0 1;
+}
+
+#main-pane {
+    width: 2fr;
+    min-width: 36;
+}
+
+#detail-pane {
     width: 1fr;
+    min-width: 30;
+}
+
+#requests {
     height: 1fr;
-    overflow: auto auto;
+    background: #171c20;
 }
 
-#exchanges {
-    border-right: round #465158;
+#requests > .datatable--cursor,
+#requests:focus > .datatable--cursor {
+    color: #101315;
+    background: #d9a94f;
+    text-style: bold;
 }
 
-#events {
+#detail-tabs {
+    color: #a8ada7;
+    padding: 0 1;
+    border-bottom: solid #2f393e;
+}
+
+#detail-scroll {
+    height: 1fr;
     background: #11161a;
+    padding: 0 1;
 }
 
+#detail-body {
+    padding: 0 1;
+}
+
+#events,
 #settings-content,
 #mockserver-rules-content {
     height: 1fr;

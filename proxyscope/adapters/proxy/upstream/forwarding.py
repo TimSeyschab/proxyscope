@@ -7,6 +7,7 @@ from proxyscope.application.processing.ports import (
     STREAM_CHUNK_SIZE,
     ForwardRequest,
     ForwardResponse,
+    UpstreamForwardingError,
 )
 
 
@@ -52,8 +53,8 @@ class UpstreamForwarder:
 
     def open_stream(self, request: ForwardRequest) -> RequestsForwardResponseStream:
         url = resolve_target_url(request)
-        return RequestsForwardResponseStream(
-            requests.request(
+        try:
+            response = requests.request(
                 request.method,
                 url,
                 headers=request.headers,
@@ -61,7 +62,9 @@ class UpstreamForwarder:
                 timeout=60,
                 stream=True,
             )
-        )
+        except requests.RequestException as exc:
+            raise UpstreamForwardingError(f"Could not reach upstream {url}.") from exc
+        return RequestsForwardResponseStream(response)
 
 
 def resolve_target_url(request: ForwardRequest) -> str:

@@ -21,6 +21,11 @@ def test_journal_adapter_returns_live_snapshots_with_capture_metadata() -> None:
     assert pending is not None
     assert pending.url == "https://api.test:8443/items"
     assert pending.method == "POST"
+    assert pending.path == "/items"
+    assert pending.start_line == "POST /items HTTP/1.1"
+    assert pending.target_host == "api.test"
+    assert pending.target_port == 8443
+    assert pending.protocol == "https"
     assert pending.response is None
 
     journal.complete_request(
@@ -39,6 +44,8 @@ def test_journal_adapter_returns_live_snapshots_with_capture_metadata() -> None:
     assert completed.response.body_size == 10
     assert completed.response.headers == (("Content-Type", "application/octet-stream"),)
     assert completed.response.status_code == 201
+    assert completed.response.start_line == "HTTP/1.1 201 Created"
+    assert completed.duration_ms == 1
     assert pending.response is None
     assert adapter.list_entries() == (completed,)
 

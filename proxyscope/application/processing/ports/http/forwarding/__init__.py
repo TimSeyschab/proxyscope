@@ -9,6 +9,10 @@ BODY_PREVIEW_BYTES = 4096
 ForwardResponse = ExchangeResponse
 
 
+class UpstreamForwardingError(Exception):
+    """The proxy could not establish or maintain an upstream HTTP connection."""
+
+
 @dataclass(frozen=True)
 class ForwardRequest:
     method: str

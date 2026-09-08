@@ -49,6 +49,9 @@ class _FakeSocket:
     def shutdown(self, _how: int) -> None:
         self.shutdown_calls += 1
 
+    def close(self) -> None:
+        return
+
     def getpeername(self) -> tuple[str, int]:
         return ("127.0.0.1", 12345)
 
@@ -188,10 +191,18 @@ class TestMitmTLSInterceptor(unittest.TestCase):
         )
 
     def test_intercept_raises_timeout_for_upstream_connect_timeout(self) -> None:
-        interceptor = MitmTLSInterceptor(certificate_authority=Mock(), runtime_context=self.runtime_context)
+        certificate_authority = Mock()
+        certificate_authority.issue_host_certificate.return_value = ("cert.pem", "key.pem")
+        interceptor = MitmTLSInterceptor(certificate_authority=certificate_authority, runtime_context=self.runtime_context)
         client = _FakeSocket([])
+        client_tls = _FakeSocket([b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"])
+        client_ctx = Mock()
+        client_ctx.wrap_socket.return_value = client_tls
 
-        with patch("proxyscope.adapters.mitm.tunnel.socket.create_connection", side_effect=socket.timeout):
+        with (
+            patch("proxyscope.adapters.mitm.tunnel.socket.create_connection", side_effect=socket.timeout),
+            patch("proxyscope.adapters.mitm.tunnel.ssl.SSLContext", return_value=client_ctx),
+        ):
             with self.assertRaises(ConnectUpstreamTimeoutError):
                 interceptor.intercept(
                     client_socket=client,  # type: ignore[arg-type]
@@ -200,10 +211,18 @@ class TestMitmTLSInterceptor(unittest.TestCase):
                 )
 
     def test_intercept_raises_connection_error_for_upstream_connect_failure(self) -> None:
-        interceptor = MitmTLSInterceptor(certificate_authority=Mock(), runtime_context=self.runtime_context)
+        certificate_authority = Mock()
+        certificate_authority.issue_host_certificate.return_value = ("cert.pem", "key.pem")
+        interceptor = MitmTLSInterceptor(certificate_authority=certificate_authority, runtime_context=self.runtime_context)
         client = _FakeSocket([])
+        client_tls = _FakeSocket([b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"])
+        client_ctx = Mock()
+        client_ctx.wrap_socket.return_value = client_tls
 
-        with patch("proxyscope.adapters.mitm.tunnel.socket.create_connection", side_effect=OSError("no route")):
+        with (
+            patch("proxyscope.adapters.mitm.tunnel.socket.create_connection", side_effect=OSError("no route")),
+            patch("proxyscope.adapters.mitm.tunnel.ssl.SSLContext", return_value=client_ctx),
+        ):
             with self.assertRaises(ConnectUpstreamConnectionError):
                 interceptor.intercept(
                     client_socket=client,  # type: ignore[arg-type]
@@ -212,15 +231,21 @@ class TestMitmTLSInterceptor(unittest.TestCase):
                 )
 
     def test_intercept_raises_connection_error_for_upstream_tls_failure(self) -> None:
-        interceptor = MitmTLSInterceptor(certificate_authority=Mock(), runtime_context=self.runtime_context)
+        certificate_authority = Mock()
+        certificate_authority.issue_host_certificate.return_value = ("cert.pem", "key.pem")
+        interceptor = MitmTLSInterceptor(certificate_authority=certificate_authority, runtime_context=self.runtime_context)
         client = _FakeSocket([])
+        client_tls = _FakeSocket([b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"])
         upstream_tcp = _FakeSocket([])
         upstream_ctx = Mock()
         upstream_ctx.wrap_socket.side_effect = ssl.SSLError("bad tls")
+        client_ctx = Mock()
+        client_ctx.wrap_socket.return_value = client_tls
 
         with (
             patch("proxyscope.adapters.mitm.tunnel.socket.create_connection", return_value=upstream_tcp),
             patch("proxyscope.adapters.mitm.tunnel.ssl.create_default_context", return_value=upstream_ctx),
+            patch("proxyscope.adapters.mitm.tunnel.ssl.SSLContext", return_value=client_ctx),
         ):
             with self.assertRaises(ConnectUpstreamConnectionError):
                 interceptor.intercept(
@@ -270,7 +295,7 @@ class TestMitmTLSInterceptor(unittest.TestCase):
         client = _FakeSocket([])
         upstream_tcp = _FakeSocket([])
         upstream_tls = _FakeSocket([])
-        client_tls = _FakeSocket([])
+        client_tls = _FakeSocket([b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"])
 
         upstream_ctx = Mock()
         upstream_ctx.wrap_socket.return_value = upstream_tls
@@ -293,3 +318,39 @@ class TestMitmTLSInterceptor(unittest.TestCase):
         relay_mock.assert_called_once()
         certificate_authority.issue_host_certificate.assert_called_once_with("example.com")
         client_ctx.load_cert_chain.assert_called_once_with(certfile="cert.pem", keyfile="key.pem")
+
+    def test_intercept_serves_https_static_response_without_an_upstream_connection(self) -> None:
+        config = RuntimeTestContext()
+        config.add_static_response_rule(
+            url="https://example.com/health",
+            status_code=503,
+            reason="Service Unavailable",
+            headers={"Content-Type": "text/plain"},
+            body=b"offline",
+            method="GET",
+        )
+        runtime_context = create_proxy_runtime_context(
+            **processing_dependencies(config),
+            request_journal=RequestJournal(),
+        )
+        certificate_authority = Mock()
+        certificate_authority.issue_host_certificate.return_value = ("cert.pem", "key.pem")
+        interceptor = MitmTLSInterceptor(certificate_authority=certificate_authority, runtime_context=runtime_context)
+        client = _FakeSocket([])
+        client_tls = _FakeSocket([b"GET /health HTTP/1.1\r\nHost: example.com\r\n\r\n"])
+        client_ctx = Mock()
+        client_ctx.wrap_socket.return_value = client_tls
+
+        with (
+            patch("proxyscope.adapters.mitm.tunnel.ssl.SSLContext", return_value=client_ctx),
+            patch("proxyscope.adapters.mitm.tunnel.socket.create_connection") as connect,
+        ):
+            ok = interceptor.intercept(
+                client_socket=client,  # type: ignore[arg-type]
+                target=ConnectTarget(host="example.com", port=443),
+                timeout_s=0.1,
+            )
+
+        self.assertTrue(ok)
+        connect.assert_not_called()
+        self.assertEqual(client_tls.sent, [b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\noffline"])
