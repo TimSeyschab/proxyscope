@@ -62,7 +62,9 @@ class ExchangePipeline:
         )
         if processed.target_host:
             self._runtime_events.on_site_visit(processed.target_host)
-        mock_response = None if self._mock_response_for is None else self._mock_response_for(processed.method, processed.url)
+        mock_response = (
+            None if self._mock_response_for is None else self._mock_response_for(processed.method, processed.url)
+        )
         static_response = None
         if rule_response is not None:
             static_response = rule_response

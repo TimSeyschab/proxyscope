@@ -43,6 +43,8 @@ jobs:
         run: |
           poetry run coverage run -m pytest tests -q
           poetry run coverage report
+          poetry run coverage json -o coverage.json
+          poetry run python scripts/check_branch_coverage.py coverage.json
 
       - name: Build package
         run: poetry build

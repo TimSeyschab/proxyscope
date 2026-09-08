@@ -103,7 +103,7 @@ class HTTP1RequestHeaderRewriter:
             return True
 
         if chunk_size == 0:
-            trailer_end = self._buffer.find(b"\r\n\r\n", line_end + 2)
+            trailer_end = self._buffer.find(b"\r\n\r\n", line_end)
             if trailer_end < 0:
                 return False
             segment_end = trailer_end + 4
@@ -143,4 +143,3 @@ def _rewrite_header_block(
         rebuilt_lines.append(f"{name}: {value}")
     rebuilt = "\r\n".join(rebuilt_lines).encode("iso-8859-1", errors="replace") + b"\r\n\r\n"
     return rebuilt, rewritten_headers
-

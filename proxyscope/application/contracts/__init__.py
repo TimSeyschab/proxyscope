@@ -9,5 +9,7 @@ from .ports import (
 
 __all__ = [
     "RequestUseCases",
-    "SessionUseCases", "SettingsUseCases", "SuspendUI",
+    "SessionUseCases",
+    "SettingsUseCases",
+    "SuspendUI",
 ]

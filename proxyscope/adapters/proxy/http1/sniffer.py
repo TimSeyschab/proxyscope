@@ -155,4 +155,3 @@ class HTTP1MessageSniffer:
                 self._current_body.extend(self._buffer[chunk_start : chunk_start + min(chunk_size, remaining)])
 
             del self._buffer[:total_needed]
-

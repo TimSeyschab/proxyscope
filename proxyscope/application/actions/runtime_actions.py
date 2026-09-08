@@ -44,14 +44,30 @@ class RuntimeReplayActionService:
         )
         self._artifact_store.add(artifact)
         if self._event_bus is not None:
-            self._event_bus.publish(ReplayRequested(request_id=entry.request_id, request_url=request_url, artifact_id=artifact.replay_id))
+            self._event_bus.publish(
+                ReplayRequested(request_id=entry.request_id, request_url=request_url, artifact_id=artifact.replay_id)
+            )
         try:
             with _suspend_runtime_ui(suspend_ui):
-                success, message = self._replay_request(entry, request_url=request_url, proxy_base_url=self._proxy_base_url)
-            completed = replace(artifact, status=ArtifactStatus.APPLIED if success else ArtifactStatus.FAILED, error=None if success else message)
+                success, message = self._replay_request(
+                    entry, request_url=request_url, proxy_base_url=self._proxy_base_url
+                )
+            completed = replace(
+                artifact,
+                status=ArtifactStatus.APPLIED if success else ArtifactStatus.FAILED,
+                error=None if success else message,
+            )
             self._artifact_store.replace(completed)
             if self._event_bus is not None:
-                self._event_bus.publish(ReplayCompleted(request_id=entry.request_id, request_url=request_url, success=success, artifact_id=artifact.replay_id, error=completed.error))
+                self._event_bus.publish(
+                    ReplayCompleted(
+                        request_id=entry.request_id,
+                        request_url=request_url,
+                        success=success,
+                        artifact_id=artifact.replay_id,
+                        error=completed.error,
+                    )
+                )
             return message
         except Exception as exc:  # noqa: BLE001
             self._artifact_store.replace(replace(artifact, status=ArtifactStatus.FAILED, error=str(exc)))
@@ -83,13 +99,20 @@ class RuntimeResponseEditActionService:
                 result = self._response_editor(pending)
             if not result.success:
                 pending.keep_original()
-                self._response_modifier.record_artifact_result(pending, status=ArtifactStatus.CANCELLED, error=result.message)
+                self._response_modifier.record_artifact_result(
+                    pending, status=ArtifactStatus.CANCELLED, error=result.message
+                )
                 return result.message
             if result.headers is None or result.body is None:
-                self._response_modifier.record_artifact_result(pending, status=ArtifactStatus.FAILED, error=result.message)
+                pending.keep_original()
+                self._response_modifier.record_artifact_result(
+                    pending, status=ArtifactStatus.FAILED, error=result.message
+                )
                 return result.message
             rule_id = self._save_static_response_rule(pending=pending, headers=result.headers, body=result.body)
-            self._response_modifier.record_artifact_result(pending, status=ArtifactStatus.APPLIED, headers=result.headers, body=result.body)
+            self._response_modifier.record_artifact_result(
+                pending, status=ArtifactStatus.APPLIED, headers=result.headers, body=result.body
+            )
             return f"{result.message}; saved static traffic rule {rule_id}."
         except Exception as exc:  # noqa: BLE001
             pending.keep_original()
@@ -111,7 +134,9 @@ class RuntimeResponseEditActionService:
                 priority=0,
                 phase=RulePhase.RESPOND,
                 match=TrafficMatch(methods=(pending.method,), url=pending.request_url),
-                action=RespondAction(pending.response.status_code, pending.response.reason, tuple(response_headers.items()), body),
+                action=RespondAction(
+                    pending.response.status_code, pending.response.reason, tuple(response_headers.items()), body
+                ),
             )
         )
         return rule_id

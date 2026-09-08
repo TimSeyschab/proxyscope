@@ -14,7 +14,9 @@ class ConfigValidationError(ValueError):
 def parse_config_payload(payload: object) -> ConfigDocument:
     if not isinstance(payload, dict):
         raise ConfigValidationError("Config root must be a JSON object.")
-    _reject_unknown_fields(payload, {"schema_version", "settings", "event_store", "traffic_rules", "components"}, "config")
+    _reject_unknown_fields(
+        payload, {"schema_version", "settings", "event_store", "traffic_rules", "components"}, "config"
+    )
     if payload.get("schema_version") != CURRENT_SCHEMA_VERSION:
         raise ConfigValidationError(
             f"Unsupported schema_version {payload.get('schema_version')!r}; expected {CURRENT_SCHEMA_VERSION}."

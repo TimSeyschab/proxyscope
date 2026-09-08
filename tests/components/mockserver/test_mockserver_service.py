@@ -19,7 +19,9 @@ from proxyscope.components.mockserver import (
 )
 
 
-def _service(store: MockScenarioStore, *, persisted: list[tuple[dict[str, object], ...]] | None = None) -> tuple[MockServerService, TrafficRuleStore]:
+def _service(
+    store: MockScenarioStore, *, persisted: list[tuple[dict[str, object], ...]] | None = None
+) -> tuple[MockServerService, TrafficRuleStore]:
     bus = EventBus()
     rules = TrafficRuleStore()
     adapter = EventBusAdapter(bus)
@@ -68,9 +70,15 @@ def test_mock_configuration_roundtrips_without_global_rule_references() -> None:
 
 
 def test_mockserver_schema_and_parser_validate_static_responses() -> None:
-    schema_path = Path(__file__).resolve().parents[3] / "proxyscope" / "components" / "mockserver" / "config.schema.json"
+    schema_path = (
+        Path(__file__).resolve().parents[3] / "proxyscope" / "components" / "mockserver" / "config.schema.json"
+    )
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    payload = {"scenarios": [{"id": "demo", "responses": [{"id": "health", "method": "GET", "url": "https://api.test/health"}]}]}
+    payload = {
+        "scenarios": [
+            {"id": "demo", "responses": [{"id": "health", "method": "GET", "url": "https://api.test/health"}]}
+        ]
+    }
 
     assert list(Draft202012Validator(schema).iter_errors(payload)) == []
     assert mockserver_configuration_from_payload(payload).list_scenarios()

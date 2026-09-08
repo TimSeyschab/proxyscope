@@ -31,7 +31,10 @@ class TestResponseEditing(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(result.headers, {"Content-Type": "text/plain"})
         self.assertEqual(result.body, b"original")
-        self.assertEqual(pending.wait(), ExchangeResponse(200, "OK", {"Content-Type": "text/plain", "Content-Length": "8"}, b"original"))
+        self.assertEqual(
+            pending.wait(),
+            ExchangeResponse(200, "OK", {"Content-Type": "text/plain", "Content-Length": "8"}, b"original"),
+        )
 
     def test_editor_failure_keeps_original_response(self) -> None:
         pending = PendingResponseEdit(

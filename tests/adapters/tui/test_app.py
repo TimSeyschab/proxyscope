@@ -1,8 +1,16 @@
 import asyncio
 import unittest
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from proxyscope.components.tui.app import MAX_VISIBLE_ITEMS, ProxyscopeTui, RuntimeEventBuffer, _visible_exchanges
+from proxyscope.components.tui.app import (
+    MAX_VISIBLE_ITEMS,
+    ProxyscopeTui,
+    RuntimeEventBuffer,
+    _render_configuration_summary,
+    _render_status,
+    _visible_exchanges,
+)
 from proxyscope.components.tui.component import TuiComponent
 from proxyscope.contracts.components import ComponentContext
 from proxyscope.contracts.events import ExchangeCompleted, RuntimeStateSnapshot
@@ -22,6 +30,7 @@ class StaticJournal:
                 response=CapturedResponse(200, "OK", (), None, 0),
             ),
         )
+
 
 class TestTuiComponent(unittest.TestCase):
     def test_disables_textual_command_palette(self) -> None:
@@ -49,11 +58,33 @@ class TestTuiComponent(unittest.TestCase):
             events = str(app.query_one("#events").render())
             settings = str(app.query_one("#settings-content").render())
             mockserver_rules = str(app.query_one("#mockserver-rules-content").render())
+            status = str(app.query_one("#status-line").render())
+            configuration = str(app.query_one("#config-line").render())
 
         self.assertIn("GET https://api.test/items [200]", exchanges)
         self.assertIn("exchange.completed request=1", events)
         self.assertIn('"log_level": "INFO"', settings)
         self.assertIn('"id": "offline"', mockserver_rules)
+        self.assertEqual(status, "CAPTURED 1  COMPLETED 1  EVENTS 1")
+        self.assertEqual(configuration, "LOG_LEVEL=INFO")
+
+    def test_uses_the_legacy_operational_palette(self) -> None:
+        stylesheet = (Path(__file__).parents[3] / "proxyscope" / "components" / "tui" / "app.tcss").read_text()
+
+        self.assertEqual(ProxyscopeTui.CSS_PATH, "app.tcss")
+        for color in ("#101315", "#171c20", "#465158", "#d9a94f"):
+            self.assertIn(color, stylesheet)
+        self.assertIn("#status-pane", stylesheet)
+
+    def test_renders_compact_runtime_status_and_configuration(self) -> None:
+        entry = StaticJournal().list_entries()[0]
+        event = ExchangeCompleted(request_id=entry.request_id, duration_ms=1)
+
+        self.assertEqual(_render_status((entry,), (event,)), "CAPTURED 1  COMPLETED 1  EVENTS 1")
+        self.assertEqual(_render_configuration_summary({}), "WAITING FOR RUNTIME SNAPSHOT")
+        self.assertEqual(
+            _render_configuration_summary({"mitm": True, "log_level": "INFO"}), "LOG_LEVEL=INFO  MITM=True"
+        )
 
     def test_requires_component_ports(self) -> None:
         with self.assertRaisesRegex(ValueError, "event bus"):

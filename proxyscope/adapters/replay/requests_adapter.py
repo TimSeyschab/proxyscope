@@ -132,4 +132,3 @@ def _sanitize_replay_headers(headers: dict[str, str]) -> dict[str, str]:
     ):
         _remove_header_case_insensitive(sanitized, name)
     return sanitized
-

@@ -6,7 +6,9 @@ from proxyscope.adapters.editing.external_editor import resolve_editor_command, 
 
 def test_editor_environment_preserves_arguments():
     with patch.dict("os.environ", {"EDITOR": '"/custom/my editor" --wait'}, clear=True):
-        with patch("proxyscope.adapters.editing.external_editor.shutil.which", return_value="/custom/my editor") as which:
+        with patch(
+            "proxyscope.adapters.editing.external_editor.shutil.which", return_value="/custom/my editor"
+        ) as which:
             assert resolve_editor_command() == '"/custom/my editor" --wait'
             which.assert_called_once_with("/custom/my editor")
 

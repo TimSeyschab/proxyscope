@@ -1,0 +1,112 @@
+/* Adapted from the retired terminal view's dark operational palette. */
+Screen {
+    background: #101315;
+    color: #e7e1d5;
+    layout: vertical;
+}
+
+Header {
+    background: #171c20;
+    color: #e7e1d5;
+    text-style: bold;
+}
+
+HeaderClock {
+    color: #d9a94f;
+}
+
+Footer {
+    background: #0c0f11;
+    color: #a8ada7;
+}
+
+Footer > .footer--key {
+    background: #171c20;
+    color: #d9a94f;
+    text-style: bold;
+}
+
+TabbedContent {
+    height: 1fr;
+    background: #101315;
+    color: #a8ada7;
+}
+
+ContentTabs {
+    background: #101315;
+    border-bottom: solid #2f393e;
+    padding: 0 1;
+}
+
+ContentTab {
+    background: #101315;
+    color: #9eb6bd;
+    padding: 0 1;
+}
+
+ContentTab.-active {
+    background: #171c20;
+    color: #d9a94f;
+    text-style: bold;
+    border-top: solid #d9a94f;
+}
+
+TabPane {
+    padding: 0;
+    background: #101315;
+}
+
+#overview-content {
+    height: 1fr;
+    margin: 0;
+    padding: 0;
+}
+
+.pane {
+    border: round #465158;
+    background: #171c20;
+    color: #e7e1d5;
+    padding: 0 1;
+}
+
+#exchanges,
+#events {
+    width: 1fr;
+    height: 1fr;
+    overflow: auto auto;
+}
+
+#exchanges {
+    border-right: round #465158;
+}
+
+#events {
+    background: #11161a;
+}
+
+#settings-content,
+#mockserver-rules-content {
+    height: 1fr;
+    overflow: auto auto;
+}
+
+#status-pane {
+    height: 3;
+    border-left: round #465158;
+    border-right: round #465158;
+    border-bottom: round #465158;
+    background: #0c0f11;
+    margin: 0;
+    padding: 0;
+}
+
+#status-line {
+    color: #d9a94f;
+    text-style: bold;
+    padding: 0 1;
+}
+
+#config-line {
+    color: #a8ada7;
+    padding: 0 1;
+}

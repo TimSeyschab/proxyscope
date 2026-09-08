@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 from proxyscope.application.commands.runtime_result import CommandExecutionResult
 from proxyscope.application.configuration import RuntimeConfigurationService
@@ -23,9 +23,9 @@ class ConfigCommandHandler:
     ) -> CommandExecutionResult:
         if len(parts) == 1 or parts[1].lower() == "show":
             path = self._configuration.path
-            if path is None:
-                return CommandExecutionResult(handled=True, status_message="Config path: <not attached>")
-            return CommandExecutionResult(handled=True, status_message=f"Config path: {path}")
+            return CommandExecutionResult(
+                handled=True, status_message=f"Config path: {path if path is not None else '<not attached>'}"
+            )
 
         action = parts[1].lower()
         if action == "save":
@@ -40,17 +40,13 @@ class ConfigCommandHandler:
 
     def _save_config(self, parts: list[str]) -> CommandExecutionResult:
         target = " ".join(parts[2:]).strip()
+        if not target and self._configuration.path is None:
+            return CommandExecutionResult(
+                handled=True,
+                status_message="Usage: config save <path> (or attach --config at startup)",
+            )
         try:
-            if target:
-                saved_path = self._configuration.save(target)
-            else:
-                current = self._configuration.path
-                if current is None:
-                    return CommandExecutionResult(
-                        handled=True,
-                        status_message="Usage: config save <path> (or attach --config at startup)",
-                    )
-                saved_path = self._configuration.save()
+            saved_path = self._configuration.save(target) if target else self._configuration.save()
         except (OSError, ValueError) as exc:
             return CommandExecutionResult(handled=True, status_message=f"Config save failed: {exc}")
         return CommandExecutionResult(handled=True, status_message=f"Config saved: {saved_path}")
@@ -66,16 +62,10 @@ class ConfigCommandHandler:
                 handled=True,
                 status_message="No attached config path. Use: config save <path>",
             )
-        if before_cache != self._settings.cache_invalidation_enabled:
-            _trigger_callback(on_cache_toggle)
+        if before_cache != self._settings.cache_invalidation_enabled and on_cache_toggle is not None:
+            on_cache_toggle()
         return CommandExecutionResult(
             handled=True,
             status_message=f"Config reloaded: {self._configuration.path}",
             updated_log_level=self._settings.log_level,
         )
-
-
-def _trigger_callback(callback: Callable[[], None] | None) -> None:
-    if callback is None:
-        return
-    callback()

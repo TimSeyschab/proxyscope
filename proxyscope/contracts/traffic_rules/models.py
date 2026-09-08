@@ -99,7 +99,14 @@ class HeaderRemoveAction:
     name: str
 
 
-TrafficAction = OpenEditorAction | RespondAction | RegexBodyRewriteAction | HeaderSetAction | HeaderReplaceAction | HeaderRemoveAction
+TrafficAction = (
+    OpenEditorAction
+    | RespondAction
+    | RegexBodyRewriteAction
+    | HeaderSetAction
+    | HeaderReplaceAction
+    | HeaderRemoveAction
+)
 
 
 @dataclass(frozen=True)

@@ -58,7 +58,9 @@ class TestRequestResponseLogging(unittest.TestCase):
         events: list[object] = []
         bus = EventBus()
         bus.subscribe(events.append)
-        recorder = RequestResponseRecorder(settings=self.config.settings_state, request_journal=self.journal, event_bus=bus)
+        recorder = RequestResponseRecorder(
+            settings=self.config.settings_state, request_journal=self.journal, event_bus=bus
+        )
 
         request_id = recorder.record_request(
             method="GET",

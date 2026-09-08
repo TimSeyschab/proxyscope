@@ -120,8 +120,6 @@ def _read_edited_payload(
     return edited_headers, body_file.read_bytes()
 
 
-
-
 def _parse_header_file(path: Path) -> dict[str, str]:
     headers: dict[str, str] = {}
     for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -135,8 +133,6 @@ def _parse_header_file(path: Path) -> dict[str, str]:
         name, value = line.split(":", 1)
         headers[name.strip()] = value.strip()
     return headers
-
-
 
 
 def _is_textual_response_body(*, headers: dict[str, str], body: bytes) -> tuple[bool, str]:
@@ -178,8 +174,6 @@ def _extract_charset(content_type: str) -> str | None:
     return None
 
 
-
-
 def _decode_content_encoded_body(body: bytes, content_encoding: str) -> bytes | None:
     encoding = content_encoding.strip().lower()
     if "," in encoding:
@@ -207,4 +201,3 @@ def _decode_content_encoded_body(body: bytes, content_encoding: str) -> bytes | 
         except Exception:
             return None
     return None
-

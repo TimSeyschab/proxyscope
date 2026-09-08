@@ -15,10 +15,10 @@ from proxyscope.contracts.traffic_rules import (
     RespondAction,
     RulePhase,
     TrafficAction,
+    TrafficRule,
 )
 
 from .store import TrafficRuleStore
-from proxyscope.contracts.traffic_rules import TrafficRule
 
 
 class TrafficRuleEngine:
@@ -153,7 +153,7 @@ def _apply_headers(
 
 
 def _is_textual(headers: dict[str, str]) -> bool:
-    content_type = (header_value(headers, "Content-Type") or "").lower()
+    content_type = header_value(headers, "Content-Type").lower()
     return content_type.startswith("text/") or any(
         token in content_type for token in ("json", "xml", "javascript", "form-urlencoded")
     )

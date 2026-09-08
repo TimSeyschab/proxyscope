@@ -28,7 +28,7 @@ def test_mockserver_configuration_serves_response_through_proxy() -> None:
                                     "status": 503,
                                     "reason": "Service Unavailable",
                                     "headers": {"Content-Type": "application/json"},
-                                    "body": "{\"error\": \"offline\"}",
+                                    "body": '{"error": "offline"}',
                                 }
                             ],
                         }

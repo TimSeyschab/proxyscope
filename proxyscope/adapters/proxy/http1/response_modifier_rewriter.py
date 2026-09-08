@@ -186,8 +186,6 @@ def _build_response_bytes(*, version: str, response: ExchangeResponse) -> bytes:
     return "\r\n".join(lines).encode("iso-8859-1", errors="replace") + b"\r\n\r\n" + response.body
 
 
-
-
 def _try_consume_chunked(data: bytes) -> tuple[bytes, bytes] | None:
     idx = 0
     decoded = bytearray()

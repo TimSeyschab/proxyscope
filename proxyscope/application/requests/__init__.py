@@ -1,5 +1,7 @@
 """Request list filtering and windowing."""
 
-from .service import RequestApplicationService, RequestFilter, RequestWindow
+from .filters import RequestFilter
+from .service import RequestApplicationService
+from .window import RequestWindow
 
 __all__ = ["RequestApplicationService", "RequestFilter", "RequestWindow"]

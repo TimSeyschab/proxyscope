@@ -53,11 +53,12 @@ class TestResponseModifierService(unittest.TestCase):
             response=ExchangeResponse(200, "OK", {"Content-Length": "8", "Transfer-Encoding": "chunked"}, b"original"),
             _done=Event(),
         )
-        pending.apply(headers={"Content-Type": "text/plain", "Transfer-Encoding": "chunked"}, body=b"hello")
+        pending.apply(
+            headers={"Content-Type": "text/plain", "Transfer-Encoding": "chunked", "content-length": "999"},
+            body=b"hello",
+        )
         out = pending.wait(timeout_s=0.1)
-        lowered = {k.lower(): v for k, v in out.headers.items()}
-        self.assertEqual(lowered["content-length"], "5")
-        self.assertNotIn("transfer-encoding", lowered)
+        self.assertEqual(out.headers, {"Content-Type": "text/plain", "Content-Length": "5"})
 
     def test_timeout_keeps_original_response(self) -> None:
         service = ResponseModifierService(interactive_enabled=True, edit_timeout_s=0.01)

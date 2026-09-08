@@ -17,7 +17,13 @@ from proxyscope.application.services import RuntimeApplicationServices
 from proxyscope.application.traffic_rules import TrafficRuleAdministrationService, TrafficRuleEngine, TrafficRuleStore
 from proxyscope.contracts.traffic_rules import OpenEditorAction, RespondAction, RulePhase, TrafficMatch, TrafficRule
 
-__all__ = ["RuntimeTestContext", "normalize_whitelist_entry", "processing_dependencies", "runtime_application_services", "runtime_dependencies"]
+__all__ = [
+    "RuntimeTestContext",
+    "normalize_whitelist_entry",
+    "processing_dependencies",
+    "runtime_application_services",
+    "runtime_dependencies",
+]
 
 
 class RuntimeTestContext:
@@ -126,20 +132,48 @@ class RuntimeTestContext:
         self.configuration.save()
 
     def add_static_response_rule(
-        self, *, url: str, status_code: int = 200, reason: str = "OK", headers: dict[str, str] | None = None,
-        body: bytes = b"", method: str = "GET",
+        self,
+        *,
+        url: str,
+        status_code: int = 200,
+        reason: str = "OK",
+        headers: dict[str, str] | None = None,
+        body: bytes = b"",
+        method: str = "GET",
     ) -> str:
         rule_id = f"static-response-{len(self.traffic_rules.list_rules()) + 1}"
-        self.traffic_rules.add_rule(TrafficRule(rule_id, rule_id, True, 0, RulePhase.RESPOND, TrafficMatch(methods=(method,), url=url), RespondAction(status_code, reason, tuple((headers or {}).items()), body)))
+        self.traffic_rules.add_rule(
+            TrafficRule(
+                rule_id,
+                rule_id,
+                True,
+                0,
+                RulePhase.RESPOND,
+                TrafficMatch(methods=(method,), url=url),
+                RespondAction(status_code, reason, tuple((headers or {}).items()), body),
+            )
+        )
         return rule_id
 
     def add_open_editor_rule(self, url: str, *, method: str = "GET") -> str:
         rule_id = f"open-editor-{len(self.traffic_rules.list_rules()) + 1}"
-        self.traffic_rules.add_rule(TrafficRule(rule_id, rule_id, True, 0, RulePhase.RESPONSE, TrafficMatch(methods=(method,), url=url), OpenEditorAction()))
+        self.traffic_rules.add_rule(
+            TrafficRule(
+                rule_id,
+                rule_id,
+                True,
+                0,
+                RulePhase.RESPONSE,
+                TrafficMatch(methods=(method,), url=url),
+                OpenEditorAction(),
+            )
+        )
         return rule_id
 
     @classmethod
-    def load_from_file(cls, path: str | Path, *, config_repository: ConfigRepository | None = None) -> "RuntimeTestContext":
+    def load_from_file(
+        cls, path: str | Path, *, config_repository: ConfigRepository | None = None
+    ) -> "RuntimeTestContext":
         repository = config_repository or JsonConfigRepository()
         document = repository.load(Path(path))
         return cls(config_path=path, config_repository=repository, settings=document.settings)

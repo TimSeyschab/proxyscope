@@ -6,7 +6,7 @@ from threading import Lock
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
 
 from proxyscope.contracts.events import RuntimeEvent, RuntimeStateSnapshot
@@ -38,16 +38,7 @@ class ProxyscopeTui(App[None]):
 
     TITLE = "proxyscope"
     ENABLE_COMMAND_PALETTE = False
-    CSS = """
-    Screen { layout: vertical; }
-    #overview-content { height: 1fr; }
-    .pane { border: round $primary; padding: 0 1; }
-    #exchanges { width: 1fr; }
-    #events { width: 1fr; }
-    TabbedContent { height: 1fr; }
-    TabPane { padding: 0; }
-    Static { overflow: auto auto; }
-    """
+    CSS_PATH = "app.tcss"
     BINDINGS = [Binding("q", "quit", "Quit"), Binding("ctrl+c", "quit", "Quit")]
 
     def __init__(self, journal: ComponentJournal) -> None:
@@ -72,6 +63,9 @@ class ProxyscopeTui(App[None]):
                 yield Static(id="settings-content", classes="pane")
             with TabPane("Mockserver Rules", id="mockserver-rules"):
                 yield Static(id="mockserver-rules-content", classes="pane")
+        with Vertical(id="status-pane"):
+            yield Static(id="status-line")
+            yield Static(id="config-line")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -102,6 +96,8 @@ class ProxyscopeTui(App[None]):
             self.query_one("#mockserver-rules-content", Static).update(
                 _render_json("Mockserver Rules", self._mockserver_configuration)
             )
+        self.query_one("#status-line", Static).update(_render_status(entries, events))
+        self.query_one("#config-line", Static).update(_render_configuration_summary(self._settings))
 
 
 def _render_exchanges(entries: Iterable[CapturedExchange]) -> str:
@@ -123,6 +119,17 @@ def _render_events(events: Iterable[RuntimeEvent]) -> str:
 
 def _render_json(title: str, value: object) -> str:
     return f"{title}\n\n{json.dumps(value, indent=2, sort_keys=True, default=str)}"
+
+
+def _render_status(entries: tuple[CapturedExchange, ...], events: tuple[RuntimeEvent, ...]) -> str:
+    completed = sum(entry.response is not None for entry in entries)
+    return f"CAPTURED {len(entries)}  COMPLETED {completed}  EVENTS {len(events)}"
+
+
+def _render_configuration_summary(settings: dict[str, object]) -> str:
+    if not settings:
+        return "WAITING FOR RUNTIME SNAPSHOT"
+    return "  ".join(f"{key.upper()}={value}" for key, value in sorted(settings.items()))
 
 
 def _visible_exchanges(entries: Iterable[CapturedExchange]) -> tuple[CapturedExchange, ...]:

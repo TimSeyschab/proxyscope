@@ -283,7 +283,9 @@ def scenario_store_from_config(values: tuple[dict[str, object], ...]) -> MockSce
 def _response_from_config(value: dict[str, object]) -> MockResponse:
     _reject_unknown_fields(value, {"id", "method", "url", "status", "reason", "headers", "body"}, "Mock response")
     headers = value.get("headers", {})
-    if not isinstance(headers, dict) or not all(isinstance(name, str) and isinstance(item, str) for name, item in headers.items()):
+    if not isinstance(headers, dict) or not all(
+        isinstance(name, str) and isinstance(item, str) for name, item in headers.items()
+    ):
         raise ValueError("Mock response headers must be an object of strings.")
     status = value.get("status", 200)
     if not isinstance(status, int) or isinstance(status, bool):

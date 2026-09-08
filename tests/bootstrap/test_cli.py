@@ -54,5 +54,6 @@ class TestAppMain(unittest.TestCase):
 
         self.assertIsNone(application_factory.call_args.args[0].mitm_enabled)
 
+
 if __name__ == "__main__":
     unittest.main()

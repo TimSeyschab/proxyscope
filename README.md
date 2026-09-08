@@ -48,7 +48,9 @@ poetry run proxyscope --config ./runtime-config.json
 The TUI is an optional read-only runtime component. Add `tui` to
 `components.enabled` to activate it. It projects captured
 exchanges from the journal and runtime notifications from the event bus; it
-does not read configuration or traffic-rule services directly.
+does not read configuration or traffic-rule services directly. Its terminal
+layout uses the operational dark palette of the retired TUI: amber highlights,
+restrained pane borders, and a compact runtime-status strip.
 
 ## Configuration
 
@@ -127,14 +129,29 @@ dependency boundaries, request processing, and component integration.
 ## Development Checks
 
 The test suite contains both unittest-style and pytest-style tests; use pytest
-to run the complete suite. If pytest is missing from the Poetry environment,
-install it there with `poetry run python -m pip install pytest`.
+to run the complete suite. It is included in the Poetry development dependencies.
 
 ```bash
 poetry run python -m pytest tests
 poetry run ruff check proxyscope tests scripts
 poetry run pyright
 ```
+
+CI measures both statements and branches. The combined coverage and the separate
+branch coverage must each reach 81%. Branch coverage checks decision outcomes;
+it does not establish full condition coverage or MC/DC for compound expressions.
+The tests include independent cases for compound conditions in request filters,
+configuration validation, and response editing.
+
+```bash
+poetry run coverage run -m pytest tests -q
+poetry run coverage report
+poetry run coverage json -o coverage.json
+poetry run python scripts/check_branch_coverage.py coverage.json
+poetry run coverage html
+```
+
+The HTML report is written to `htmlcov/index.html`.
 
 Architecture boundaries are checked in
 [tests/architecture](tests/architecture). The

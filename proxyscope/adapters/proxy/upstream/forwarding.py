@@ -77,4 +77,3 @@ def resolve_target_url(request: ForwardRequest) -> str:
 
     normalized_path = request.path if request.path.startswith("/") else f"/{request.path}"
     return f"http://{host}{normalized_path}"
-

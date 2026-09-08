@@ -140,7 +140,26 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
         payload = persisted.components.configuration_for("mockserver")
         self.assertEqual(
             payload,
-            {"scenarios": [{"id": "demo", "name": "Demo", "enabled": True, "responses": [{"id": "mock-rule", "method": "GET", "url": "http://example.com/items", "status": 200, "reason": "OK", "headers": {}, "body": "mocked"}]}]},
+            {
+                "scenarios": [
+                    {
+                        "id": "demo",
+                        "name": "Demo",
+                        "enabled": True,
+                        "responses": [
+                            {
+                                "id": "mock-rule",
+                                "method": "GET",
+                                "url": "http://example.com/items",
+                                "status": 200,
+                                "reason": "OK",
+                                "headers": {},
+                                "body": "mocked",
+                            }
+                        ],
+                    }
+                ]
+            },
         )
 
     def test_shutdown_is_idempotent_and_joins_server_thread(self) -> None:

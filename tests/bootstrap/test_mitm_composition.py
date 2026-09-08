@@ -67,7 +67,9 @@ class TestMitmComposition(unittest.TestCase):
         fake_ca = Mock()
         fake_ca.ensure_ca_material.return_value = False
 
-        with patch("proxyscope.bootstrap.composition.certificate_authority_for_root", return_value=fake_ca) as ca_factory:
+        with patch(
+            "proxyscope.bootstrap.composition.certificate_authority_for_root", return_value=fake_ca
+        ) as ca_factory:
             interceptor = create_mitm_interceptor(
                 runtime_context=self.runtime_context,
                 enabled=True,
@@ -110,12 +112,21 @@ class TestMitmComposition(unittest.TestCase):
             config_path = Path(directory) / "config.json"
             JsonConfigRepository().save(
                 config_path,
-                ConfigDocument(settings=RuntimeSettings.create(mitm_enabled=True, cache_invalidation_enabled=True, mitm_certs_dir=Path(directory) / "certs")),
+                ConfigDocument(
+                    settings=RuntimeSettings.create(
+                        mitm_enabled=True, cache_invalidation_enabled=True, mitm_certs_dir=Path(directory) / "certs"
+                    )
+                ),
             )
             with patch("proxyscope.bootstrap.composition.certificate_authority_for_root", return_value=fake_ca):
                 graph = create_runtime_object_graph(
-                    host="127.0.0.1", port=8080, config_path=config_path, mitm_enabled=None,
-                    certs_dir=None, edit_timeout_s=1, server_factory=Mock(return_value=server),
+                    host="127.0.0.1",
+                    port=8080,
+                    config_path=config_path,
+                    mitm_enabled=None,
+                    certs_dir=None,
+                    edit_timeout_s=1,
+                    server_factory=Mock(return_value=server),
                 )
 
         self.assertTrue(graph.settings.mitm_enabled)

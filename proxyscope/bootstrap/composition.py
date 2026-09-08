@@ -91,9 +91,7 @@ def create_runtime_object_graph(
     document = repository.load(Path(config_path)) if config_path else None
     event_store = _create_event_store(document)
     if document is not None and document.event_store.enabled:
-        event_bus.subscribe_async(
-            EventStoreWriter(event_store), max_queue_size=document.event_store.queue_size
-        )
+        event_bus.subscribe_async(EventStoreWriter(event_store), max_queue_size=document.event_store.queue_size)
     artifact_store = InMemoryArtifactStore(
         max_body_bytes=4096 if document is None else document.event_store.max_body_bytes
     )

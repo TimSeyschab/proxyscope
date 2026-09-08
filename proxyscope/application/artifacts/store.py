@@ -52,11 +52,8 @@ class InMemoryArtifactStore:
     def list_for_source(self, source_request_id: int) -> tuple[Artifact, ...]:
         with self._lock:
             return tuple(
-                artifact
-                for artifact in self._artifacts.values()
-                if _source_request_id(artifact) == source_request_id
+                artifact for artifact in self._artifacts.values() if _source_request_id(artifact) == source_request_id
             )
-
 
 
 def _artifact_id(artifact: Artifact) -> str:
