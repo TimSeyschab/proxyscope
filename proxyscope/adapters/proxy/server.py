@@ -4,16 +4,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Final
 from urllib.parse import urlsplit
 
-from proxyscope.adapters.proxy.connect_tunnel import (
+from proxyscope.adapters.proxy.connect import (
     ConnectUpstreamConnectionError,
     ConnectUpstreamTimeoutError,
     handle_connect_tunnel,
     parse_connect_target,
 )
-from proxyscope.adapters.proxy.forwarding import UpstreamForwarder, resolve_target_url
-from proxyscope.adapters.proxy.http_bridge import map_incoming_request, write_forward_response
+from proxyscope.adapters.proxy.http1 import map_incoming_request, write_forward_response
 from proxyscope.adapters.proxy.tunnel_registry import TunnelConnectionRegistry
 from proxyscope.adapters.proxy.types import TunnelInterceptor
+from proxyscope.adapters.proxy.upstream import UpstreamForwarder, resolve_target_url
 from proxyscope.application.processing.models import ExchangeRequest
 from proxyscope.application.processing.ports import (
     BODY_PREVIEW_BYTES,
@@ -313,7 +313,6 @@ class RequestLoggingHandler(BaseHTTPRequestHandler):
                 target_host=target_host,
                 target_port=target_port,
             )
-            server.runtime_context.runtime_events.on_site_visit(target.host)
             server.register_tunnel_socket(self.connection)
 
             if server.mitm_interceptor is not None:

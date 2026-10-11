@@ -8,7 +8,6 @@ from proxyscope.application.processing.ports import (
     RequestMiddleware,
     ResponseMiddleware,
     ResponseTransformer,
-    RuntimeEventSink,
     TrafficRuleEvaluator,
 )
 
@@ -19,7 +18,6 @@ class ExchangePipeline:
         *,
         exchange_recorder: ExchangeRecorder,
         response_transformer: ResponseTransformer,
-        runtime_events: RuntimeEventSink,
         cache_middleware: CacheInvalidationMiddleware,
         request_middlewares: Iterable[RequestMiddleware] = (),
         response_middlewares: Iterable[ResponseMiddleware] = (),
@@ -30,7 +28,6 @@ class ExchangePipeline:
     ) -> None:
         self._exchange_recorder = exchange_recorder
         self._response_transformer = response_transformer
-        self._runtime_events = runtime_events
         self._cache_middleware = cache_middleware
         self._request_middlewares = (cache_middleware, *request_middlewares)
         self._response_middlewares = tuple(response_middlewares)
@@ -60,8 +57,6 @@ class ExchangePipeline:
             target_port=processed.target_port,
             protocol=processed.protocol,
         )
-        if processed.target_host:
-            self._runtime_events.on_site_visit(processed.target_host)
         mock_response = (
             None if self._mock_response_for is None else self._mock_response_for(processed.method, processed.url)
         )

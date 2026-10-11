@@ -130,7 +130,6 @@ class ProxyApplication:
         if thread is not None and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=self.options.thread_join_timeout_s)
         if self._runtime_graph is not None:
-            self._runtime_graph.runtime_events.set_observer(None)
             self._runtime_graph.event_bus.shutdown()
             self._runtime_graph.event_store.close()
         self._restore_logging()
@@ -160,7 +159,11 @@ class ProxyApplication:
         self._previous_root_handlers = list(root_logger.handlers)
         self._previous_root_level = root_logger.level
         assert self._runtime_graph is not None
-        configure_logging(level=self._runtime_graph.settings.log_level)
+        tui = self._runtime_graph.tui
+        configure_logging(
+            level=self._runtime_graph.settings.log_level,
+            handler=None if tui is None else tui.logging_handler,
+        )
         self._logging_configured = True
 
     def _wait_for_shutdown(self) -> None:

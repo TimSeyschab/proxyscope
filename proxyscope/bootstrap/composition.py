@@ -26,7 +26,7 @@ from proxyscope.application.configuration import (
 from proxyscope.application.event_store import EventStore, EventStoreWriter, NoopEventStore
 from proxyscope.application.events import EventBus
 from proxyscope.application.journal import RequestJournal
-from proxyscope.application.observability import RequestResponseRecorder, RuntimeEventDispatcher
+from proxyscope.application.observability import RequestResponseRecorder
 from proxyscope.application.processing.middleware import CacheInvalidationMiddleware
 from proxyscope.application.processing.pipeline import ExchangePipeline
 from proxyscope.application.processing.ports import RequestMiddleware, ResponseMiddleware
@@ -67,7 +67,6 @@ class RuntimeObjectGraph:
     mockserver: MockServerService
     tui: TuiComponent | None
     traffic_rules: TrafficRuleAdministrationService
-    runtime_events: RuntimeEventDispatcher
     application_services: RuntimeApplicationServices
     component_manager: ComponentManager
     runtime_context: ProxyRuntimeContext
@@ -124,6 +123,11 @@ def create_runtime_object_graph(
             "mockserver", mockserver_configuration_payload(mockserver.store)
         ),
     )
+    configuration.add_document_applied_handler(
+        lambda updated: mockserver.replace_store(
+            mockserver_configuration_from_payload(updated.components.configuration_for("mockserver"))
+        )
+    )
     traffic_rule_engine = TrafficRuleEngine(
         traffic_rule_store,
         event_bus=event_bus,
@@ -144,12 +148,10 @@ def create_runtime_object_graph(
         event_bus=event_bus,
         artifact_store=artifact_store,
     )
-    runtime_events = RuntimeEventDispatcher(event_bus)
     runtime_context = create_proxy_runtime_context(
         settings=settings,
         request_journal=request_journal,
         response_modifier=response_modifier,
-        runtime_events=runtime_events,
         event_bus=event_bus,
         artifact_store=artifact_store,
         component_manager=component_manager,
@@ -208,6 +210,7 @@ def create_runtime_object_graph(
         enabled=document is not None and "tui" in document.components.enabled_components,
         event_bus=component_events,
         journal=component_journal,
+        configuration_editor=configuration,
     )
     if tui_component is not None:
         component_manager.register(tui_component.contribution())
@@ -222,7 +225,6 @@ def create_runtime_object_graph(
         mockserver=mockserver,
         tui=tui_component,
         traffic_rules=traffic_rules,
-        runtime_events=runtime_events,
         application_services=application_services,
         component_manager=component_manager,
         runtime_context=runtime_context,
@@ -235,13 +237,20 @@ def _create_tui_component(
     enabled: bool,
     event_bus: EventBusAdapter,
     journal: JournalAdapter,
+    configuration_editor: RuntimeConfigurationService,
 ) -> TuiComponent | None:
     if not enabled:
         return None
     # Import Textual only when the configuration enables the terminal component.
     from proxyscope.components.tui import TuiComponent
 
-    return TuiComponent(ComponentContext(event_bus=event_bus, journal=journal))
+    return TuiComponent(
+        ComponentContext(
+            event_bus=event_bus,
+            journal=journal,
+            configuration_editor=configuration_editor,
+        )
+    )
 
 
 def _runtime_state_snapshot_handler(
@@ -276,7 +285,6 @@ def create_proxy_runtime_context(
     settings: RuntimeSettingsState,
     request_journal: RequestJournal,
     response_modifier: ResponseModifierService | None = None,
-    runtime_events: RuntimeEventDispatcher | None = None,
     event_bus: EventBus | None = None,
     artifact_store: ArtifactStore | None = None,
     component_manager: ComponentManager | None = None,
@@ -284,7 +292,6 @@ def create_proxy_runtime_context(
 ) -> ProxyRuntimeContext:
     resolved_modifier = response_modifier or ResponseModifierService(artifact_store=artifact_store)
     resolved_event_bus = event_bus or EventBus()
-    resolved_events = runtime_events or RuntimeEventDispatcher(resolved_event_bus)
     recorder = RequestResponseRecorder(
         settings=settings,
         request_journal=request_journal,
@@ -293,7 +300,6 @@ def create_proxy_runtime_context(
     pipeline = ExchangePipeline(
         exchange_recorder=recorder,
         response_transformer=resolved_modifier,
-        runtime_events=resolved_events,
         cache_middleware=CacheInvalidationMiddleware(settings),
         dynamic_request_middlewares=(
             None
@@ -310,7 +316,6 @@ def create_proxy_runtime_context(
     return ProxyRuntimeContext(
         exchange_recorder=recorder,
         response_transformer=resolved_modifier,
-        runtime_events=resolved_events,
         cache_policy=settings,
         exchange_pipeline=pipeline,
     )

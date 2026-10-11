@@ -15,7 +15,6 @@ from proxyscope.application.processing.ports.http.static_response import StaticR
 from proxyscope.application.processing.ports.http.traffic_rules import TrafficRuleEvaluator
 from proxyscope.application.processing.ports.middleware import RequestMiddleware, ResponseMiddleware
 from proxyscope.application.processing.ports.runtime.cache import CachePolicy
-from proxyscope.application.processing.ports.runtime.events import RuntimeEventSink
 
 __all__ = [
     "CachePolicy",
@@ -30,7 +29,6 @@ __all__ = [
     "RequestMiddleware",
     "ResponseMiddleware",
     "ResponseTransformer",
-    "RuntimeEventSink",
     "STREAM_CHUNK_SIZE",
     "StaticResponse",
     "StreamingForwarder",

@@ -112,6 +112,14 @@ class MockServerService:
     def store(self) -> MockScenarioStore:
         return self._store
 
+    def replace_store(self, store: MockScenarioStore) -> None:
+        """Apply externally edited scenario configuration to the live mock server."""
+        self._store = store
+        if self._active:
+            self._sync_derived_rules()
+        else:
+            self._sync_rule_scope()
+
     def activate(self) -> None:
         self._active = True
         self._sync_derived_rules()

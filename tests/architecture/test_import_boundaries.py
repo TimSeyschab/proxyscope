@@ -75,13 +75,21 @@ MAX_CLASSES_PER_PACKAGE_OVERRIDES = {
             id="application-proxy-does-not-import-transport-technology",
         ),
         pytest.param(
-            ("tests/application", "tests/adapters"),
+            ("tests/application",),
             (
-                "proxyscope.adapters.proxy.forwarding",
+                "proxyscope.adapters.proxy.upstream.forwarding",
                 "proxyscope.adapters.proxy.upstream.forwarding.ForwardRequest",
                 "proxyscope.adapters.proxy.upstream.forwarding.ForwardResponse",
             ),
-            id="tests-use-exchange-contracts",
+            id="application-tests-use-exchange-contracts",
+        ),
+        pytest.param(
+            ("tests/adapters",),
+            (
+                "proxyscope.adapters.proxy.upstream.forwarding.ForwardRequest",
+                "proxyscope.adapters.proxy.upstream.forwarding.ForwardResponse",
+            ),
+            id="adapter-tests-use-exchange-contracts",
         ),
     ],
 )

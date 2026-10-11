@@ -6,7 +6,7 @@ from typing import Protocol
 
 from proxyscope.contracts.commands import CommandDefinition
 from proxyscope.contracts.event_store import EventStore
-from proxyscope.contracts.ports import ComponentEventBus, ComponentJournal
+from proxyscope.contracts.ports import ComponentEventBus, ComponentJournal, ConfigurationEditor
 from proxyscope.contracts.shortcuts import ShortcutDefinition
 
 CORE_COMPONENT_ID = "core"
@@ -45,6 +45,7 @@ class ComponentContext:
     commands: tuple[CommandDefinition, ...] = ()
     event_bus: ComponentEventBus | None = None
     journal: ComponentJournal | None = None
+    configuration_editor: ConfigurationEditor | None = None
     event_store: EventStore | None = None
     component_manager: ComponentController | None = None
     settings: Mapping[str, object] = field(default_factory=dict)

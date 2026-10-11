@@ -18,6 +18,7 @@ class TestLoggingSetup(unittest.TestCase):
         kwargs = basic_config_mock.call_args.kwargs
         self.assertEqual(kwargs["level"], logging.DEBUG)
         self.assertIn("%(message)s", kwargs["format"])
+        self.assertTrue(kwargs["force"])
 
 
 class TestRequestResponseLogging(unittest.TestCase):

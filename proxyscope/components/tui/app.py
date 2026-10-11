@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Iterable
+import logging
+from collections.abc import Callable, Iterable
 from threading import Lock
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
+from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane, TextArea
 
 from proxyscope.contracts.events import RuntimeEvent, RuntimeStateSnapshot
-from proxyscope.contracts.ports import CapturedExchange, ComponentJournal
+from proxyscope.contracts.ports import CapturedExchange, ComponentJournal, ConfigurationEditor
 
 MAX_VISIBLE_ITEMS = 50
+MAX_LOG_ENTRIES = 500
+MOCK_BODY_PREVIEW_LENGTH = 80
+DETAIL_BODY_PREVIEW_BYTES = 8_192
 REQUEST_COLUMNS = ("ID", "Status", "Method", "Host", "Path", "Duration")
 
 
@@ -36,6 +40,40 @@ class RuntimeEventBuffer:
             return tuple(self._events)
 
 
+class RuntimeLogBuffer:
+    """A bounded, thread-safe log history for the terminal UI."""
+
+    def __init__(self, *, capacity: int = MAX_LOG_ENTRIES) -> None:
+        if capacity < 1:
+            raise ValueError("capacity must be positive")
+        self._entries: list[str] = []
+        self._capacity = capacity
+        self._lock = Lock()
+
+    def append(self, entry: str) -> None:
+        with self._lock:
+            self._entries.append(entry)
+            del self._entries[: -self._capacity]
+
+    def entries(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(self._entries)
+
+
+class TuiLogHandler(logging.Handler):
+    def __init__(self, buffer: RuntimeLogBuffer, request_refresh: Callable[[], None]) -> None:
+        super().__init__()
+        self._buffer = buffer
+        self._request_refresh = request_refresh
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._buffer.append(self.format(record))
+            self._request_refresh()
+        except Exception:
+            self.handleError(record)
+
+
 class ProxyscopeTui(App[None]):
     """Live terminal view backed by journal snapshots and runtime events only."""
 
@@ -47,22 +85,34 @@ class ProxyscopeTui(App[None]):
         Binding("ctrl+c", "quit", "Quit"),
         Binding("r", "show_request", "Request"),
         Binding("s", "show_response", "Response"),
+        Binding("ctrl+s", "save_configuration", "Save config"),
     ]
 
-    def __init__(self, journal: ComponentJournal) -> None:
+    def __init__(
+        self,
+        journal: ComponentJournal,
+        configuration_editor: ConfigurationEditor | None = None,
+        on_configuration_saved: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__()
         self._journal = journal
+        self._configuration_editor = configuration_editor
+        self._on_configuration_saved = on_configuration_saved
+        self._refresh_lock = Lock()
+        self._refresh_pending = True
         self._event_buffer = RuntimeEventBuffer()
+        self._log_buffer = RuntimeLogBuffer()
+        self._log_handler = TuiLogHandler(self._log_buffer, self._request_refresh)
         self._last_entries: tuple[CapturedExchange, ...] | None = None
         self._last_events: tuple[RuntimeEvent, ...] | None = None
+        self._last_logs: tuple[str, ...] | None = None
         self._selected_request_id: int | None = None
         self._detail_tab = "request"
         self._settings: dict[str, object] = {}
         self._mockserver_configuration: dict[str, object] = {}
-        self._last_settings: dict[str, object] | None = None
         self._last_mockserver_configuration: dict[str, object] | None = None
-        self._refresh_pending = True
-        self._refresh_lock = Lock()
+        self._configuration_status = "No configuration file attached." if configuration_editor is None else ""
+        self._configuration_json = "" if configuration_editor is None else configuration_editor.load_json()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -79,10 +129,18 @@ class ProxyscopeTui(App[None]):
                             yield Static(id="detail-body")
             with TabPane("Events", id="events-view"):
                 yield Static(id="events", classes="pane")
-            with TabPane("Settings", id="settings"):
-                yield Static(id="settings-content", classes="pane")
+            with TabPane("Logs", id="logs-view"):
+                yield Static(id="logs", classes="pane")
             with TabPane("Mockserver Rules", id="mockserver-rules"):
                 yield Static(id="mockserver-rules-content", classes="pane")
+            with TabPane("Configuration", id="configuration"):
+                yield TextArea.code_editor(
+                    self._configuration_json,
+                    language="json",
+                    id="configuration-editor",
+                    read_only=self._configuration_editor is None,
+                )
+                yield Static(self._configuration_status, id="configuration-status")
         with Vertical(id="status-pane"):
             yield Static(id="status-line")
             yield Static(id="config-line")
@@ -118,9 +176,29 @@ class ProxyscopeTui(App[None]):
         self._detail_tab = "response"
         self._refresh_detail()
 
+    def action_save_configuration(self) -> None:
+        if self._configuration_editor is None:
+            return
+        editor = self.query_one("#configuration-editor", TextArea)
+        try:
+            saved_path = self._configuration_editor.save_json(editor.text)
+        except ValueError as exc:
+            self.query_one("#configuration-status", Static).update(f"Not saved: {exc}")
+            return
+        editor.load_text(self._configuration_editor.load_json())
+        if self._on_configuration_saved is not None:
+            self._on_configuration_saved()
+        self.query_one("#configuration-status", Static).update(
+            f"Saved {saved_path}. Runtime settings reloaded; startup-only changes require restart."
+        )
+
     def handle_event(self, event: RuntimeEvent) -> None:
         self._event_buffer.append(event)
         self._request_refresh()
+
+    @property
+    def logging_handler(self) -> logging.Handler:
+        return self._log_handler
 
     def update_runtime_snapshot(self, snapshot: RuntimeStateSnapshot) -> None:
         with self._refresh_lock:
@@ -150,14 +228,15 @@ class ProxyscopeTui(App[None]):
         events = _visible_events(self._event_buffer.entries())
         if events != self._last_events:
             self._last_events = events
-            self.query_one("#events", Static).update(_render_events(events))
-        if settings != self._last_settings:
-            self._last_settings = settings
-            self.query_one("#settings-content", Static).update(_render_json("Settings", settings))
+            self.query_one("#events", Static).update(Text(_render_events(events)))
+        logs = self._log_buffer.entries()
+        if logs != self._last_logs:
+            self._last_logs = logs
+            self.query_one("#logs", Static).update(Text(_render_logs(logs)))
         if mockserver_configuration != self._last_mockserver_configuration:
             self._last_mockserver_configuration = mockserver_configuration
             self.query_one("#mockserver-rules-content", Static).update(
-                _render_json("Mockserver Rules", mockserver_configuration)
+                Text(_render_mockserver_rules(mockserver_configuration))
             )
         self.query_one("#status-line", Static).update(_render_status(entries, events))
         self.query_one("#config-line", Static).update(_render_configuration_summary(settings))
@@ -183,7 +262,7 @@ class ProxyscopeTui(App[None]):
         self.query_one("#detail-tabs", Static).update(
             _render_detail_tabs(self._detail_tab, entry is not None and entry.response is not None)
         )
-        self.query_one("#detail-body", Static).update(_render_detail(entry, self._detail_tab))
+        self.query_one("#detail-body", Static).update(Text(_render_detail(entry, self._detail_tab)))
 
 
 def _request_row(entry: CapturedExchange) -> tuple[str, str, str, str, str, str]:
@@ -207,7 +286,7 @@ def _render_detail(entry: CapturedExchange | None, tab: str) -> str:
         f"port: {entry.target_port if entry.target_port is not None else '-'}\n"
         f"protocol: {entry.protocol}\n"
         f"client: {entry.client_ip or '-'}\n\n"
-        f"headers\n{headers}\n\nbody\n{_format_body(entry.body)}"
+        f"headers\n{headers}\n\nbody\n{_format_body(entry.body, entry.headers)}"
     )
 
 
@@ -221,7 +300,7 @@ def _render_response_detail(entry: CapturedExchange) -> str:
         f"{response.start_line or f'HTTP {response.status_code} {response.reason}'}\n"
         f"status: {response.status_code} {response.reason}\n"
         f"duration: {duration}\nsize: {size}\n\n"
-        f"headers\n{_format_headers(response.headers)}\n\nbody\n{_format_body(response.body)}"
+        f"headers\n{_format_headers(response.headers)}\n\nbody\n{_format_body(response.body, response.headers)}"
     )
 
 
@@ -229,12 +308,37 @@ def _format_headers(headers: tuple[tuple[str, str], ...]) -> str:
     return "\n".join(f"{name}: {value}" for name, value in headers) or "<none>"
 
 
-def _format_body(body: bytes | None) -> str:
+def _format_body(body: bytes | None, headers: tuple[tuple[str, str], ...]) -> str:
     if body is None:
         return "<not captured>"
     if not body:
         return "<empty>"
-    return body.decode("utf-8", errors="replace")
+    content_type = _content_type(headers)
+    if content_type is not None and not _is_textual_content_type(content_type):
+        return f"<binary body omitted: {len(body)} bytes ({content_type})>"
+
+    preview = body[:DETAIL_BODY_PREVIEW_BYTES].decode("utf-8", errors="replace")
+    if len(body) <= DETAIL_BODY_PREVIEW_BYTES:
+        return preview
+    return f"{preview}\n… truncated; showing first {DETAIL_BODY_PREVIEW_BYTES} of {len(body)} bytes"
+
+
+def _content_type(headers: tuple[tuple[str, str], ...]) -> str | None:
+    for name, value in headers:
+        if name.lower() == "content-type":
+            return value.split(";", 1)[0].strip().lower() or None
+    return None
+
+
+def _is_textual_content_type(content_type: str) -> bool:
+    return content_type.startswith("text/") or content_type in {
+        "application/json",
+        "application/xml",
+        "application/javascript",
+        "application/x-javascript",
+        "application/x-www-form-urlencoded",
+        "application/graphql",
+    }
 
 
 def _render_detail_tabs(tab: str, has_response: bool) -> str:
@@ -254,8 +358,61 @@ def _render_events(events: Iterable[RuntimeEvent]) -> str:
     return "Events\n\n" + ("\n".join(rendered) or "No runtime events yet.")
 
 
-def _render_json(title: str, value: object) -> str:
-    return f"{title}\n\n{json.dumps(value, indent=2, sort_keys=True, default=str)}"
+def _render_logs(entries: Iterable[str]) -> str:
+    return "Logs\n\n" + ("\n".join(entries) or "No log entries yet.")
+
+
+def _render_mockserver_rules(configuration: dict[str, object]) -> str:
+    scenarios = configuration.get("scenarios")
+    if not isinstance(scenarios, (list, tuple)) or not scenarios:
+        return "Mockserver Rules\n\nNo mock scenarios configured."
+
+    rendered = ["Mockserver Rules", ""]
+    for scenario_index, scenario in enumerate(scenarios):
+        if not isinstance(scenario, dict):
+            continue
+        rendered.extend(_render_mock_scenario(scenario, is_last=scenario_index == len(scenarios) - 1))
+    return "\n".join(rendered)
+
+
+def _render_mock_scenario(scenario: dict[str, object], *, is_last: bool) -> list[str]:
+    scenario_id = _display_value(scenario.get("id"), fallback="unnamed")
+    name = _display_value(scenario.get("name"), fallback=scenario_id)
+    enabled = "enabled" if scenario.get("enabled") is True else "disabled"
+    branch = "└─" if is_last else "├─"
+    continuation = "  " if is_last else "│ "
+    responses = scenario.get("responses")
+    if not isinstance(responses, (list, tuple)) or not responses:
+        return [f"{branch} {name} (id={scenario_id}) · {enabled}", f"{continuation}  no rules"]
+
+    lines = [f"{branch} {name} (id={scenario_id}) · {enabled}"]
+    for response_index, response in enumerate(responses):
+        if not isinstance(response, dict):
+            continue
+        is_last_response = response_index == len(responses) - 1
+        response_branch = "└─" if is_last_response else "├─"
+        response_continuation = "   " if is_last_response else "│  "
+        method = _display_value(response.get("method"), fallback="?")
+        url = _display_value(response.get("url"), fallback="?")
+        status = _display_value(response.get("status"), fallback="200")
+        reason = _display_value(response.get("reason"), fallback="OK")
+        response_id = _display_value(response.get("id"), fallback="unnamed")
+        lines.append(f"{continuation}{response_branch} {method} {url} → {status} {reason} (id={response_id})")
+        lines.append(f"{continuation}{response_continuation} body: {_mock_body_preview(response.get('body'))}")
+    return lines
+
+
+def _display_value(value: object, *, fallback: str) -> str:
+    return value if isinstance(value, str) and value else str(value) if isinstance(value, int) else fallback
+
+
+def _mock_body_preview(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        return "<empty>"
+    normalized = " ".join(value.split())
+    if len(normalized) <= MOCK_BODY_PREVIEW_LENGTH:
+        return normalized
+    return normalized[: MOCK_BODY_PREVIEW_LENGTH - 1] + "…"
 
 
 def _render_status(entries: tuple[CapturedExchange, ...], events: tuple[RuntimeEvent, ...]) -> str:

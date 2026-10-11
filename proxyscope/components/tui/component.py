@@ -1,3 +1,5 @@
+import logging
+
 from proxyscope.contracts.components import ComponentContext, ComponentContribution
 from proxyscope.contracts.events import RuntimeEvent, RuntimeStateSnapshot, RuntimeStateSnapshotRequested
 
@@ -13,7 +15,11 @@ class TuiComponent:
         if context.journal is None:
             raise ValueError("TUI component requires a journal.")
         self._event_bus = context.event_bus
-        self._app = ProxyscopeTui(context.journal)
+        self._app = ProxyscopeTui(
+            context.journal,
+            context.configuration_editor,
+            on_configuration_saved=self.request_runtime_snapshot,
+        )
 
     def contribution(self) -> ComponentContribution:
         return ComponentContribution(
@@ -38,3 +44,7 @@ class TuiComponent:
     @property
     def app(self) -> ProxyscopeTui:
         return self._app
+
+    @property
+    def logging_handler(self) -> logging.Handler:
+        return self._app.logging_handler

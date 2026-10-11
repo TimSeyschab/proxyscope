@@ -5,7 +5,6 @@ from proxyscope.application.processing.ports import (
     CachePolicy,
     ExchangeRecorder,
     ResponseTransformer,
-    RuntimeEventSink,
 )
 
 
@@ -13,6 +12,5 @@ from proxyscope.application.processing.ports import (
 class ProxyRuntimeContext:
     exchange_recorder: ExchangeRecorder
     response_transformer: ResponseTransformer
-    runtime_events: RuntimeEventSink
     cache_policy: CachePolicy
     exchange_pipeline: ExchangePipeline

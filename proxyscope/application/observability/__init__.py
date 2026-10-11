@@ -1,6 +1,5 @@
-"""Application-level exchange recording and runtime event dispatch."""
+"""Application-level exchange recording."""
 
-from .events import RuntimeEventDispatcher
 from .exchange_recorder import RequestResponseRecorder
 
-__all__ = ["RequestResponseRecorder", "RuntimeEventDispatcher"]
+__all__ = ["RequestResponseRecorder"]

@@ -1,9 +1,18 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from proxyscope.application.configuration import ConfigDocument, ConfigRepository, JsonConfigRepository, RuntimeSettings
+from proxyscope.application.configuration import (
+    ConfigDocument,
+    ConfigRepository,
+    JsonConfigRepository,
+    RuntimeConfigurationService,
+    RuntimeSettings,
+    serialize_config_document,
+)
+from proxyscope.application.runtime_settings import RuntimeSettingsState
 
 
 class TestJsonConfigRepository(unittest.TestCase):
@@ -48,6 +57,43 @@ class TestJsonConfigRepository(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, r"line 1, column"):
                 repository.load(path)
+
+    def test_save_json_validates_persists_and_applies_configuration(self) -> None:
+        repository = JsonConfigRepository()
+        original = ConfigDocument(settings=RuntimeSettings.create(mitm_enabled=True))
+        edited = ConfigDocument(settings=RuntimeSettings.create(mitm_enabled=False))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "config.json"
+            repository.save(path, original)
+            service = RuntimeConfigurationService(
+                settings=RuntimeSettingsState(settings=original.settings),
+                repository=repository,
+                path=path,
+            )
+
+            saved_path = service.save_json(json.dumps(serialize_config_document(edited)))
+
+            self.assertEqual(saved_path, str(path))
+            self.assertFalse(repository.load(path).settings.mitm_enabled)
+            self.assertFalse(service.create_document().settings.mitm_enabled)
+
+    def test_save_json_rejects_invalid_content_without_overwriting_the_file(self) -> None:
+        repository = JsonConfigRepository()
+        original = ConfigDocument(settings=RuntimeSettings())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "config.json"
+            repository.save(path, original)
+            expected_content = path.read_text(encoding="utf-8")
+            service = RuntimeConfigurationService(
+                settings=RuntimeSettingsState(settings=original.settings),
+                repository=repository,
+                path=path,
+            )
+
+            with self.assertRaisesRegex(ValueError, "Invalid JSON"):
+                service.save_json('{"schema_version":')
+
+            self.assertEqual(path.read_text(encoding="utf-8"), expected_content)
 
 
 if __name__ == "__main__":

@@ -114,10 +114,22 @@ TabPane {
 }
 
 #events,
-#settings-content,
+#logs,
 #mockserver-rules-content {
     height: 1fr;
     overflow: auto auto;
+}
+
+#configuration-editor {
+    height: 1fr;
+    border: round #465158;
+    background: #171c20;
+}
+
+#configuration-status {
+    height: 1;
+    color: #a8ada7;
+    padding: 0 1;
 }
 
 #status-pane {

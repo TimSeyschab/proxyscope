@@ -1,4 +1,5 @@
 import http.client
+import json
 import tempfile
 import threading
 import time
@@ -23,6 +24,7 @@ from proxyscope.components.mockserver import (
     MockScenarioStore,
     mockserver_configuration_payload,
 )
+from proxyscope.contracts.events import RuntimeStateSnapshot, RuntimeStateSnapshotRequested
 
 
 class _StaticForwarder:
@@ -161,6 +163,69 @@ class TestProxyApplicationLifecycle(unittest.TestCase):
                 ]
             },
         )
+
+    def test_configuration_edit_updates_live_mockserver_before_runtime_snapshot(self) -> None:
+        document = ConfigDocument(
+            settings=RuntimeSettings.create(),
+            components=ComponentSettings(
+                configurations=(
+                    (
+                        "mockserver",
+                        {
+                            "scenarios": [
+                                {
+                                    "id": "demo",
+                                    "name": "Demo",
+                                    "enabled": True,
+                                    "responses": [],
+                                }
+                            ]
+                        },
+                    ),
+                )
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "runtime-config.json"
+            repository = JsonConfigRepository()
+            repository.save(path, document)
+            graph = create_runtime_object_graph(
+                host="127.0.0.1",
+                port=8080,
+                config_path=path,
+                mitm_enabled=False,
+                certs_dir=None,
+                edit_timeout_s=1,
+                server_factory=lambda *_args, **_kwargs: _FakeServer(),  # type: ignore[arg-type]
+            )
+            edited = {
+                "schema_version": 1,
+                "settings": {},
+                "components": {
+                    "enabled": ["core"],
+                    "configurations": {
+                        "mockserver": {
+                            "scenarios": [
+                                {
+                                    "id": "demo",
+                                    "name": "Demo",
+                                    "enabled": False,
+                                    "responses": [],
+                                }
+                            ]
+                        }
+                    },
+                },
+            }
+            graph.configuration.save_json(json.dumps(edited))
+            snapshots: list[RuntimeStateSnapshot] = []
+            graph.event_bus.subscribe(
+                lambda event: snapshots.append(event) if isinstance(event, RuntimeStateSnapshot) else None
+            )
+            graph.event_bus.publish(RuntimeStateSnapshotRequested())
+
+        self.assertFalse(graph.mockserver.store.list_scenarios()[0].enabled)
+        self.assertFalse(snapshots[0].mockserver_configuration["scenarios"][0]["enabled"])
 
     def test_shutdown_is_idempotent_and_joins_server_thread(self) -> None:
         server = _FakeServer()

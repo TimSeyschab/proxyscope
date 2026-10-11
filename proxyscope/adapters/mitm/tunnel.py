@@ -7,14 +7,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from proxyscope.adapters.mitm.certificates import MitmCertificateAuthority
-from proxyscope.adapters.proxy.connect_tunnel import (
+from proxyscope.adapters.proxy.connect import (
     ConnectTarget,
     ConnectUpstreamConnectionError,
     ConnectUpstreamTimeoutError,
 )
-from proxyscope.adapters.proxy.http1_request_rewriter import HTTP1RequestHeaderRewriter
-from proxyscope.adapters.proxy.http1_response_modifier_rewriter import HTTP1ResponseModifierRewriter
-from proxyscope.adapters.proxy.http1_sniffer import HTTP1MessageSniffer
+from proxyscope.adapters.proxy.http1 import (
+    HTTP1MessageSniffer,
+    HTTP1RequestHeaderRewriter,
+    HTTP1ResponseModifierRewriter,
+)
 from proxyscope.application.processing.headers import headers_for_body
 from proxyscope.application.processing.models import ExchangeRequest, ExchangeResponse, PreparedExchange
 from proxyscope.application.proxy.runtime import ProxyRuntimeContext

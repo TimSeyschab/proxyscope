@@ -1,14 +1,19 @@
 import asyncio
+import logging
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from proxyscope.components.tui.app import (
+    DETAIL_BODY_PREVIEW_BYTES,
+    MAX_LOG_ENTRIES,
     MAX_VISIBLE_ITEMS,
     ProxyscopeTui,
     RuntimeEventBuffer,
+    RuntimeLogBuffer,
     _render_configuration_summary,
     _render_detail,
+    _render_mockserver_rules,
     _render_status,
     _visible_exchanges,
 )
@@ -47,6 +52,24 @@ class MutableJournal:
         return self.entries
 
 
+class InMemoryConfigurationEditor:
+    def __init__(self, content: str = '{"schema_version": 1}\n') -> None:
+        self.content = content
+        self.saved: list[str] = []
+
+    def load_json(self) -> str:
+        return self.content
+
+    def save_json(self, content: str) -> str:
+        self.saved.append(content)
+        return "config.json"
+
+
+class _RejectingConfigurationEditor(InMemoryConfigurationEditor):
+    def save_json(self, content: str) -> str:
+        raise ValueError("settings.log_level has unsupported value: INVALID")
+
+
 class TestTuiComponent(unittest.TestCase):
     def test_disables_textual_command_palette(self) -> None:
         self.assertFalse(ProxyscopeTui.ENABLE_COMMAND_PALETTE)
@@ -64,7 +87,25 @@ class TestTuiComponent(unittest.TestCase):
                 RuntimeStateSnapshot(
                     correlation_id="snapshot",
                     settings={"log_level": "INFO"},
-                    mockserver_configuration={"scenarios": [{"id": "offline"}]},
+                    mockserver_configuration={
+                        "scenarios": (
+                            {
+                                "id": "offline",
+                                "name": "Offline API",
+                                "enabled": True,
+                                "responses": [
+                                    {
+                                        "id": "health",
+                                        "method": "GET",
+                                        "url": "https://api.test/health",
+                                        "status": 503,
+                                        "reason": "Unavailable",
+                                        "body": "temporarily offline",
+                                    }
+                                ],
+                            },
+                        )
+                    },
                 )
             )
             app._refresh()
@@ -72,7 +113,7 @@ class TestTuiComponent(unittest.TestCase):
             requests = app.query_one("#requests")
             detail = str(app.query_one("#detail-body").render())
             events = str(app.query_one("#events").render())
-            settings = str(app.query_one("#settings-content").render())
+            logs = str(app.query_one("#logs").render())
             mockserver_rules = str(app.query_one("#mockserver-rules-content").render())
             status = str(app.query_one("#status-line").render())
             configuration = str(app.query_one("#config-line").render())
@@ -80,8 +121,9 @@ class TestTuiComponent(unittest.TestCase):
         self.assertEqual(requests.row_count, 1)
         self.assertIn("GET /items", detail)
         self.assertIn("exchange.completed request=1", events)
-        self.assertIn('"log_level": "INFO"', settings)
-        self.assertIn('"id": "offline"', mockserver_rules)
+        self.assertEqual(logs, "Logs\n\nNo log entries yet.")
+        self.assertIn("Offline API (id=offline) · enabled", mockserver_rules)
+        self.assertIn("GET https://api.test/health → 503 Unavailable (id=health)", mockserver_rules)
         self.assertEqual(status, "CAPTURED 1  COMPLETED 1  EVENTS 1")
         self.assertEqual(configuration, "LOG_LEVEL=INFO")
 
@@ -103,11 +145,90 @@ class TestTuiComponent(unittest.TestCase):
             _render_configuration_summary({"mitm": True, "log_level": "INFO"}), "LOG_LEVEL=INFO  MITM=True"
         )
 
+    def test_renders_mockserver_rules_with_a_truncated_body_preview(self) -> None:
+        rules = _render_mockserver_rules(
+            {
+                "scenarios": [
+                    {
+                        "id": "demo",
+                        "name": "Demo API",
+                        "enabled": False,
+                        "responses": [
+                            {
+                                "id": "items",
+                                "method": "POST",
+                                "url": "https://api.test/items",
+                                "status": 201,
+                                "reason": "Created",
+                                "body": "x" * 100,
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        self.assertIn("Demo API (id=demo) · disabled", rules)
+        self.assertIn("POST https://api.test/items → 201 Created (id=items)", rules)
+        self.assertIn("body: " + "x" * 79 + "…", rules)
+        self.assertNotIn("x" * 100, rules)
+
     def test_requires_component_ports(self) -> None:
         with self.assertRaisesRegex(ValueError, "event bus"):
             TuiComponent(ComponentContext(journal=StaticJournal()))
         with self.assertRaisesRegex(ValueError, "journal"):
             TuiComponent(ComponentContext(event_bus=object()))  # type: ignore[arg-type]
+
+    def test_saves_configuration_from_the_editor(self) -> None:
+        configuration_editor = InMemoryConfigurationEditor()
+        app = ProxyscopeTui(StaticJournal(), configuration_editor)
+
+        asyncio.run(self._assert_configuration_is_saved(app, configuration_editor))
+
+    def test_displays_a_configuration_validation_error(self) -> None:
+        app = ProxyscopeTui(StaticJournal(), _RejectingConfigurationEditor())
+
+        asyncio.run(self._assert_configuration_error_is_displayed(app))
+
+    async def _assert_configuration_is_saved(
+        self,
+        app: ProxyscopeTui,
+        configuration_editor: InMemoryConfigurationEditor,
+    ) -> None:
+        async with app.run_test():
+            editor = app.query_one("#configuration-editor")
+            editor.load_text('{"schema_version": 1, "settings": {}}\n')
+            app.action_save_configuration()
+            status = str(app.query_one("#configuration-status").render())
+
+        self.assertEqual(configuration_editor.saved, ['{"schema_version": 1, "settings": {}}\n'])
+        self.assertEqual(
+            status,
+            "Saved config.json. Runtime settings reloaded; startup-only changes require restart.",
+        )
+
+    def test_configuration_save_requests_a_fresh_runtime_snapshot(self) -> None:
+        requests: list[None] = []
+        app = ProxyscopeTui(
+            StaticJournal(),
+            InMemoryConfigurationEditor(),
+            on_configuration_saved=lambda: requests.append(None),
+        )
+
+        asyncio.run(self._assert_configuration_save_requests_snapshot(app))
+
+        self.assertEqual(requests, [None])
+
+    async def _assert_configuration_save_requests_snapshot(self, app: ProxyscopeTui) -> None:
+        async with app.run_test():
+            app.action_save_configuration()
+
+    async def _assert_configuration_error_is_displayed(self, app: ProxyscopeTui) -> None:
+        async with app.run_test():
+            app.action_save_configuration()
+            status = str(app.query_one("#configuration-status").render())
+
+        self.assertEqual(status, "Not saved: settings.log_level has unsupported value: INVALID")
 
     def test_shows_the_newest_fifty_exchanges_first(self) -> None:
         entries = tuple(
@@ -137,6 +258,35 @@ class TestTuiComponent(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "positive"):
             RuntimeEventBuffer(capacity=0)
 
+    def test_log_buffer_retains_the_latest_five_hundred_entries(self) -> None:
+        buffer = RuntimeLogBuffer()
+        for index in range(MAX_LOG_ENTRIES + 25):
+            buffer.append(f"entry {index}")
+
+        entries = buffer.entries()
+
+        self.assertEqual(len(entries), MAX_LOG_ENTRIES)
+        self.assertEqual(entries[0], "entry 25")
+        self.assertEqual(entries[-1], f"entry {MAX_LOG_ENTRIES + 24}")
+
+    def test_log_buffer_rejects_non_positive_capacity(self) -> None:
+        with self.assertRaisesRegex(ValueError, "positive"):
+            RuntimeLogBuffer(capacity=0)
+
+    def test_logging_handler_renders_records_in_the_logs_tab(self) -> None:
+        app = ProxyscopeTui(StaticJournal())
+
+        asyncio.run(self._assert_log_record_is_rendered(app))
+
+    async def _assert_log_record_is_rendered(self, app: ProxyscopeTui) -> None:
+        async with app.run_test():
+            record = logging.LogRecord("proxyscope.test", logging.INFO, __file__, 0, "captured log", (), None)
+            app.logging_handler.handle(record)
+            app._refresh_if_needed()
+            logs = str(app.query_one("#logs").render())
+
+        self.assertIn("captured log", logs)
+
     def test_renders_request_and_response_detail_from_journal_snapshot(self) -> None:
         entry = CapturedExchange(
             request_id=7,
@@ -159,6 +309,64 @@ class TestTuiComponent(unittest.TestCase):
         self.assertIn("HTTP/1.1 201 Created", response)
         self.assertIn("X-Response: yes", response)
         self.assertIn("response", response)
+
+    def test_omits_binary_response_bodies_and_truncates_text_bodies(self) -> None:
+        binary_body = b"\x89PNG\r\n\x1a\n" + b"x" * 100
+        binary_entry = CapturedExchange(
+            request_id=8,
+            method="GET",
+            url="https://api.test/image.png",
+            response=CapturedResponse(
+                200,
+                "OK",
+                (("Content-Type", "image/png"),),
+                binary_body,
+                len(binary_body),
+            ),
+        )
+        text_entry = CapturedExchange(
+            request_id=9,
+            method="GET",
+            url="https://api.test/large-text",
+            response=CapturedResponse(
+                200,
+                "OK",
+                (("Content-Type", "text/plain; charset=utf-8"),),
+                b"x" * (DETAIL_BODY_PREVIEW_BYTES + 1),
+                DETAIL_BODY_PREVIEW_BYTES + 1,
+            ),
+        )
+
+        binary_detail = _render_detail(binary_entry, "response")
+        text_detail = _render_detail(text_entry, "response")
+
+        self.assertIn(f"<binary body omitted: {len(binary_body)} bytes (image/png)>", binary_detail)
+        self.assertIn(
+            f"… truncated; showing first {DETAIL_BODY_PREVIEW_BYTES} of {DETAIL_BODY_PREVIEW_BYTES + 1} bytes",
+            text_detail,
+        )
+
+    def test_displays_detail_bodies_as_literal_text(self) -> None:
+        entry = CapturedExchange(
+            request_id=10,
+            method="GET",
+            url="https://api.test/markup",
+            response=CapturedResponse(
+                200,
+                "OK",
+                (("Content-Type", "text/plain"),),
+                b"[invalid markup",
+                15,
+            ),
+        )
+        app = ProxyscopeTui(MutableJournal((entry,)))
+
+        asyncio.run(self._assert_literal_detail_body(app))
+
+    async def _assert_literal_detail_body(self, app: ProxyscopeTui) -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("s")
+            self.assertIn("[invalid markup", str(app.query_one("#detail-body").render()))
 
     def test_selection_and_detail_follow_event_driven_journal_snapshots(self) -> None:
         asyncio.run(self._assert_selection_follows_live_journal())

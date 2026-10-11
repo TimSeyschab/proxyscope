@@ -41,10 +41,13 @@ Transport-specific code stays in adapters; the shared processing pipeline works
 with exchange models and ports.
 
 The terminal UI is an optional runtime component enabled through runtime
-configuration. It receives only the event
-bus and journal ports through its component context, projecting runtime events
-and captured exchanges without direct access to configuration or rule services.
-The Textual dependency remains isolated in that optional component.
+configuration. It receives event-bus and journal ports through its component
+context, projecting runtime events and captured exchanges. When a configuration
+path is attached, bootstrap also supplies a narrow configuration-editor port;
+the UI can validate, persist, and reload runtime settings through the existing
+snapshot-event flow. Startup-only resources still apply on the next start. It
+has no direct access to configuration or rule services. The Textual dependency
+remains isolated in that optional component.
 
 Components bind to adapters through injected ports. Event and journal adapters
 provide access to the shared application runtime.
@@ -130,6 +133,11 @@ consult the corresponding package and its tests.
 Update this document when ownership, dependency direction, or an integration
 contract changes. New commands, fields, helper classes, and internal file moves
 normally need no architecture documentation change.
+
+The [backup UI migration assessment](backup-migration-assessment.md) explains
+which behavior from `backup/ui` is already represented by the component
+architecture and which interactive features need a new contract before they are
+ported.
 
 The [archived architecture](../architecture_old/README.md) contains earlier designs
 and implementation plans; it is not authoritative for the current code.

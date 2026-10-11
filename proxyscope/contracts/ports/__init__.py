@@ -15,6 +15,14 @@ class ComponentEventBus(Protocol):
     def unsubscribe(self, handler: EventHandler) -> None: ...
 
 
+class ConfigurationEditor(Protocol):
+    """Provides a validated, persisted JSON configuration document."""
+
+    def load_json(self) -> str: ...
+
+    def save_json(self, content: str) -> str: ...
+
+
 @dataclass(frozen=True)
 class CapturedResponse:
     status_code: int

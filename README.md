@@ -45,10 +45,9 @@ the proxy normally:
 poetry run proxyscope --config ./runtime-config.json
 ```
 
-The TUI is an optional read-only runtime component. Add `tui` to
-`components.enabled` to activate it. It projects captured
-exchanges from the journal and runtime notifications from the event bus; it
-does not read configuration or traffic-rule services directly.
+The TUI is an optional runtime component. Add `tui` to
+`components.enabled` to activate it. It projects captured exchanges from the
+journal and runtime notifications from the event bus.
 
 ## Configuration
 
